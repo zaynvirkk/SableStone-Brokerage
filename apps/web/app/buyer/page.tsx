@@ -1,3 +1,117 @@
-import Link from "next/link";import{DocketHeader,FieldTable,Shell,Status}from"../components";import{productionGet}from"../lib/production-api";import{EmptyRegister,ProductionBoundary}from"../production-state";
-type Demand={id:string;product_family:string;quantity_mt:string;buyer_ceiling:string|null;currency:string|null;freshness:string};type Trade={id:string;state:string;updated_at:string};
-export default async function Buyer(){const[demands,trades]=await Promise.all([productionGet<{items:Demand[]}>("/v1/demands"),productionGet<{items:Trade[]}>("/v1/trades")]);if(demands.state!=="CONNECTED")return <Shell current="/buyer"><ProductionBoundary state={demands.state} reason={demands.reason}/></Shell>;if(trades.state!=="CONNECTED")return <Shell current="/buyer"><ProductionBoundary state={trades.state} reason={trades.reason}/></Shell>;return <Shell current="/buyer"><DocketHeader title="Buyer requirement register" refId="LIVE-DEMAND" rails="Server enforced"/><section className="two-col"><div className="sheet"><h2>Current verified requirements</h2>{demands.data.items.length?demands.data.items.map(demand=><article className="register-entry" key={`${demand.id}-${demand.product_family}`}><FieldTable rows={[["Material",demand.product_family],["Required",`${demand.quantity_mt} MT`],["Ceiling",demand.buyer_ceiling&&demand.currency?`${demand.currency} ${demand.buyer_ceiling}/kg`:"Unknown"],["Freshness",demand.freshness,<Status key="f" state={demand.freshness==="CURRENT"?"pass":"unknown"}/>]]}/></article>):<EmptyRegister title="No executable requirement" body="Send a requirement from the verified buyer mailbox. Missing ceiling, cadence, application, or specification stays unknown."/>}</div><div className="sheet"><h2>Protected trades</h2>{trades.data.items.length?<div className="register-list">{trades.data.items.map(trade=><Link href={`/trade/${trade.id}`} key={trade.id}><b>{trade.id}</b><span>{trade.state}</span><time>{new Intl.DateTimeFormat("en-IN",{dateStyle:"medium",timeStyle:"short"}).format(new Date(trade.updated_at))}</time></Link>)}</div>:<EmptyRegister title="No protected trade" body="Supplier identity remains sealed until the relationship and brokerage entitlement are independently protected."/>}</div></section></Shell>}
+import Link from "next/link";
+import { DocketHeader, FieldTable, Shell, Status } from "../components";
+import { productionGet } from "../lib/production-api";
+import { EmptyRegister, ProductionBoundary } from "../production-state";
+import { AgreementRegister, type BoundAgreement } from "../agreement-register";
+type Demand = {
+  id: string;
+  product_family: string;
+  quantity_mt: string;
+  buyer_ceiling: string | null;
+  currency: string | null;
+  freshness: string;
+};
+type Trade = { id: string; state: string; updated_at: string };
+export default async function Buyer() {
+  const [demands, trades, agreements] = await Promise.all([
+    productionGet<{ items: Demand[] }>("/v1/demands"),
+    productionGet<{ items: Trade[] }>("/v1/trades"),
+    productionGet<{ items: BoundAgreement[] }>("/v1/agreements"),
+  ]);
+  if (demands.state !== "CONNECTED")
+    return (
+      <Shell current="/buyer">
+        <ProductionBoundary state={demands.state} reason={demands.reason} />
+      </Shell>
+    );
+  if (trades.state !== "CONNECTED")
+    return (
+      <Shell current="/buyer">
+        <ProductionBoundary state={trades.state} reason={trades.reason} />
+      </Shell>
+    );
+  if (agreements.state !== "CONNECTED")
+    return (
+      <Shell current="/buyer">
+        <ProductionBoundary
+          state={agreements.state}
+          reason={agreements.reason}
+        />
+      </Shell>
+    );
+  return (
+    <Shell current="/buyer">
+      <DocketHeader
+        title="Buyer requirement register"
+        refId="LIVE-DEMAND"
+        rails="Server enforced"
+      />
+      <section className="two-col">
+        <div className="sheet">
+          <h2>Current verified requirements</h2>
+          {demands.data.items.length ? (
+            demands.data.items.map((demand) => (
+              <article
+                className="register-entry"
+                key={`${demand.id}-${demand.product_family}`}
+              >
+                <FieldTable
+                  rows={[
+                    ["Material", demand.product_family],
+                    ["Required", `${demand.quantity_mt} MT`],
+                    [
+                      "Ceiling",
+                      demand.buyer_ceiling && demand.currency
+                        ? `${demand.currency} ${demand.buyer_ceiling}/kg`
+                        : "Unknown",
+                    ],
+                    [
+                      "Freshness",
+                      demand.freshness,
+                      <Status
+                        key="f"
+                        state={
+                          demand.freshness === "CURRENT" ? "pass" : "unknown"
+                        }
+                      />,
+                    ],
+                  ]}
+                />
+              </article>
+            ))
+          ) : (
+            <EmptyRegister
+              title="No executable requirement"
+              body="Send a requirement from the verified buyer mailbox. Missing ceiling, cadence, application, or specification stays unknown."
+            />
+          )}
+        </div>
+        <div className="sheet">
+          <h2>Protected trades</h2>
+          {trades.data.items.length ? (
+            <div className="register-list">
+              {trades.data.items.map((trade) => (
+                <Link href={`/trade/${trade.id}`} key={trade.id}>
+                  <b>{trade.id}</b>
+                  <span>{trade.state}</span>
+                  <time>
+                    {new Intl.DateTimeFormat("en-IN", {
+                      dateStyle: "medium",
+                      timeStyle: "short",
+                    }).format(new Date(trade.updated_at))}
+                  </time>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <EmptyRegister
+              title="No protected trade"
+              body="Supplier identity remains sealed until the relationship and brokerage entitlement are independently protected."
+            />
+          )}
+        </div>
+      </section>
+      <AgreementRegister agreements={agreements.data.items} />
+    </Shell>
+  );
+}

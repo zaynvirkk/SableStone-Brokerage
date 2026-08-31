@@ -13,6 +13,7 @@ import {
   ProviderPartyAccountRegistry,
   type ProviderPartyRole,
 } from "../runtime/provider_parties.js";
+import type { ImmutableEvidenceStore } from "../runtime/object_store.js";
 declare module "@fastify/jwt" {
   interface FastifyJWT {
     payload: {
@@ -43,6 +44,7 @@ export interface ApiDependencies {
   readonly activation: Readonly<ProductionActivationPayload> | null;
   readonly releaseDigest: string;
   readonly sensitiveDataCipher?: SensitiveDataCipher;
+  readonly evidenceStore?: ImmutableEvidenceStore;
   readonly redis: Redis;
   readonly webhookHandlers: Readonly<
     Record<
@@ -479,14 +481,66 @@ export async function createProductionApi(
       return {
         items: (
           await deps.pool.query(
-            "select id,agreement_kind,version,body_sha256,effective_at,expires_at from agreements where agreement_kind=any($1) and effective_at<=now() and expires_at>now() order by agreement_kind,version desc",
-            [kinds],
+            "select a.id,a.agreement_kind,a.version,a.body_sha256,a.effective_at,a.expires_at,b.id agreement_binding_id,b.resource_type,b.resource_id,b.binding_sha256 from agreements a join agreement_resource_bindings b on b.agreement_id=a.id and b.agreement_version=a.version where b.expected_organization_id=$1 and b.role=$2 and a.agreement_kind=any($3) and a.effective_at<=now() and a.expires_at>now() order by a.agreement_kind,a.version desc",
+            [p.organizationId, p.role, kinds],
           )
         ).rows,
       };
     },
   );
-  app.post<{ Params: { id: string; version: string } }>(
+  app.get<{
+    Params: { id: string; version: string; bindingId: string };
+  }>(
+    "/v1/agreements/:id/:version/bindings/:bindingId/body",
+    {
+      onRequest: [app.authenticate],
+      config: { rateLimit: { max: 30, timeWindow: "1 minute" } },
+    },
+    async (request, reply) => {
+      const p = principal(request);
+      if ((p.role !== "SUPPLIER" && p.role !== "BUYER") || !p.organizationId)
+        return reply.code(403).send({ error: "ROLE_FORBIDDEN" });
+      if (!deps.evidenceStore)
+        return reply.code(503).send({ error: "AGREEMENT_BODY_UNAVAILABLE" });
+      const row = (
+        await deps.pool.query(
+          "select a.body_object_key,a.body_sha256 from agreements a join agreement_resource_bindings b on b.agreement_id=a.id and b.agreement_version=a.version where a.id=$1 and a.version=$2 and b.id=$3 and b.expected_organization_id=$4 and b.role=$5 and a.effective_at<=now() and a.expires_at>now()",
+          [
+            request.params.id,
+            request.params.version,
+            request.params.bindingId,
+            p.organizationId,
+            p.role,
+          ],
+        )
+      ).rows[0];
+      if (!row) return reply.code(404).send({ error: "AGREEMENT_NOT_FOUND" });
+      try {
+        const bytes = await deps.evidenceStore.readVerified(
+          String(row.body_object_key),
+          String(row.body_sha256),
+        );
+        return reply
+          .header("content-type", "application/octet-stream")
+          .header(
+            "content-disposition",
+            `inline; filename="sablestone-agreement-${request.params.id}-${request.params.version}.bin"`,
+          )
+          .header("cache-control", "private, no-store")
+          .header("x-content-type-options", "nosniff")
+          .header("x-sablestone-body-sha256", String(row.body_sha256))
+          .send(Buffer.from(bytes));
+      } catch {
+        return reply
+          .code(503)
+          .send({ error: "AGREEMENT_BODY_VERIFICATION_FAILED" });
+      }
+    },
+  );
+  app.post<{
+    Params: { id: string; version: string };
+    Body: { agreementBindingId?: string };
+  }>(
     "/v1/agreements/:id/:version/acceptance",
     { onRequest: [app.authenticate] },
     async (request, reply) => {
@@ -496,15 +550,20 @@ export async function createProductionApi(
         return reply.code(403).send({ error: "ROLE_FORBIDDEN" });
       if (!deps.sensitiveDataCipher)
         return reply.code(503).send({ error: "E_SIGN_UNAVAILABLE" });
+      const agreementBindingId = request.body?.agreementBindingId;
       if (
         !user.emailVerified ||
         !user.amr?.includes("otp") ||
         !user.jti ||
         !user.exp ||
+        !agreementBindingId ||
+        !/^[0-9a-f-]{36}$/i.test(agreementBindingId) ||
         !(await allowedAgreement(
           deps.pool,
           request.params.id,
           request.params.version,
+          agreementBindingId,
+          p.organizationId,
           p.role,
         ))
       )
@@ -514,6 +573,7 @@ export async function createProductionApi(
           result = await commands.acceptAgreement({
             agreementId: request.params.id,
             agreementVersion: request.params.version,
+            agreementBindingId,
             organizationId: p.organizationId,
             userId: user.sub,
             authChallengeId: user.jti,
@@ -765,6 +825,8 @@ async function allowedAgreement(
   pool: Pool,
   id: string,
   version: string,
+  bindingId: string,
+  organizationId: string,
   role: "SUPPLIER" | "BUYER",
 ): Promise<boolean> {
   const kinds =
@@ -784,8 +846,8 @@ async function allowedAgreement(
   return Boolean(
     (
       await pool.query(
-        "select 1 from agreements where id=$1 and version=$2 and agreement_kind=any($3) and effective_at<=now() and expires_at>now()",
-        [id, version, kinds],
+        "select 1 from agreements a join agreement_resource_bindings b on b.agreement_id=a.id and b.agreement_version=a.version where a.id=$1 and a.version=$2 and b.id=$3 and b.expected_organization_id=$4 and b.role=$5 and a.agreement_kind=any($6) and a.effective_at<=now() and a.expires_at>now()",
+        [id, version, bindingId, organizationId, role, kinds],
       )
     ).rowCount,
   );

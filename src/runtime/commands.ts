@@ -9,6 +9,7 @@ export class ProductionCommandService {
   async acceptAgreement(input: {
     agreementId: string;
     agreementVersion: string;
+    agreementBindingId: string;
     organizationId: string;
     userId: string;
     authChallengeId: string;
@@ -20,8 +21,14 @@ export class ProductionCommandService {
     return inTransaction(this.pool, async (client) => {
       const agreement = (
         await client.query(
-          "select * from agreements where id=$1 and version=$2 and effective_at<=$3 and expires_at>$3",
-          [input.agreementId, input.agreementVersion, input.acceptedAt],
+          "select a.*,b.id agreement_binding_id,b.resource_type,b.resource_id,b.binding_sha256 from agreements a join agreement_resource_bindings b on b.agreement_id=a.id and b.agreement_version=a.version where a.id=$1 and a.version=$2 and b.id=$3 and b.expected_organization_id=$4 and a.effective_at<=$5 and a.expires_at>$5",
+          [
+            input.agreementId,
+            input.agreementVersion,
+            input.agreementBindingId,
+            input.organizationId,
+            input.acceptedAt,
+          ],
         )
       ).rows[0];
       if (!agreement) throw new Error("current agreement unavailable");
@@ -30,7 +37,7 @@ export class ProductionCommandService {
         Date.parse(input.acceptedAt) >= Date.parse(input.authExpiresAt)
       )
         throw new Error("acceptance authentication invalid");
-      const idempotencyKey = `agreement:${input.agreementId}:${input.agreementVersion}:${input.organizationId}:${input.userId}:${input.authChallengeId}`,
+      const idempotencyKey = `agreement:${input.agreementId}:${input.agreementVersion}:${agreement.agreement_binding_id}:${input.organizationId}:${input.userId}:${input.authChallengeId}`,
         prior = (
           await client.query(
             "select id,acceptance_sha256 from agreement_acceptances where idempotency_key=$1",
@@ -48,6 +55,8 @@ export class ProductionCommandService {
               agreementId: input.agreementId,
               version: input.agreementVersion,
               bodySha256: agreement.body_sha256,
+              bindingId: agreement.agreement_binding_id,
+              bindingSha256: agreement.binding_sha256,
               organizationId: input.organizationId,
               userId: input.userId,
               authChallengeId: input.authChallengeId,
@@ -57,13 +66,14 @@ export class ProductionCommandService {
           .digest("hex"),
         id = randomUUID();
       await client.query(
-        "insert into agreement_acceptances(id,idempotency_key,agreement_id,agreement_version,agreement_body_sha256,expected_organization_id,signer_organization_id,signer_user_id,signer_email_verified,otp_challenge_id,otp_verified,otp_expires_at,accepted_at,ip_address_ciphertext,user_agent_digest,acceptance_sha256) values($1,$2,$3,$4,$5,$6,$6,$7,true,$8,true,$9,$10,$11,$12,$13)",
+        "insert into agreement_acceptances(id,idempotency_key,agreement_id,agreement_version,agreement_body_sha256,agreement_binding_id,expected_organization_id,signer_organization_id,signer_user_id,signer_email_verified,otp_challenge_id,otp_verified,otp_expires_at,accepted_at,ip_address_ciphertext,user_agent_digest,acceptance_sha256) values($1,$2,$3,$4,$5,$6,$7,$7,$8,true,$9,true,$10,$11,$12,$13,$14)",
         [
           id,
           idempotencyKey,
           input.agreementId,
           input.agreementVersion,
           agreement.body_sha256,
+          agreement.agreement_binding_id,
           input.organizationId,
           input.userId,
           input.authChallengeId,
@@ -98,10 +108,12 @@ export class ProductionCommandService {
         throw new Error("protected acceptance organization mismatch");
       const agreement = (
         await client.query(
-          "select aa.* from agreement_acceptances aa join agreements a on a.id=aa.agreement_id and a.version=aa.agreement_version and a.body_sha256=aa.agreement_body_sha256 where aa.id=$1 and aa.signer_organization_id=$2 and aa.expected_organization_id=$2 and aa.accepted_at<aa.otp_expires_at and a.effective_at<=$3 and a.expires_at>$3 and a.agreement_kind=$4",
+          "select aa.* from agreement_acceptances aa join agreements a on a.id=aa.agreement_id and a.version=aa.agreement_version and a.body_sha256=aa.agreement_body_sha256 join agreement_resource_bindings b on b.id=aa.agreement_binding_id and b.agreement_id=a.id and b.agreement_version=a.version where aa.id=$1 and aa.signer_organization_id=$2 and aa.expected_organization_id=$2 and b.expected_organization_id=$2 and b.resource_type='MATCH' and b.resource_id=$3 and b.role=$4 and aa.accepted_at<aa.otp_expires_at and a.effective_at<=$5 and a.expires_at>$5 and a.agreement_kind=$6",
           [
             input.agreementAcceptanceId,
             input.organizationId,
+            input.matchId,
+            input.role,
             input.acceptedAt,
             input.role === "SUPPLIER"
               ? "PROTECTED_ACCOUNT_NOTICE"
@@ -116,8 +128,8 @@ export class ProductionCommandService {
             : "BUYER_ACCESS_TERMS",
         master = (
           await client.query(
-            "select 1 from agreement_acceptances aa join agreements a on a.id=aa.agreement_id and a.version=aa.agreement_version and a.body_sha256=aa.agreement_body_sha256 where aa.signer_organization_id=$1 and a.agreement_kind=$2 and a.effective_at<=$3 and a.expires_at>$3 order by aa.accepted_at desc limit 1",
-            [input.organizationId, masterKind, input.acceptedAt],
+            "select 1 from agreement_acceptances aa join agreements a on a.id=aa.agreement_id and a.version=aa.agreement_version and a.body_sha256=aa.agreement_body_sha256 join agreement_resource_bindings b on b.id=aa.agreement_binding_id and b.agreement_id=a.id and b.agreement_version=a.version where aa.signer_organization_id=$1 and b.expected_organization_id=$1 and b.resource_type='ORG_MASTER' and b.resource_id=$1 and b.role=$3 and a.agreement_kind=$2 and a.effective_at<=$4 and a.expires_at>$4 order by aa.accepted_at desc limit 1",
+            [input.organizationId, masterKind, input.role, input.acceptedAt],
           )
         ).rows[0];
       if (!master)
@@ -279,8 +291,14 @@ export class ProductionCommandService {
         throw new Error("contract acceptance organization mismatch");
       const acceptance = (
         await client.query(
-          "select aa.* from agreement_acceptances aa join agreements a on a.id=aa.agreement_id and a.version=aa.agreement_version and a.body_sha256=aa.agreement_body_sha256 where aa.id=$1 and aa.signer_organization_id=$2 and aa.expected_organization_id=$2 and aa.accepted_at<aa.otp_expires_at and a.agreement_kind='TRANSACTION_CONFIRMATION' and a.effective_at<=$3 and a.expires_at>$3",
-          [input.agreementAcceptanceId, input.organizationId, input.acceptedAt],
+          "select aa.* from agreement_acceptances aa join agreements a on a.id=aa.agreement_id and a.version=aa.agreement_version and a.body_sha256=aa.agreement_body_sha256 join agreement_resource_bindings b on b.id=aa.agreement_binding_id and b.agreement_id=a.id and b.agreement_version=a.version where aa.id=$1 and aa.signer_organization_id=$2 and aa.expected_organization_id=$2 and b.expected_organization_id=$2 and b.resource_type='TRADE' and b.resource_id=$3 and b.role=$4 and aa.accepted_at<aa.otp_expires_at and a.agreement_kind='TRANSACTION_CONFIRMATION' and a.effective_at<=$5 and a.expires_at>$5",
+          [
+            input.agreementAcceptanceId,
+            input.organizationId,
+            input.tradeId,
+            input.role,
+            input.acceptedAt,
+          ],
         )
       ).rows[0];
       if (!acceptance)

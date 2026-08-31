@@ -102,6 +102,7 @@ const app = await createProductionApi({
   activation: runtime.activation,
   releaseDigest: runtime.releaseDigest,
   sensitiveDataCipher,
+  evidenceStore: runtime.evidence,
   redis: runtime.redis,
   webhookHandlers,
 });
