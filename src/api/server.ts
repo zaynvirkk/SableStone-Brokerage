@@ -14,6 +14,12 @@ import {
   type ProviderPartyRole,
 } from "../runtime/provider_parties.js";
 import type { ImmutableEvidenceStore } from "../runtime/object_store.js";
+import {
+  AgreementRegistry,
+  type AgreementResourceType,
+  type AgreementRole,
+} from "../runtime/agreement_registry.js";
+import type { AgreementKind } from "../agreements.js";
 declare module "@fastify/jwt" {
   interface FastifyJWT {
     payload: {
@@ -78,6 +84,9 @@ export async function createProductionApi(
     commands = new ProductionCommandService(deps.pool),
     providerPartyRegistry = deps.sensitiveDataCipher
       ? new ProviderPartyAccountRegistry(deps.pool, deps.sensitiveDataCipher)
+      : null,
+    agreementRegistry = deps.evidenceStore
+      ? new AgreementRegistry(deps.pool, deps.evidenceStore)
       : null;
   await app.register(jwt, {
     secret: { public: deps.jwtPublicKey },
@@ -298,6 +307,89 @@ export async function createProductionApi(
   );
   app.post<{
     Body: {
+      agreementId?: string;
+      version?: string;
+      kind?: AgreementKind;
+      legalGateReceiptId?: string;
+      resourceType?: AgreementResourceType;
+      resourceId?: string;
+      expectedOrganizationId?: string;
+      role?: AgreementRole;
+      effectiveAt?: string;
+      expiresAt?: string;
+    };
+  }>(
+    "/v1/system/agreements",
+    {
+      onRequest: [app.authenticate],
+      config: { rateLimit: { max: 20, timeWindow: "1 minute" } },
+    },
+    async (request, reply) => {
+      const p = principal(request),
+        body = request.body,
+        now = new Date().toISOString();
+      try {
+        assertAuthorized(
+          p,
+          { organizationId: null, allowedRoles: ["SYSTEM"] },
+          now,
+        );
+      } catch {
+        return reply.code(403).send({ error: "ROLE_FORBIDDEN" });
+      }
+      if (
+        !deps.activation?.capabilities.includes("TRADING") ||
+        !agreementRegistry
+      )
+        return reply
+          .code(503)
+          .send({ error: "AGREEMENT_PROVISIONING_UNAVAILABLE" });
+      if (
+        !body?.agreementId ||
+        !body.version ||
+        !body.kind ||
+        !body.legalGateReceiptId ||
+        !body.resourceType ||
+        !body.resourceId ||
+        !body.expectedOrganizationId ||
+        !body.role ||
+        !body.effectiveAt ||
+        !body.expiresAt ||
+        !/^[0-9a-f-]{36}$/i.test(body.agreementId) ||
+        !/^[0-9a-f-]{36}$/i.test(body.legalGateReceiptId) ||
+        !/^[0-9a-f-]{36}$/i.test(body.resourceId) ||
+        !/^[0-9a-f-]{36}$/i.test(body.expectedOrganizationId) ||
+        Number.isNaN(Date.parse(body.effectiveAt)) ||
+        Number.isNaN(Date.parse(body.expiresAt))
+      )
+        return reply
+          .code(400)
+          .send({ error: "AGREEMENT_REGISTRATION_INVALID" });
+      try {
+        return reply.code(201).send(
+          await agreementRegistry.register({
+            agreementId: body.agreementId,
+            version: body.version,
+            kind: body.kind,
+            legalGateReceiptId: body.legalGateReceiptId,
+            resourceType: body.resourceType,
+            resourceId: body.resourceId,
+            expectedOrganizationId: body.expectedOrganizationId,
+            role: body.role,
+            effectiveAt: body.effectiveAt,
+            expiresAt: body.expiresAt,
+            registeredAt: now,
+          }),
+        );
+      } catch {
+        return reply
+          .code(409)
+          .send({ error: "AGREEMENT_REGISTRATION_REJECTED" });
+      }
+    },
+  );
+  app.post<{
+    Body: {
       provider?: string;
       organizationId?: string;
       role?: ProviderPartyRole;
@@ -481,7 +573,7 @@ export async function createProductionApi(
       return {
         items: (
           await deps.pool.query(
-            "select a.id,a.agreement_kind,a.version,a.body_sha256,a.effective_at,a.expires_at,b.id agreement_binding_id,b.resource_type,b.resource_id,b.binding_sha256 from agreements a join agreement_resource_bindings b on b.agreement_id=a.id and b.agreement_version=a.version where b.expected_organization_id=$1 and b.role=$2 and a.agreement_kind=any($3) and a.effective_at<=now() and a.expires_at>now() order by a.agreement_kind,a.version desc",
+            "select a.id,a.agreement_kind,a.version,a.body_sha256,a.effective_at,a.expires_at,b.id agreement_binding_id,b.resource_type,b.resource_id,b.binding_sha256 from agreements a join agreement_resource_bindings b on b.agreement_id=a.id and b.agreement_version=a.version join authority_receipts legal on legal.receipt_id=b.legal_gate_receipt_id where b.expected_organization_id=$1 and b.role=$2 and legal.authority_kind='LEGAL_AGREEMENT_APPROVAL' and legal.effective_at<=now() and legal.expires_at>now() and a.agreement_kind=any($3) and a.effective_at<=now() and a.expires_at>now() order by a.agreement_kind,a.version desc",
             [p.organizationId, p.role, kinds],
           )
         ).rows,
@@ -504,7 +596,7 @@ export async function createProductionApi(
         return reply.code(503).send({ error: "AGREEMENT_BODY_UNAVAILABLE" });
       const row = (
         await deps.pool.query(
-          "select a.body_object_key,a.body_sha256 from agreements a join agreement_resource_bindings b on b.agreement_id=a.id and b.agreement_version=a.version where a.id=$1 and a.version=$2 and b.id=$3 and b.expected_organization_id=$4 and b.role=$5 and a.effective_at<=now() and a.expires_at>now()",
+          "select a.body_object_key,a.body_sha256 from agreements a join agreement_resource_bindings b on b.agreement_id=a.id and b.agreement_version=a.version join authority_receipts legal on legal.receipt_id=b.legal_gate_receipt_id where a.id=$1 and a.version=$2 and b.id=$3 and b.expected_organization_id=$4 and b.role=$5 and legal.authority_kind='LEGAL_AGREEMENT_APPROVAL' and legal.effective_at<=now() and legal.expires_at>now() and a.effective_at<=now() and a.expires_at>now()",
           [
             request.params.id,
             request.params.version,
@@ -846,7 +938,7 @@ async function allowedAgreement(
   return Boolean(
     (
       await pool.query(
-        "select 1 from agreements a join agreement_resource_bindings b on b.agreement_id=a.id and b.agreement_version=a.version where a.id=$1 and a.version=$2 and b.id=$3 and b.expected_organization_id=$4 and b.role=$5 and a.agreement_kind=any($6) and a.effective_at<=now() and a.expires_at>now()",
+        "select 1 from agreements a join agreement_resource_bindings b on b.agreement_id=a.id and b.agreement_version=a.version join authority_receipts legal on legal.receipt_id=b.legal_gate_receipt_id where a.id=$1 and a.version=$2 and b.id=$3 and b.expected_organization_id=$4 and b.role=$5 and legal.authority_kind='LEGAL_AGREEMENT_APPROVAL' and legal.effective_at<=now() and legal.expires_at>now() and a.agreement_kind=any($6) and a.effective_at<=now() and a.expires_at>now()",
         [id, version, bindingId, organizationId, role, kinds],
       )
     ).rowCount,

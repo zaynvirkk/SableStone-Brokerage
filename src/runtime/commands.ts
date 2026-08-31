@@ -21,7 +21,7 @@ export class ProductionCommandService {
     return inTransaction(this.pool, async (client) => {
       const agreement = (
         await client.query(
-          "select a.*,b.id agreement_binding_id,b.resource_type,b.resource_id,b.binding_sha256 from agreements a join agreement_resource_bindings b on b.agreement_id=a.id and b.agreement_version=a.version where a.id=$1 and a.version=$2 and b.id=$3 and b.expected_organization_id=$4 and a.effective_at<=$5 and a.expires_at>$5",
+          "select a.*,b.id agreement_binding_id,b.resource_type,b.resource_id,b.binding_sha256 from agreements a join agreement_resource_bindings b on b.agreement_id=a.id and b.agreement_version=a.version join authority_receipts legal on legal.receipt_id=b.legal_gate_receipt_id where a.id=$1 and a.version=$2 and b.id=$3 and b.expected_organization_id=$4 and legal.authority_kind='LEGAL_AGREEMENT_APPROVAL' and legal.effective_at<=$5 and legal.expires_at>$5 and a.effective_at<=$5 and a.expires_at>$5",
           [
             input.agreementId,
             input.agreementVersion,
