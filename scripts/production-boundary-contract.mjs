@@ -115,6 +115,11 @@ const approval = {
     buyerId: "buyer",
     supplierId: "supplier",
     sablestoneBeneficiaryId: "sablestone",
+    providerParties: {
+      buyer: { customer_id: "cashfree-buyer" },
+      supplier: { vendor_id: "cashfree-supplier-vendor" },
+      sablestone: { merchant_id: "cashfree-sablestone-merchant" },
+    },
     currency: "INR",
     grossAmount: decimal("8500000"),
     supplierEntitlement: decimal("8000000"),
@@ -129,8 +134,8 @@ const approval = {
     const sent = JSON.parse(request.body);
     if (
       sent.split.length !== 1 ||
-      sent.split[0].vendor_id !== "supplier" ||
-      sent.split.some((item) => item.vendor_id === "sablestone")
+      sent.split[0].vendor_id !== "cashfree-supplier-vendor" ||
+      sent.split.some((item) => item.vendor_id === "cashfree-sablestone-merchant")
     )
       throw new Error("merchant-retained split payload invalid");
     return new Response(

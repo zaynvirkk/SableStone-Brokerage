@@ -12,6 +12,7 @@ import type { EmailEvent, OutboundEmail } from "../email.js";
 import type { ImmutableEvidenceStore } from "./object_store.js";
 import { inTransaction, TransactionalOutboxRepository } from "./database.js";
 import { SensitiveDataCipher } from "./sensitive_data.js";
+import type { ProviderPartyReferenceResolver } from "./provider_parties.js";
 import {
   negotiate,
   type NegotiationIntent,
@@ -46,6 +47,7 @@ export function buildProductionInboxHandlers(input: {
   gmail: GmailProductionConnector | null;
   settlementAdapters: readonly ProductionSettlementHttpAdapter[];
   commercialExtractor?: EvidenceBoundCommercialExtractor | null;
+  providerParties?: ProviderPartyReferenceResolver | null;
 }): Readonly<Record<string, (event: QueryResultRow) => Promise<void>>> {
   const handlers: Record<string, (event: QueryResultRow) => Promise<void>> = {};
   if (input.gmail) {
@@ -62,7 +64,13 @@ export function buildProductionInboxHandlers(input: {
   }
   for (const adapter of input.settlementAdapters)
     handlers[adapter.provider] = (event) =>
-      processSettlementEvent(input.pool, input.store, adapter, event);
+      processSettlementEvent(
+        input.pool,
+        input.store,
+        adapter,
+        event,
+        input.providerParties ?? null,
+      );
   return Object.freeze(handlers);
 }
 
@@ -365,6 +373,7 @@ async function processSettlementEvent(
   store: ImmutableEvidenceStore,
   adapter: ProductionSettlementHttpAdapter,
   event: QueryResultRow,
+  providerParties: ProviderPartyReferenceResolver | null,
 ): Promise<void> {
   const config = adapter.config;
   if (
@@ -443,6 +452,12 @@ async function processSettlementEvent(
     securityEvidenceSha256 = String(event.payload_digest),
     platformAllocationVerified = false;
   if (adapter.provider === "CASHFREE_EASY_SPLIT" && mappedType === "FUNDED") {
+    if (!providerParties)
+      throw new Error("provider party resolver unavailable");
+    const parties = await providerParties.resolveAndBind(
+      instruction,
+      occurredAt,
+    );
     const split = await adapter.applyCashfreeCapturedSplit(
       {
         instructionId: instruction.id,
@@ -453,6 +468,7 @@ async function processSettlementEvent(
         buyerId: instruction.buyer_id,
         supplierId: instruction.supplier_id,
         sablestoneBeneficiaryId: instruction.sablestone_beneficiary_id,
+        providerParties: parties,
         currency: instruction.currency,
         grossAmount: decimal(String(instruction.gross_amount)),
         supplierEntitlement: decimal(String(instruction.supplier_entitlement)),
@@ -475,6 +491,12 @@ async function processSettlementEvent(
     internalType = "ENTITLEMENT_SECURED";
   }
   if (adapter.provider === "RAZORPAY_ROUTE" && mappedType === "FUNDED") {
+    if (!providerParties)
+      throw new Error("provider party resolver unavailable");
+    const parties = await providerParties.resolveAndBind(
+      instruction,
+      occurredAt,
+    );
     if (!config.webhookPaymentReferencePath)
       throw new Error("Razorpay captured payment reference path missing");
     const paymentReference = text(
@@ -491,6 +513,7 @@ async function processSettlementEvent(
           buyerId: instruction.buyer_id,
           supplierId: instruction.supplier_id,
           sablestoneBeneficiaryId: instruction.sablestone_beneficiary_id,
+          providerParties: parties,
           currency: instruction.currency,
           grossAmount: decimal(String(instruction.gross_amount)),
           supplierEntitlement: decimal(

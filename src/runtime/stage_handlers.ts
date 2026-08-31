@@ -13,6 +13,7 @@ import type { ProductionDiscoveryService } from "./discovery_service.js";
 import { reconcileTradeAccounting } from "./accounting.js";
 import { compareDecimalStrings } from "../domain.js";
 import { ensureEconomicJobs } from "./economic_jobs.js";
+import type { ProviderPartyReferenceResolver } from "./provider_parties.js";
 
 const accepted = (
   receipt: string,
@@ -39,6 +40,7 @@ export function buildDatabaseStageHandlers(
   pool: Pool,
   adapters: readonly SettlementAdapter[] = [],
   discovery?: ProductionDiscoveryService,
+  providerParties?: ProviderPartyReferenceResolver,
 ): Readonly<Partial<Record<StageName, StageHandler>>> {
   return Object.freeze({
     DISCOVER_SUPPLIER: async (input) =>
@@ -174,6 +176,7 @@ export function buildDatabaseStageHandlers(
         adapters,
         String(input.tradeId),
         String(input.provider),
+        providerParties,
       ),
     RELEASE_IDENTITY: async (input) =>
       releaseIdentity(
@@ -582,6 +585,7 @@ async function lockSettlement(
   adapters: readonly SettlementAdapter[],
   tradeId: string,
   requestedProvider: string,
+  providerParties?: ProviderPartyReferenceResolver,
 ): Promise<StageResult> {
   const existing = (
     await pool.query(
@@ -703,6 +707,14 @@ async function lockSettlement(
       buyerId: instruction.buyer_id,
       supplierId: instruction.supplier_id,
       sablestoneBeneficiaryId: instruction.sablestone_beneficiary_id,
+      providerParties: providerParties
+        ? await providerParties.resolveAndBind(
+            instruction,
+            new Date().toISOString(),
+          )
+        : (() => {
+            throw new Error("provider party resolver unavailable");
+          })(),
       currency: instruction.currency,
       grossAmount: decimal(String(instruction.gross_amount)),
       supplierEntitlement: decimal(String(instruction.supplier_entitlement)),

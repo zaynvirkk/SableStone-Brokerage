@@ -420,14 +420,32 @@ function inrPaise(value: string): number {
     throw new Error("Razorpay amount exceeds safe integer");
   return Number(paise);
 }
+function providerReference(
+  party: Readonly<Record<string, string>>,
+  key: string,
+): string {
+  const value = party[key];
+  if (!value?.trim())
+    throw new Error(`verified provider party reference missing:${key}`);
+  return value;
+}
 
 export const escrowComRequest: SettlementRequestBuilder = (draft) => ({
   currency: draft.currency.toLowerCase(),
   description: `SableStone protected polymer trade ${draft.tradeId}`,
   parties: [
-    { role: "buyer", customer: draft.buyerId },
-    { role: "seller", customer: draft.supplierId },
-    { role: "broker", customer: draft.sablestoneBeneficiaryId },
+    {
+      role: "buyer",
+      customer: providerReference(draft.providerParties.buyer, "customer"),
+    },
+    {
+      role: "seller",
+      customer: providerReference(draft.providerParties.supplier, "customer"),
+    },
+    {
+      role: "broker",
+      customer: providerReference(draft.providerParties.sablestone, "customer"),
+    },
   ],
   items: [
     {
@@ -439,8 +457,14 @@ export const escrowComRequest: SettlementRequestBuilder = (draft) => ({
       inspection_period: 259200,
       schedule: [
         {
-          payer_customer: draft.buyerId,
-          beneficiary_customer: draft.supplierId,
+          payer_customer: providerReference(
+            draft.providerParties.buyer,
+            "customer",
+          ),
+          beneficiary_customer: providerReference(
+            draft.providerParties.supplier,
+            "customer",
+          ),
           amount: draft.supplierEntitlement,
         },
       ],
@@ -451,8 +475,14 @@ export const escrowComRequest: SettlementRequestBuilder = (draft) => ({
       quantity: 1,
       schedule: [
         {
-          payer_customer: draft.buyerId,
-          beneficiary_customer: draft.sablestoneBeneficiaryId,
+          payer_customer: providerReference(
+            draft.providerParties.buyer,
+            "customer",
+          ),
+          beneficiary_customer: providerReference(
+            draft.providerParties.sablestone,
+            "customer",
+          ),
           amount: draft.sablestoneEntitlement,
         },
       ],
@@ -469,7 +499,7 @@ export const escrowComRequest: SettlementRequestBuilder = (draft) => ({
 export const cashfreeSplitRequest: SettlementRequestBuilder = (draft) => ({
   split: [
     {
-      vendor_id: draft.supplierId,
+      vendor_id: providerReference(draft.providerParties.supplier, "vendor_id"),
       amount: draft.supplierEntitlement,
       tags: { trade_id: draft.tradeId, instruction_id: draft.instructionId },
     },
@@ -481,13 +511,31 @@ export const cashfreeOrderRequest: SettlementRequestBuilder = (draft) => ({
   order_amount: draft.grossAmount,
   order_currency: draft.currency,
   order_note: `protected trade ${draft.tradeId}`,
+  customer_details: {
+    customer_id: providerReference(draft.providerParties.buyer, "customer_id"),
+    customer_name: providerReference(
+      draft.providerParties.buyer,
+      "customer_name",
+    ),
+    customer_email: providerReference(
+      draft.providerParties.buyer,
+      "customer_email",
+    ),
+    customer_phone: providerReference(
+      draft.providerParties.buyer,
+      "customer_phone",
+    ),
+  },
 });
 export const razorpayRouteRequest: SettlementRequestBuilder = (draft) => {
   if (draft.currency !== "INR") throw new Error("Razorpay Route requires INR");
   return {
     transfers: [
       {
-        account: draft.supplierId,
+        account: providerReference(
+          draft.providerParties.supplier,
+          "linked_account_id",
+        ),
         amount: inrPaise(draft.supplierEntitlement),
         currency: "INR",
         on_hold: true,
@@ -510,9 +558,13 @@ export const bankEscrowRequest: SettlementRequestBuilder = (draft) => ({
   gross_amount: draft.grossAmount,
   currency: draft.currency,
   beneficiaries: [
-    { id: draft.supplierId, amount: draft.supplierEntitlement, role: "SELLER" },
     {
-      id: draft.sablestoneBeneficiaryId,
+      id: providerReference(draft.providerParties.supplier, "beneficiary_id"),
+      amount: draft.supplierEntitlement,
+      role: "SELLER",
+    },
+    {
+      id: providerReference(draft.providerParties.sablestone, "beneficiary_id"),
       amount: draft.sablestoneEntitlement,
       role: "BROKER",
     },
@@ -523,8 +575,11 @@ export const bankEscrowRequest: SettlementRequestBuilder = (draft) => ({
 });
 export const lcProceedsRequest: SettlementRequestBuilder = (draft) => ({
   instruction_id: draft.instructionId,
-  credit_beneficiary: draft.supplierId,
-  assignee: draft.sablestoneBeneficiaryId,
+  credit_beneficiary: providerReference(
+    draft.providerParties.supplier,
+    "credit_beneficiary_id",
+  ),
+  assignee: providerReference(draft.providerParties.sablestone, "assignee_id"),
   assigned_amount: draft.sablestoneEntitlement,
   currency: draft.currency,
   bank_acknowledgement_required: true,

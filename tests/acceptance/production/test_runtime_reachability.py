@@ -14,7 +14,8 @@ def test_worker_reaches_real_inbox_and_discovery_handlers():
     assert "buildProductionInboxHandlers" in worker
     assert "ProductionWorkflowScheduler" in worker
     assert "ProductionDiscoveryService" in worker
-    assert "buildDatabaseStageHandlers(runtime.pool, adapters, discovery)" in worker
+    assert "buildDatabaseStageHandlers(" in worker
+    assert "providerParties ?? undefined" in worker
     assert "taskQueue,{}" not in worker.replace(" ","")
     migration=(ROOT/"migrations/0030_production_event_processing.sql").read_text()
     assert "settlement_provider_events" in migration

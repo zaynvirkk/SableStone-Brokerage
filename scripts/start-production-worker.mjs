@@ -172,6 +172,11 @@ const commercialExtractor = runtime.activation.capabilities.includes("OUTREACH")
       process.env.SABLESTONE_COMMERCIAL_EXTRACTOR_JSON,
     )
   : null;
+const { ProviderPartyReferenceResolver } =
+  await import("../dist/runtime/provider_parties.js");
+const providerParties = cipher
+  ? new ProviderPartyReferenceResolver(runtime.pool, cipher)
+  : null;
 
 const controller = new AbortController(),
   client = await createWorkflowClient(temporalConfig),
@@ -181,7 +186,12 @@ const controller = new AbortController(),
       : undefined,
   activities = new ProductionActivityService(
     runtime.pool,
-    buildDatabaseStageHandlers(runtime.pool, adapters, discovery),
+    buildDatabaseStageHandlers(
+      runtime.pool,
+      adapters,
+      discovery,
+      providerParties ?? undefined,
+    ),
   ),
   handlers = {
     ...buildProductionInboxHandlers({
@@ -191,6 +201,7 @@ const controller = new AbortController(),
       gmail,
       settlementAdapters: adapters,
       commercialExtractor,
+      providerParties,
     }),
   },
   supervisor = new RuntimeSupervisor(

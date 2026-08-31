@@ -17,6 +17,27 @@ const draft = {
   buyerId: "buyer@example.test",
   supplierId: "supplier@example.test",
   sablestoneBeneficiaryId: "broker@example.test",
+  providerParties: {
+    buyer: {
+      customer: "escrow-buyer",
+      customer_id: "cashfree-buyer",
+      customer_name: "Buyer",
+      customer_email: "buyer@example.test",
+      customer_phone: "9999999999",
+    },
+    supplier: {
+      customer: "escrow-supplier",
+      vendor_id: "cashfree-vendor",
+      linked_account_id: "acc_supplier",
+      beneficiary_id: "bank-supplier",
+      credit_beneficiary_id: "lc-supplier",
+    },
+    sablestone: {
+      customer: "escrow-broker",
+      beneficiary_id: "bank-broker",
+      assignee_id: "lc-broker",
+    },
+  },
   currency: "USD",
   grossAmount: decimal("1000"),
   supplierEntitlement: decimal("900"),
@@ -33,7 +54,7 @@ if (
   escrow.items[0].type !== "general_merchandise" ||
   escrow.items[1].type !== "broker_fee" ||
   escrow.items[1].schedule[0].beneficiary_customer !==
-    draft.sablestoneBeneficiaryId ||
+    draft.providerParties.sablestone.customer ||
   !escrow.privacy.buyer ||
   !escrow.privacy.seller
 )
@@ -45,9 +66,9 @@ const cashfree = cashfreeSplitRequest({
 });
 if (
   cashfree.split.length !== 1 ||
-  cashfree.split[0].vendor_id !== draft.supplierId ||
+  cashfree.split[0].vendor_id !== draft.providerParties.supplier.vendor_id ||
   cashfree.split.some(
-    (value) => value.vendor_id === draft.sablestoneBeneficiaryId,
+    (value) => value.vendor_id === draft.providerParties.sablestone.customer,
   )
 )
   throw new Error("Cashfree merchant retention malformed");
@@ -58,6 +79,8 @@ const cashfreeOrder = cashfreeOrderRequest({
 });
 if (
   cashfreeOrder.order_amount !== draft.grossAmount ||
+  cashfreeOrder.customer_details.customer_id !==
+    draft.providerParties.buyer.customer_id ||
   "split" in cashfreeOrder
 )
   throw new Error("Cashfree order must precede split");
@@ -70,7 +93,8 @@ const razorpay = razorpayRouteRequest({
 if (
   razorpay.transfers.length !== 1 ||
   razorpay.transfers[0].amount !== 20035 ||
-  razorpay.transfers[0].account !== draft.supplierId
+  razorpay.transfers[0].account !==
+    draft.providerParties.supplier.linked_account_id
 )
   throw new Error("Razorpay paise/vendor semantics malformed");
 const razorpayOrder = razorpayOrderRequest({
@@ -199,7 +223,7 @@ const escrowApproval = {
             schedule: [
               {
                 amount: "100",
-                beneficiary_customer: draft.sablestoneBeneficiaryId,
+                beneficiary_customer: draft.providerParties.sablestone.customer,
                 status: { secured: true },
               },
             ],
@@ -238,7 +262,7 @@ const escrowApproval = {
 if (
   verifiedEscrow.sablestone_event_type !== "FUNDS_SECURED" ||
   verifiedEscrow.sablestone_broker_beneficiary !==
-    draft.sablestoneBeneficiaryId ||
+    draft.providerParties.sablestone.customer ||
   verifiedEscrow.sablestone_gross_amount !== "1000"
 )
   throw new Error("Escrow fetch confirmation did not prove entitlement");
