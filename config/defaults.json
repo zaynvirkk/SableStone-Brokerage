@@ -1,0 +1,11 @@
+{
+  "schema_version": "sablestone-runtime-config-v1",
+  "live_trading": false,
+  "live_outreach": false,
+  "live_settlement": false,
+  "production_providers": false,
+  "sablestone_inventory": "0",
+  "sablestone_cargo_capital": "0",
+  "sablestone_credit_exposure": "0",
+  "missing_evidence": "UNKNOWN"
+}

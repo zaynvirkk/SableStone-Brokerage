@@ -1,0 +1,1 @@
+BEGIN;DROP TABLE IF EXISTS protected_purchase_observations;DROP TABLE IF EXISTS recurring_candidates;DROP TABLE IF EXISTS standing_demand_authorizations;DELETE FROM schema_migrations WHERE version='0022_recurring';COMMIT;

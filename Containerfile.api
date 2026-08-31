@@ -1,0 +1,19 @@
+FROM node:24.8.0-bookworm-slim AS build
+WORKDIR /app
+COPY package.json package-lock.json tsconfig.json ./
+RUN npm ci --ignore-scripts
+COPY src ./src
+RUN npm run build
+
+FROM node:24.8.0-bookworm-slim AS runtime
+ENV NODE_ENV=production
+WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends postgresql-client ca-certificates && rm -rf /var/lib/apt/lists/*
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
+COPY --from=build /app/dist ./dist
+COPY scripts/start-production-api.mjs scripts/start-production-worker.mjs scripts/migrate-production.mjs scripts/backup-production.mjs scripts/restore-drill-production.mjs ./scripts/
+COPY migrations ./migrations
+USER node
+EXPOSE 8080
+CMD ["node","scripts/start-production-api.mjs"]

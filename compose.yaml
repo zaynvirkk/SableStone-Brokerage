@@ -1,0 +1,35 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: sablestone
+      POSTGRES_USER: sablestone
+      POSTGRES_PASSWORD: sablestone
+    ports: ["54329:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sablestone"]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+  redis:
+    image: redis:7-alpine
+    ports: ["6389:6379"]
+  temporal:
+    image: temporalio/auto-setup:1.27
+    environment:
+      DB: postgresql
+      DB_PORT: 5432
+      POSTGRES_USER: sablestone
+      POSTGRES_PWD: sablestone
+      POSTGRES_SEEDS: postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports: ["7233:7233"]
+  object-storage:
+    image: minio/minio:RELEASE.2025-07-23T15-54-02Z
+    command: server /data
+    environment:
+      MINIO_ROOT_USER: localfixture
+      MINIO_ROOT_PASSWORD: localfixtureonly
+    ports: ["9000:9000"]

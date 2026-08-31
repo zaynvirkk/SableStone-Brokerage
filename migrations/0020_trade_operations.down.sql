@@ -1,0 +1,1 @@
+BEGIN; DROP TABLE IF EXISTS trade_disputes; DROP TABLE IF EXISTS inspection_events; DROP TABLE IF EXISTS shipment_events; DROP TABLE IF EXISTS material_contracts; DELETE FROM schema_migrations WHERE version='0020_trade_operations'; COMMIT;

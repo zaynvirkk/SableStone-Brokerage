@@ -1,0 +1,3 @@
+import{readdirSync}from"node:fs";import{resolve}from"node:path";import{bootstrapProduction,runMigrations}from"../dist/index.js";
+const runtime=await bootstrapProduction(process.env);if(!runtime.activation.capabilities.includes("DEPLOY"))throw new Error("signed DEPLOY activation required");const paths=readdirSync("migrations").filter(name=>/^\d{4}_[^.]+\.sql$/.test(name)&&!name.includes(".down.")).sort().map(name=>resolve("migrations",name));try{const applied=await runMigrations(runtime.pool,paths);console.log(`MIGRATIONS_OK applied=${applied.length}`)}finally{await runtime.pool.end();runtime.redis.disconnect()}
+

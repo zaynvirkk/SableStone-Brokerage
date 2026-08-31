@@ -1,0 +1,1 @@
+BEGIN;DROP TABLE IF EXISTS acquisition_plan_items;DROP TABLE IF EXISTS acquisition_value_snapshots;DROP TABLE IF EXISTS acquisition_funnel_observations;DELETE FROM schema_migrations WHERE version='0023_acquisition';COMMIT;

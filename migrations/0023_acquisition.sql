@@ -1,0 +1,5 @@
+BEGIN;
+CREATE TABLE acquisition_funnel_observations (id uuid PRIMARY KEY,segment_id text NOT NULL,event_type text NOT NULL CHECK(event_type IN('SENT','REPLIED','QUALIFIED','MATCHED','CONTRACTED','FUNDED','SETTLED')),subject_id uuid NOT NULL,outcome_receipt_id uuid,occurred_at timestamptz NOT NULL,UNIQUE(segment_id,event_type,subject_id));
+CREATE TABLE acquisition_value_snapshots (id uuid PRIMARY KEY,segment_id text NOT NULL,state text NOT NULL CHECK(state IN('CALIBRATED','UNKNOWN','UNCALIBRATED')),value numeric,currency char(3),sample_size integer NOT NULL CHECK(sample_size>=0),reasons jsonb NOT NULL,source_digest text NOT NULL,calculated_at timestamptz NOT NULL,CHECK((state='CALIBRATED' AND value IS NOT NULL AND currency IS NOT NULL) OR state<>'CALIBRATED'));
+CREATE TABLE acquisition_plan_items (id uuid PRIMARY KEY,candidate_id uuid NOT NULL,executable_match_id uuid NOT NULL,mode text NOT NULL CHECK(mode='SANDBOX_PLAN_ONLY'),reason text NOT NULL CHECK(reason='EXECUTABLE_INVENTORY_AND_POLICY'),created_at timestamptz NOT NULL,UNIQUE(candidate_id,executable_match_id));
+INSERT INTO schema_migrations(version) VALUES('0023_acquisition');COMMIT;

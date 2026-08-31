@@ -1,0 +1,3584 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "version": 1,
+  "metadata": {
+    "component": {
+      "type": "application",
+      "name": "sablestone-brokerage",
+      "version": "0.0.0"
+    },
+    "properties": [
+      {
+        "name": "sablestone:evidence",
+        "value": "offline-build-only"
+      }
+    ]
+  },
+  "components": [
+    {
+      "type": "library",
+      "name": "@aws-sdk/checksums",
+      "version": "3.1000.29",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@aws-sdk/client-s3",
+      "version": "3.1121.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@aws-sdk/core",
+      "version": "3.977.9",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@aws-sdk/credential-provider-env",
+      "version": "3.972.70",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@aws-sdk/credential-provider-http",
+      "version": "3.972.72",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@aws-sdk/credential-provider-ini",
+      "version": "3.973.15",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@aws-sdk/credential-provider-login",
+      "version": "3.972.77",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@aws-sdk/credential-provider-node",
+      "version": "3.972.81",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@aws-sdk/credential-provider-process",
+      "version": "3.972.70",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@aws-sdk/credential-provider-sso",
+      "version": "3.973.14",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@aws-sdk/credential-provider-web-identity",
+      "version": "3.972.76",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@aws-sdk/lib-storage",
+      "version": "3.1121.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@aws-sdk/middleware-sdk-s3",
+      "version": "3.972.75",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@aws-sdk/nested-clients",
+      "version": "3.997.44",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@aws-sdk/signature-v4-multi-region",
+      "version": "3.996.46",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@aws-sdk/token-providers",
+      "version": "3.1116.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@aws-sdk/types",
+      "version": "3.974.5",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@aws-sdk/xml-builder",
+      "version": "3.972.40",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@aws/lambda-invoke-store",
+      "version": "0.3.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@borewit/text-codec",
+      "version": "0.2.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@fastify/ajv-compiler",
+      "version": "4.0.6",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@fastify/error",
+      "version": "4.2.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@fastify/fast-json-stringify-compiler",
+      "version": "5.1.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@fastify/forwarded",
+      "version": "3.0.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@fastify/jwt",
+      "version": "10.2.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@fastify/merge-json-schemas",
+      "version": "0.2.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@fastify/proxy-addr",
+      "version": "5.1.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@fastify/rate-limit",
+      "version": "11.2.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@grpc/grpc-js",
+      "version": "1.14.4",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@grpc/proto-loader",
+      "version": "0.8.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@ioredis/commands",
+      "version": "2.0.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@isaacs/cliui",
+      "version": "8.0.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@jridgewell/gen-mapping",
+      "version": "0.3.13",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@jridgewell/resolve-uri",
+      "version": "3.1.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@jridgewell/source-map",
+      "version": "0.3.11",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@jridgewell/sourcemap-codec",
+      "version": "1.6.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@jridgewell/trace-mapping",
+      "version": "0.3.31",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@js-sdsl/ordered-map",
+      "version": "4.4.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@jsonjoy.com/base64",
+      "version": "1.1.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@jsonjoy.com/base64",
+      "version": "17.67.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@jsonjoy.com/buffers",
+      "version": "17.67.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@jsonjoy.com/buffers",
+      "version": "1.2.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@jsonjoy.com/buffers",
+      "version": "1.2.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@jsonjoy.com/codegen",
+      "version": "1.0.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@jsonjoy.com/codegen",
+      "version": "17.67.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@jsonjoy.com/fs-core",
+      "version": "4.68.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@jsonjoy.com/fs-fsa",
+      "version": "4.68.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@jsonjoy.com/fs-node",
+      "version": "4.68.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@jsonjoy.com/fs-node-builtins",
+      "version": "4.68.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@jsonjoy.com/fs-node-to-fsa",
+      "version": "4.68.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@jsonjoy.com/fs-node-utils",
+      "version": "4.68.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@jsonjoy.com/fs-print",
+      "version": "4.68.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@jsonjoy.com/fs-snapshot",
+      "version": "4.68.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@jsonjoy.com/json-pack",
+      "version": "17.67.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@jsonjoy.com/json-pack",
+      "version": "1.21.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@jsonjoy.com/json-pointer",
+      "version": "17.67.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@jsonjoy.com/json-pointer",
+      "version": "1.0.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@jsonjoy.com/util",
+      "version": "17.67.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@jsonjoy.com/util",
+      "version": "1.9.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@lukeed/ms",
+      "version": "2.0.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@napi-rs/canvas",
+      "version": "1.0.8",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@napi-rs/canvas-android-arm64",
+      "version": "1.0.8",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@napi-rs/canvas-darwin-arm64",
+      "version": "1.0.8",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@napi-rs/canvas-darwin-x64",
+      "version": "1.0.8",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@napi-rs/canvas-linux-arm-gnueabihf",
+      "version": "1.0.8",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@napi-rs/canvas-linux-arm64-gnu",
+      "version": "1.0.8",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@napi-rs/canvas-linux-arm64-musl",
+      "version": "1.0.8",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@napi-rs/canvas-linux-riscv64-gnu",
+      "version": "1.0.8",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@napi-rs/canvas-linux-x64-gnu",
+      "version": "1.0.8",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@napi-rs/canvas-linux-x64-musl",
+      "version": "1.0.8",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@napi-rs/canvas-win32-arm64-msvc",
+      "version": "1.0.8",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@napi-rs/canvas-win32-x64-msvc",
+      "version": "1.0.8",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/api",
+      "version": "1.9.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/api-logs",
+      "version": "0.221.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/auto-instrumentations-node",
+      "version": "0.79.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/configuration",
+      "version": "0.221.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/context-async-hooks",
+      "version": "2.10.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/core",
+      "version": "2.10.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/exporter-logs-otlp-grpc",
+      "version": "0.221.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/exporter-logs-otlp-http",
+      "version": "0.221.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/exporter-logs-otlp-proto",
+      "version": "0.221.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/exporter-metrics-otlp-grpc",
+      "version": "0.221.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/exporter-metrics-otlp-http",
+      "version": "0.221.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/exporter-metrics-otlp-proto",
+      "version": "0.221.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/exporter-prometheus",
+      "version": "0.221.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/exporter-trace-otlp-grpc",
+      "version": "0.221.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/exporter-trace-otlp-http",
+      "version": "0.221.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/exporter-trace-otlp-proto",
+      "version": "0.221.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/exporter-zipkin",
+      "version": "2.10.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/instrumentation",
+      "version": "0.221.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/instrumentation-amqplib",
+      "version": "0.68.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/instrumentation-aws-lambda",
+      "version": "0.73.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/instrumentation-aws-sdk",
+      "version": "0.76.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/instrumentation-bunyan",
+      "version": "0.66.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/instrumentation-cassandra-driver",
+      "version": "0.66.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/instrumentation-connect",
+      "version": "0.64.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/instrumentation-cucumber",
+      "version": "0.37.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/instrumentation-dataloader",
+      "version": "0.38.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/instrumentation-dns",
+      "version": "0.64.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/instrumentation-express",
+      "version": "0.69.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/instrumentation-fs",
+      "version": "0.40.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/instrumentation-generic-pool",
+      "version": "0.64.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/instrumentation-graphql",
+      "version": "0.69.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/instrumentation-grpc",
+      "version": "0.221.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/instrumentation-hapi",
+      "version": "0.67.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/instrumentation-host-metrics",
+      "version": "0.4.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/instrumentation-http",
+      "version": "0.221.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/instrumentation-ioredis",
+      "version": "0.69.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/instrumentation-kafkajs",
+      "version": "0.30.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/instrumentation-knex",
+      "version": "0.65.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/instrumentation-koa",
+      "version": "0.69.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/instrumentation-lru-memoizer",
+      "version": "0.65.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/instrumentation-memcached",
+      "version": "0.64.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/instrumentation-mongodb",
+      "version": "0.74.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/instrumentation-mongoose",
+      "version": "0.67.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/instrumentation-mysql",
+      "version": "0.67.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/instrumentation-mysql2",
+      "version": "0.67.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/instrumentation-nestjs-core",
+      "version": "0.67.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/instrumentation-net",
+      "version": "0.65.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/instrumentation-openai",
+      "version": "0.19.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/instrumentation-oracledb",
+      "version": "0.46.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/instrumentation-pg",
+      "version": "0.73.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/instrumentation-pino",
+      "version": "0.67.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/instrumentation-redis",
+      "version": "0.69.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/instrumentation-restify",
+      "version": "0.66.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/instrumentation-router",
+      "version": "0.65.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/instrumentation-runtime-node",
+      "version": "0.34.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/instrumentation-socket.io",
+      "version": "0.68.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/instrumentation-tedious",
+      "version": "0.40.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/instrumentation-undici",
+      "version": "0.31.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/instrumentation-winston",
+      "version": "0.65.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/otlp-exporter-base",
+      "version": "0.221.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/otlp-grpc-exporter-base",
+      "version": "0.221.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/otlp-transformer",
+      "version": "0.221.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/propagator-aws-xray",
+      "version": "2.2.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/propagator-b3",
+      "version": "2.10.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/propagator-jaeger",
+      "version": "2.10.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/redis-common",
+      "version": "0.38.3",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/resource-detector-alibaba-cloud",
+      "version": "0.36.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/resource-detector-aws",
+      "version": "2.21.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/resource-detector-azure",
+      "version": "0.29.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/resource-detector-container",
+      "version": "0.8.12",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/resource-detector-gcp",
+      "version": "0.56.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/resources",
+      "version": "2.10.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/sdk-logs",
+      "version": "0.221.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/sdk-metrics",
+      "version": "2.10.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/sdk-node",
+      "version": "0.221.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/sdk-trace",
+      "version": "2.10.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/sdk-trace-base",
+      "version": "2.10.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/sdk-trace-node",
+      "version": "2.10.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/semantic-conventions",
+      "version": "1.43.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@opentelemetry/sql-common",
+      "version": "0.42.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@pinojs/redact",
+      "version": "0.4.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@pkgjs/parseargs",
+      "version": "0.11.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@protobufjs/aspromise",
+      "version": "1.1.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@protobufjs/base64",
+      "version": "1.1.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@protobufjs/codegen",
+      "version": "2.0.5",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@protobufjs/eventemitter",
+      "version": "1.1.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@protobufjs/fetch",
+      "version": "1.1.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@protobufjs/float",
+      "version": "1.0.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@protobufjs/path",
+      "version": "1.1.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@protobufjs/pool",
+      "version": "1.1.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@protobufjs/utf8",
+      "version": "1.1.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@selderee/plugin-htmlparser2",
+      "version": "0.12.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@smithy/core",
+      "version": "3.33.3",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@smithy/credential-provider-imds",
+      "version": "4.5.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@smithy/fetch-http-handler",
+      "version": "5.7.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@smithy/node-http-handler",
+      "version": "4.11.3",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@smithy/signature-v4",
+      "version": "5.7.3",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@smithy/types",
+      "version": "4.17.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@swc/core",
+      "version": "1.16.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@swc/core-darwin-arm64",
+      "version": "1.16.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@swc/core-darwin-x64",
+      "version": "1.16.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@swc/core-linux-arm-gnueabihf",
+      "version": "1.16.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@swc/core-linux-arm64-gnu",
+      "version": "1.16.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@swc/core-linux-arm64-musl",
+      "version": "1.16.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@swc/core-linux-ppc64-gnu",
+      "version": "1.16.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@swc/core-linux-s390x-gnu",
+      "version": "1.16.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@swc/core-linux-x64-gnu",
+      "version": "1.16.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@swc/core-linux-x64-musl",
+      "version": "1.16.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@swc/core-win32-arm64-msvc",
+      "version": "1.16.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@swc/core-win32-ia32-msvc",
+      "version": "1.16.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@swc/core-win32-x64-msvc",
+      "version": "1.16.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@swc/counter",
+      "version": "0.1.3",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@swc/types",
+      "version": "0.1.28",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@temporalio/activity",
+      "version": "1.23.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@temporalio/client",
+      "version": "1.23.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@temporalio/common",
+      "version": "1.23.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@temporalio/core-bridge",
+      "version": "1.23.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@temporalio/nexus",
+      "version": "1.23.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@temporalio/proto",
+      "version": "1.23.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@temporalio/worker",
+      "version": "1.23.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@temporalio/workflow",
+      "version": "1.23.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@tokenizer/inflate",
+      "version": "0.4.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@tokenizer/token",
+      "version": "0.3.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@types/aws-lambda",
+      "version": "8.10.162",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@types/bunyan",
+      "version": "1.8.11",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@types/connect",
+      "version": "3.4.38",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@types/estree",
+      "version": "1.0.9",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@types/json-schema",
+      "version": "7.0.15",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@types/mailparser",
+      "version": "3.4.6",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@types/memcached",
+      "version": "2.2.10",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@types/mysql",
+      "version": "2.15.27",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@types/node",
+      "version": "24.10.13",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@types/oracledb",
+      "version": "6.5.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@types/pg",
+      "version": "8.15.6",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@types/pg",
+      "version": "8.23.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@types/pg-pool",
+      "version": "2.0.7",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@types/tedious",
+      "version": "4.0.14",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@webassemblyjs/ast",
+      "version": "1.14.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@webassemblyjs/floating-point-hex-parser",
+      "version": "1.13.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@webassemblyjs/helper-api-error",
+      "version": "1.13.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@webassemblyjs/helper-buffer",
+      "version": "1.14.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@webassemblyjs/helper-numbers",
+      "version": "1.13.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@webassemblyjs/helper-wasm-bytecode",
+      "version": "1.13.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@webassemblyjs/helper-wasm-section",
+      "version": "1.14.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@webassemblyjs/ieee754",
+      "version": "1.13.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@webassemblyjs/leb128",
+      "version": "1.13.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@webassemblyjs/utf8",
+      "version": "1.13.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@webassemblyjs/wasm-edit",
+      "version": "1.14.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@webassemblyjs/wasm-gen",
+      "version": "1.14.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@webassemblyjs/wasm-opt",
+      "version": "1.14.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@webassemblyjs/wasm-parser",
+      "version": "1.14.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@webassemblyjs/wast-printer",
+      "version": "1.14.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@xtuc/ieee754",
+      "version": "1.2.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@xtuc/long",
+      "version": "4.2.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@zone-eu/mailsplit",
+      "version": "5.4.15",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "abort-controller",
+      "version": "3.0.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "abstract-logging",
+      "version": "2.0.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "acorn",
+      "version": "8.18.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "agent-base",
+      "version": "7.1.4",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "ajv",
+      "version": "8.20.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "ajv-formats",
+      "version": "3.0.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "ajv-formats",
+      "version": "2.1.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "ajv-formats",
+      "version": "3.0.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "ajv-keywords",
+      "version": "5.1.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "ansi-regex",
+      "version": "6.3.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "ansi-regex",
+      "version": "5.0.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "ansi-styles",
+      "version": "6.2.3",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "ansi-styles",
+      "version": "4.3.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "asn1.js",
+      "version": "5.4.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "atomic-sleep",
+      "version": "1.0.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "avvio",
+      "version": "9.3.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "balanced-match",
+      "version": "1.0.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "base64-js",
+      "version": "1.5.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "baseline-browser-mapping",
+      "version": "2.11.20",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "bignumber.js",
+      "version": "9.3.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "bn.js",
+      "version": "4.12.5",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "boolbase",
+      "version": "1.0.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "bowser",
+      "version": "2.14.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "brace-expansion",
+      "version": "2.1.4",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "browserslist",
+      "version": "4.28.8",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "buffer",
+      "version": "5.6.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "buffer-equal-constant-time",
+      "version": "1.0.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "buffer-from",
+      "version": "1.1.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "bytes",
+      "version": "3.1.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "call-bind-apply-helpers",
+      "version": "1.0.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "call-bound",
+      "version": "1.0.4",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "caniuse-lite",
+      "version": "1.0.30001810",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "cheerio",
+      "version": "1.2.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "cheerio-select",
+      "version": "2.1.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "chrome-trace-event",
+      "version": "1.0.4",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "cjs-module-lexer",
+      "version": "2.2.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "cliui",
+      "version": "8.0.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "cluster-key-slot",
+      "version": "1.1.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "color-convert",
+      "version": "2.0.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "color-name",
+      "version": "1.1.4",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "commander",
+      "version": "2.20.3",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "cookie",
+      "version": "1.1.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "cross-spawn",
+      "version": "7.0.6",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "css-select",
+      "version": "5.2.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "css-what",
+      "version": "6.2.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "data-uri-to-buffer",
+      "version": "4.0.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "debug",
+      "version": "4.4.3",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "deepmerge-ts",
+      "version": "8.0.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "denque",
+      "version": "2.1.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "depd",
+      "version": "2.0.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "dequal",
+      "version": "2.0.3",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "dom-serializer",
+      "version": "2.0.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "domelementtype",
+      "version": "2.3.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "domhandler",
+      "version": "5.0.3",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "domutils",
+      "version": "3.2.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "dunder-proto",
+      "version": "1.0.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "eastasianwidth",
+      "version": "0.2.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "ecdsa-sig-formatter",
+      "version": "1.0.11",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "electron-to-chromium",
+      "version": "1.5.416",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "emoji-regex",
+      "version": "9.2.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "emoji-regex",
+      "version": "8.0.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "encoding-japanese",
+      "version": "2.2.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "encoding-sniffer",
+      "version": "0.2.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "enhanced-resolve",
+      "version": "5.24.5",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "entities",
+      "version": "4.5.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "entities",
+      "version": "7.0.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "entities",
+      "version": "6.0.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "es-define-property",
+      "version": "1.0.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "es-errors",
+      "version": "1.3.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "es-module-lexer",
+      "version": "2.3.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "es-object-atoms",
+      "version": "1.1.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "escalade",
+      "version": "3.2.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "event-target-shim",
+      "version": "5.0.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "events",
+      "version": "3.3.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "extend",
+      "version": "3.0.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "fast-decode-uri-component",
+      "version": "1.0.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "fast-deep-equal",
+      "version": "3.1.3",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "fast-json-stringify",
+      "version": "7.0.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "fast-jwt",
+      "version": "6.3.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "fast-querystring",
+      "version": "1.1.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "fast-uri",
+      "version": "4.1.3",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "fast-uri",
+      "version": "4.1.3",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "fast-uri",
+      "version": "3.1.6",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "fastfall",
+      "version": "1.5.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "fastify",
+      "version": "5.12.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "fastify-plugin",
+      "version": "6.0.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "fastify-raw-body",
+      "version": "6.0.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "fastparallel",
+      "version": "2.4.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "fastq",
+      "version": "1.20.3",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "fastseries",
+      "version": "1.7.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "fetch-blob",
+      "version": "3.2.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "file-type",
+      "version": "22.0.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "find-my-way",
+      "version": "9.9.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "foreground-child",
+      "version": "3.3.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "formdata-polyfill",
+      "version": "4.0.10",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "forwarded-parse",
+      "version": "2.1.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "fs-monkey",
+      "version": "1.1.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "function-bind",
+      "version": "1.1.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "gaxios",
+      "version": "7.1.3",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "gaxios",
+      "version": "7.3.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "gaxios",
+      "version": "7.1.3",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "gaxios",
+      "version": "7.1.3",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "gcp-metadata",
+      "version": "8.1.4",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "gcp-metadata",
+      "version": "9.0.3",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "gcp-metadata",
+      "version": "8.1.4",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "gcp-metadata",
+      "version": "8.1.4",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "get-caller-file",
+      "version": "2.0.5",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "get-intrinsic",
+      "version": "1.3.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "get-proto",
+      "version": "1.0.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "glob",
+      "version": "10.5.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "glob-to-regex.js",
+      "version": "1.2.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "google-auth-library",
+      "version": "11.0.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "google-auth-library",
+      "version": "10.5.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "google-auth-library",
+      "version": "10.5.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "google-logging-utils",
+      "version": "1.1.3",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "google-logging-utils",
+      "version": "2.0.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "google-logging-utils",
+      "version": "1.1.3",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "google-logging-utils",
+      "version": "1.1.3",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "google-logging-utils",
+      "version": "1.2.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "googleapis",
+      "version": "176.0.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "googleapis-common",
+      "version": "8.0.3",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "gopd",
+      "version": "1.2.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "graceful-fs",
+      "version": "4.2.11",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "gtoken",
+      "version": "8.0.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "has-flag",
+      "version": "4.0.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "has-symbols",
+      "version": "1.1.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "hasown",
+      "version": "2.0.4",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "he",
+      "version": "1.2.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "heap-js",
+      "version": "2.7.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "html-to-text",
+      "version": "10.0.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "htmlparser2",
+      "version": "10.1.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "http-errors",
+      "version": "2.0.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "https-proxy-agent",
+      "version": "7.0.6",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "hyperdyperid",
+      "version": "1.2.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "iconv-lite",
+      "version": "0.6.3",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "iconv-lite",
+      "version": "0.6.3",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "iconv-lite",
+      "version": "0.7.3",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "iconv-lite",
+      "version": "0.6.3",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "iconv-lite",
+      "version": "0.6.3",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "ieee754",
+      "version": "1.2.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "import-in-the-middle",
+      "version": "3.3.3",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "inherits",
+      "version": "2.0.4",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "ioredis",
+      "version": "6.0.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "ip-address",
+      "version": "10.7.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "ipaddr.js",
+      "version": "2.5.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "is-fullwidth-code-point",
+      "version": "3.0.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "isexe",
+      "version": "2.0.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "jackspeak",
+      "version": "3.4.3",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "jest-worker",
+      "version": "27.5.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "json-bigint",
+      "version": "1.0.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "json-schema-ref-resolver",
+      "version": "3.0.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "json-schema-traverse",
+      "version": "1.0.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "jwa",
+      "version": "2.0.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "jws",
+      "version": "4.0.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "leac",
+      "version": "0.7.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "libbase64",
+      "version": "1.3.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "libmime",
+      "version": "5.4.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "libqp",
+      "version": "2.1.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "light-my-request",
+      "version": "6.6.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "linkify-it",
+      "version": "5.0.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "lodash.camelcase",
+      "version": "4.3.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "long",
+      "version": "5.3.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "lru-cache",
+      "version": "10.4.3",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "mailparser",
+      "version": "3.9.17",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "math-intrinsics",
+      "version": "1.1.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "memfs",
+      "version": "4.68.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "merge-stream",
+      "version": "2.0.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "mime-db",
+      "version": "1.54.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "minimalistic-assert",
+      "version": "1.0.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "minimatch",
+      "version": "9.0.9",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "minimizer-webpack-plugin",
+      "version": "5.8.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "minipass",
+      "version": "7.1.3",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "mnemonist",
+      "version": "0.40.4",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "module-details-from-path",
+      "version": "1.0.4",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "ms",
+      "version": "2.1.3",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "ms",
+      "version": "3.0.0-canary.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "neo-async",
+      "version": "2.6.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "nexus-rpc",
+      "version": "0.0.3",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "node-domexception",
+      "version": "1.0.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "node-fetch",
+      "version": "3.3.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "node-releases",
+      "version": "2.0.54",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "nodemailer",
+      "version": "9.0.6",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "nth-check",
+      "version": "2.1.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "object-inspect",
+      "version": "1.13.4",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "obliterator",
+      "version": "2.0.5",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "on-exit-leak-free",
+      "version": "2.1.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "package-json-from-dist",
+      "version": "1.0.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "parse5",
+      "version": "7.3.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "parse5-htmlparser2-tree-adapter",
+      "version": "7.1.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "parse5-parser-stream",
+      "version": "7.1.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "parseley",
+      "version": "0.13.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "path-key",
+      "version": "3.1.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "path-scurry",
+      "version": "1.11.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "pdfjs-dist",
+      "version": "6.3.289",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "peberminta",
+      "version": "0.10.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "pg",
+      "version": "8.23.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "pg-cloudflare",
+      "version": "1.4.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "pg-connection-string",
+      "version": "2.14.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "pg-int8",
+      "version": "1.0.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "pg-pool",
+      "version": "3.14.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "pg-protocol",
+      "version": "1.16.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "pg-types",
+      "version": "2.2.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "pgpass",
+      "version": "1.0.5",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "picocolors",
+      "version": "1.1.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "pino",
+      "version": "10.3.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "pino-abstract-transport",
+      "version": "3.0.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "pino-std-serializers",
+      "version": "7.1.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "postgres-array",
+      "version": "2.0.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "postgres-bytea",
+      "version": "1.0.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "postgres-date",
+      "version": "1.0.7",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "postgres-interval",
+      "version": "1.2.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "process-warning",
+      "version": "4.0.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "process-warning",
+      "version": "5.1.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "protobufjs",
+      "version": "8.8.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "protobufjs",
+      "version": "8.8.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "protobufjs",
+      "version": "8.8.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "protobufjs",
+      "version": "7.6.6",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "punycode.js",
+      "version": "2.3.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "qs",
+      "version": "6.16.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "quick-format-unescaped",
+      "version": "4.0.4",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "raw-body",
+      "version": "3.0.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "readable-stream",
+      "version": "3.6.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "real-require",
+      "version": "0.2.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "real-require",
+      "version": "1.0.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "redis-errors",
+      "version": "1.2.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "require-directory",
+      "version": "2.1.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "require-from-string",
+      "version": "2.0.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "require-in-the-middle",
+      "version": "8.0.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "ret",
+      "version": "0.5.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "reusify",
+      "version": "1.1.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "rfdc",
+      "version": "1.4.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "rimraf",
+      "version": "5.0.10",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "rxjs",
+      "version": "7.8.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "safe-buffer",
+      "version": "5.2.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "safe-regex2",
+      "version": "5.1.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "safe-stable-stringify",
+      "version": "2.5.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "safer-buffer",
+      "version": "2.1.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "schema-utils",
+      "version": "4.3.3",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "secure-json-parse",
+      "version": "4.1.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "selderee",
+      "version": "0.12.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "semver",
+      "version": "7.8.5",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "set-cookie-parser",
+      "version": "2.7.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "setprototypeof",
+      "version": "1.2.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "shebang-command",
+      "version": "2.0.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "shebang-regex",
+      "version": "3.0.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "side-channel",
+      "version": "1.1.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "side-channel-list",
+      "version": "1.0.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "side-channel-map",
+      "version": "1.0.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "side-channel-weakmap",
+      "version": "1.0.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "signal-exit",
+      "version": "4.1.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "sonic-boom",
+      "version": "4.2.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "source-map",
+      "version": "0.7.6",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "source-map",
+      "version": "0.6.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "source-map-js",
+      "version": "1.2.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "source-map-loader",
+      "version": "5.0.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "source-map-support",
+      "version": "0.5.21",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "split2",
+      "version": "4.2.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "standard-as-callback",
+      "version": "2.1.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "statuses",
+      "version": "2.0.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "steed",
+      "version": "1.1.3",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "stream-browserify",
+      "version": "3.0.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "string_decoder",
+      "version": "1.3.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "string-width",
+      "version": "5.1.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "string-width",
+      "version": "4.2.3",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "string-width-cjs",
+      "version": "4.2.3",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "strip-ansi",
+      "version": "7.2.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "strip-ansi",
+      "version": "6.0.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "strip-ansi-cjs",
+      "version": "6.0.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "strtok3",
+      "version": "10.3.5",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "supports-color",
+      "version": "8.1.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "swc-loader",
+      "version": "0.2.7",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "systeminformation",
+      "version": "5.33.6",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "tapable",
+      "version": "2.3.3",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "terser",
+      "version": "5.51.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "thingies",
+      "version": "2.6.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "thread-stream",
+      "version": "4.2.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "tlds",
+      "version": "1.261.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "toad-cache",
+      "version": "3.7.4",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "toidentifier",
+      "version": "1.0.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "token-types",
+      "version": "6.1.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "tree-dump",
+      "version": "1.1.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "tslib",
+      "version": "2.8.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "uc.micro",
+      "version": "2.1.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "uint8array-extras",
+      "version": "1.5.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "undici",
+      "version": "7.29.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "undici-types",
+      "version": "7.16.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "unionfs",
+      "version": "4.6.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "unpipe",
+      "version": "1.0.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "update-browserslist-db",
+      "version": "1.3.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "url-template",
+      "version": "2.0.8",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "util-deprecate",
+      "version": "1.0.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "uuid",
+      "version": "11.1.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "watchpack",
+      "version": "2.5.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "web-streams-polyfill",
+      "version": "3.3.3",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "webpack",
+      "version": "5.110.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "webpack-sources",
+      "version": "3.5.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "whatwg-encoding",
+      "version": "3.1.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "whatwg-mimetype",
+      "version": "4.0.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "which",
+      "version": "2.0.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "wrap-ansi",
+      "version": "8.1.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "wrap-ansi",
+      "version": "7.0.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "wrap-ansi-cjs",
+      "version": "7.0.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "xtend",
+      "version": "4.0.2",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "y18n",
+      "version": "5.0.8",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "yaml",
+      "version": "2.9.0",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "yargs",
+      "version": "17.7.3",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "yargs-parser",
+      "version": "21.1.1",
+      "scope": "root"
+    },
+    {
+      "type": "library",
+      "name": "@emnapi/runtime",
+      "version": "1.11.3",
+      "scope": "web"
+    },
+    {
+      "type": "library",
+      "name": "@img/colour",
+      "version": "1.1.0",
+      "scope": "web"
+    },
+    {
+      "type": "library",
+      "name": "@img/sharp-darwin-arm64",
+      "version": "0.35.4",
+      "scope": "web"
+    },
+    {
+      "type": "library",
+      "name": "@img/sharp-darwin-x64",
+      "version": "0.35.4",
+      "scope": "web"
+    },
+    {
+      "type": "library",
+      "name": "@img/sharp-freebsd-wasm32",
+      "version": "0.35.4",
+      "scope": "web"
+    },
+    {
+      "type": "library",
+      "name": "@img/sharp-libvips-darwin-arm64",
+      "version": "1.3.3",
+      "scope": "web"
+    },
+    {
+      "type": "library",
+      "name": "@img/sharp-libvips-darwin-x64",
+      "version": "1.3.3",
+      "scope": "web"
+    },
+    {
+      "type": "library",
+      "name": "@img/sharp-libvips-linux-arm",
+      "version": "1.3.3",
+      "scope": "web"
+    },
+    {
+      "type": "library",
+      "name": "@img/sharp-libvips-linux-arm64",
+      "version": "1.3.3",
+      "scope": "web"
+    },
+    {
+      "type": "library",
+      "name": "@img/sharp-libvips-linux-ppc64",
+      "version": "1.3.3",
+      "scope": "web"
+    },
+    {
+      "type": "library",
+      "name": "@img/sharp-libvips-linux-riscv64",
+      "version": "1.3.3",
+      "scope": "web"
+    },
+    {
+      "type": "library",
+      "name": "@img/sharp-libvips-linux-s390x",
+      "version": "1.3.3",
+      "scope": "web"
+    },
+    {
+      "type": "library",
+      "name": "@img/sharp-libvips-linux-x64",
+      "version": "1.3.3",
+      "scope": "web"
+    },
+    {
+      "type": "library",
+      "name": "@img/sharp-libvips-linuxmusl-arm64",
+      "version": "1.3.3",
+      "scope": "web"
+    },
+    {
+      "type": "library",
+      "name": "@img/sharp-libvips-linuxmusl-x64",
+      "version": "1.3.3",
+      "scope": "web"
+    },
+    {
+      "type": "library",
+      "name": "@img/sharp-linux-arm",
+      "version": "0.35.4",
+      "scope": "web"
+    },
+    {
+      "type": "library",
+      "name": "@img/sharp-linux-arm64",
+      "version": "0.35.4",
+      "scope": "web"
+    },
+    {
+      "type": "library",
+      "name": "@img/sharp-linux-ppc64",
+      "version": "0.35.4",
+      "scope": "web"
+    },
+    {
+      "type": "library",
+      "name": "@img/sharp-linux-riscv64",
+      "version": "0.35.4",
+      "scope": "web"
+    },
+    {
+      "type": "library",
+      "name": "@img/sharp-linux-s390x",
+      "version": "0.35.4",
+      "scope": "web"
+    },
+    {
+      "type": "library",
+      "name": "@img/sharp-linux-x64",
+      "version": "0.35.4",
+      "scope": "web"
+    },
+    {
+      "type": "library",
+      "name": "@img/sharp-linuxmusl-arm64",
+      "version": "0.35.4",
+      "scope": "web"
+    },
+    {
+      "type": "library",
+      "name": "@img/sharp-linuxmusl-x64",
+      "version": "0.35.4",
+      "scope": "web"
+    },
+    {
+      "type": "library",
+      "name": "@img/sharp-wasm32",
+      "version": "0.35.4",
+      "scope": "web"
+    },
+    {
+      "type": "library",
+      "name": "@img/sharp-webcontainers-wasm32",
+      "version": "0.35.4",
+      "scope": "web"
+    },
+    {
+      "type": "library",
+      "name": "@img/sharp-win32-arm64",
+      "version": "0.35.4",
+      "scope": "web"
+    },
+    {
+      "type": "library",
+      "name": "@img/sharp-win32-ia32",
+      "version": "0.35.4",
+      "scope": "web"
+    },
+    {
+      "type": "library",
+      "name": "@img/sharp-win32-x64",
+      "version": "0.35.4",
+      "scope": "web"
+    },
+    {
+      "type": "library",
+      "name": "@next/env",
+      "version": "16.3.3",
+      "scope": "web"
+    },
+    {
+      "type": "library",
+      "name": "@next/swc-darwin-arm64",
+      "version": "16.3.3",
+      "scope": "web"
+    },
+    {
+      "type": "library",
+      "name": "@next/swc-darwin-x64",
+      "version": "16.3.3",
+      "scope": "web"
+    },
+    {
+      "type": "library",
+      "name": "@next/swc-linux-arm64-gnu",
+      "version": "16.3.3",
+      "scope": "web"
+    },
+    {
+      "type": "library",
+      "name": "@next/swc-linux-arm64-musl",
+      "version": "16.3.3",
+      "scope": "web"
+    },
+    {
+      "type": "library",
+      "name": "@next/swc-linux-x64-gnu",
+      "version": "16.3.3",
+      "scope": "web"
+    },
+    {
+      "type": "library",
+      "name": "@next/swc-linux-x64-musl",
+      "version": "16.3.3",
+      "scope": "web"
+    },
+    {
+      "type": "library",
+      "name": "@next/swc-win32-arm64-msvc",
+      "version": "16.3.3",
+      "scope": "web"
+    },
+    {
+      "type": "library",
+      "name": "@next/swc-win32-x64-msvc",
+      "version": "16.3.3",
+      "scope": "web"
+    },
+    {
+      "type": "library",
+      "name": "@swc/helpers",
+      "version": "0.5.23",
+      "scope": "web"
+    },
+    {
+      "type": "library",
+      "name": "@types/node",
+      "version": "24.10.13",
+      "scope": "web"
+    },
+    {
+      "type": "library",
+      "name": "@types/react",
+      "version": "19.2.14",
+      "scope": "web"
+    },
+    {
+      "type": "library",
+      "name": "@types/react-dom",
+      "version": "19.2.3",
+      "scope": "web"
+    },
+    {
+      "type": "library",
+      "name": "baseline-browser-mapping",
+      "version": "2.11.20",
+      "scope": "web"
+    },
+    {
+      "type": "library",
+      "name": "caniuse-lite",
+      "version": "1.0.30001810",
+      "scope": "web"
+    },
+    {
+      "type": "library",
+      "name": "client-only",
+      "version": "0.0.1",
+      "scope": "web"
+    },
+    {
+      "type": "library",
+      "name": "csstype",
+      "version": "3.2.3",
+      "scope": "web"
+    },
+    {
+      "type": "library",
+      "name": "detect-libc",
+      "version": "2.1.2",
+      "scope": "web"
+    },
+    {
+      "type": "library",
+      "name": "nanoid",
+      "version": "3.3.18",
+      "scope": "web"
+    },
+    {
+      "type": "library",
+      "name": "next",
+      "version": "16.3.3",
+      "scope": "web"
+    },
+    {
+      "type": "library",
+      "name": "picocolors",
+      "version": "1.1.1",
+      "scope": "web"
+    },
+    {
+      "type": "library",
+      "name": "postcss",
+      "version": "8.5.23",
+      "scope": "web"
+    },
+    {
+      "type": "library",
+      "name": "react",
+      "version": "19.2.4",
+      "scope": "web"
+    },
+    {
+      "type": "library",
+      "name": "react-dom",
+      "version": "19.2.4",
+      "scope": "web"
+    },
+    {
+      "type": "library",
+      "name": "scheduler",
+      "version": "0.27.0",
+      "scope": "web"
+    },
+    {
+      "type": "library",
+      "name": "semver",
+      "version": "7.8.5",
+      "scope": "web"
+    },
+    {
+      "type": "library",
+      "name": "sharp",
+      "version": "0.35.4",
+      "scope": "web"
+    },
+    {
+      "type": "library",
+      "name": "source-map-js",
+      "version": "1.2.1",
+      "scope": "web"
+    },
+    {
+      "type": "library",
+      "name": "styled-jsx",
+      "version": "5.1.6",
+      "scope": "web"
+    },
+    {
+      "type": "library",
+      "name": "tslib",
+      "version": "2.8.1",
+      "scope": "web"
+    },
+    {
+      "type": "library",
+      "name": "typescript",
+      "version": "5.9.3",
+      "scope": "web"
+    },
+    {
+      "type": "library",
+      "name": "undici-types",
+      "version": "7.16.0",
+      "scope": "web"
+    }
+  ]
+}

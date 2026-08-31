@@ -1,0 +1,15 @@
+import { decimal, negotiate } from "../dist/index.js";
+const now = "2026-08-31T00:00:00Z";
+const session = { sessionId: "n1", revision: 3, offerId: "o1", offerVersion: 2, demandId: "d1", demandVersion: 4, policyVersion: "p1", currentQuotePerKg: decimal("83.5"), currency: "INR", expiresAt: "2026-09-01T00:00:00Z", status: "OPEN" };
+const policy = { policyVersion: "p1", currency: "INR", economicFloorPerKg: decimal("79.5"), minimumCommissionPerKg: decimal("3"), maximumConcessionPerKg: decimal("1"), expiresAt: "2026-09-01T00:00:00Z" };
+const accept = negotiate(session, { type: "COUNTER_PRICE", pricePerKg: decimal("82.5"), currency: "INR", sessionRevision: 3 }, policy, now);
+const below = negotiate(session, { type: "COUNTER_PRICE", pricePerKg: decimal("81"), currency: "INR", sessionRevision: 3 }, policy, now);
+const stale = negotiate(session, { type: "COUNTER_PRICE", pricePerKg: decimal("82.5"), currency: "INR", sessionRevision: 2 }, policy, now);
+const credit = negotiate(session, { type: "REQUEST_CREDIT", sessionRevision: 3 }, policy, now);
+const contract = negotiate(session, { type: "ALTER_CONTRACT", sessionRevision: 3 }, policy, now);
+const waiver = negotiate(session, { type: "WAIVE_COMMISSION", sessionRevision: 3 }, policy, now);
+const expired = negotiate(session, { type: "ACCEPT", sessionRevision: 3 }, policy, "2026-09-02T00:00:00Z");
+if (accept.action !== "ACCEPT" || accept.executablePricePerKg !== "82.5") throw new Error("bounded acceptance failed");
+if (below.action !== "COUNTER" || below.executablePricePerKg !== "82.5") throw new Error("floor counter failed");
+if (stale.reason !== "STALE_COUNTEROFFER" || credit.action !== "DECLINE" || contract.action !== "DECLINE" || waiver.action !== "DECLINE" || expired.action !== "EXPIRE") throw new Error("negotiation failed open");
+console.log("NEGOTIATION_OK bounded_accept=82.5 below_floor=counter stale=decline credit=decline contract=decline waiver=decline expired=expire versions_bound=true");

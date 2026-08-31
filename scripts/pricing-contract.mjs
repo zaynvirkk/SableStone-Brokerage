@@ -1,0 +1,17 @@
+import { addDecimal, decimal, expectedRelationshipValue, known, priceMatch, unknown } from "../dist/index.js";
+if (addDecimal(decimal("0.1"), decimal("0.2")) !== "0.3") throw new Error("binary float leaked into Decimal math");
+const now = "2026-08-31T00:00:00Z";
+const floor = { state: "KNOWN", amountPerKg: decimal("80.5"), currency: "INR", componentReceiptIds: ["costs"] };
+const ceiling = known({ value: decimal("89"), currency: "INR" }, "buyer-confirmation");
+const policy = { policyId: "policy-1", version: "v1", currency: "INR", commissionFloorPerKg: decimal("2.5"), surplusCaptureRate: decimal("0.4"), hardCommissionCapPerKg: decimal("8"), validFrom: "2026-08-01T00:00:00Z", validUntil: "2026-12-01T00:00:00Z", approvalReceiptId: "fixture-approval", evidenceState: "HYPOTHESIS" };
+const decision = priceMatch(floor, ceiling, policy, now);
+if (decision.state !== "EXECUTABLE" || decision.availableSurplusPerKg !== "8.5" || decision.commissionPerKg !== "3.4" || decision.buyerExecutablePricePerKg !== "83.9") throw new Error(`pricing mismatch ${JSON.stringify(decision)}`);
+const tooThin = priceMatch(floor, known({ value: decimal("82"), currency: "INR" }, "c"), policy, now);
+const unknownFloor = priceMatch({ state: "UNKNOWN", reasons: ["missing"] }, ceiling, policy, now);
+const currency = priceMatch(floor, known({ value: decimal("89"), currency: "USD" }, "c"), policy, now);
+if (tooThin.state !== "REJECTED" || unknownFloor.state !== "UNKNOWN" || currency.state !== "REJECTED") throw new Error("pricing failed open");
+const factor = (value) => known(decimal(value), `source-${value}`);
+const ltv = expectedRelationshipValue({ monthlyVolumeKg: factor("150000"), expectedCommissionPerKg: factor("4"), expectedFillRate: factor("0.8"), expectedMonths: factor("12"), paymentProbability: factor("0.9"), operationalComplexity: factor("2") }, "HEURISTIC");
+const unknownLtv = expectedRelationshipValue({ monthlyVolumeKg: unknown(), expectedCommissionPerKg: factor("4"), expectedFillRate: factor("0.8"), expectedMonths: factor("12"), paymentProbability: factor("0.9"), operationalComplexity: factor("2") }, "HEURISTIC");
+if (ltv.state !== "KNOWN" || ltv.value !== "2592000" || unknownLtv.state !== "UNKNOWN") throw new Error("LTV truth failed");
+console.log("PRICING_OK surplus=8.5 commission=3.4 executable=83.9 thin=rejected unknown=unknown decimal_exact=true ltv=heuristic missing_ltv=unknown");

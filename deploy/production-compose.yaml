@@ -1,0 +1,48 @@
+services:
+  migrate:
+    build:
+      context: ..
+      dockerfile: Containerfile.api
+    command: ["node","scripts/migrate-production.mjs"]
+    env_file: ["production.env"]
+    read_only: true
+    tmpfs: ["/tmp"]
+    restart: "no"
+  api:
+    build:
+      context: ..
+      dockerfile: Containerfile.api
+    env_file: ["production.env"]
+    read_only: true
+    tmpfs: ["/tmp"]
+    ports: ["127.0.0.1:8080:8080"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD","node","-e","fetch('http://127.0.0.1:8080/healthz').then(r=>{if(!r.ok)process.exit(1)})"]
+      interval: 15s
+      timeout: 3s
+      retries: 4
+  worker:
+    build:
+      context: ..
+      dockerfile: Containerfile.api
+    command: ["node","scripts/start-production-worker.mjs"]
+    env_file: ["production.env"]
+    read_only: true
+    tmpfs: ["/tmp"]
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+  web:
+    build:
+      context: ../apps/web
+      dockerfile: Containerfile
+    env_file: ["web.env"]
+    read_only: true
+    tmpfs: ["/tmp"]
+    ports: ["127.0.0.1:3000:3000"]
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy

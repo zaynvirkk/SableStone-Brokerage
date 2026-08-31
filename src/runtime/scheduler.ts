@@ -1,0 +1,8 @@
+import type {Pool} from "pg";
+import type {WorkflowClient} from "@temporalio/client";
+import {inTransaction} from "./database.js";
+
+export class ProductionWorkflowScheduler{
+ constructor(readonly pool:Pool,readonly temporal:WorkflowClient,readonly taskQueue:string){}
+ async tick(limit=20):Promise<number>{if(limit<1||limit>50)throw new Error("schedule limit invalid");const due=await inTransaction(this.pool,async client=>(await client.query("select * from workflow_schedules where state='ACTIVE' and next_run_at<=now() order by next_run_at for update skip locked limit $1",[limit])).rows);let started=0;for(const item of due){const workflow=item.schedule_kind==="DISCOVER_SUPPLIER"?"SupplierDiscoveryWorkflow":"BuyerDiscoveryWorkflow",workflowId=`${workflow}:${item.source_id}:${new Date(item.next_run_at).toISOString()}`;try{await this.temporal.start(workflow,{taskQueue:this.taskQueue,workflowId,args:[{sourceId:String(item.source_id),cursor:null}]});const updated=await this.pool.query("update workflow_schedules set next_run_at=greatest(next_run_at,now())+(interval '1 second' * interval_seconds),last_started_at=now(),last_workflow_id=$2 where id=$1 and state='ACTIVE' and next_run_at<=now()",[item.id,workflowId]);if((updated.rowCount??0)===1)started++}catch(error){if((error as{name?:string}).name!=="WorkflowExecutionAlreadyStartedError")throw error;await this.pool.query("update workflow_schedules set next_run_at=greatest(next_run_at,now())+(interval '1 second' * interval_seconds),last_started_at=now(),last_workflow_id=$2 where id=$1 and state='ACTIVE' and next_run_at<=now()",[item.id,workflowId])}}return started}
+}

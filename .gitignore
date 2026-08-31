@@ -1,0 +1,37 @@
+# Dependencies and generated builds
+node_modules/
+apps/web/node_modules/
+dist/
+apps/web/.next/
+coverage/
+*.tsbuildinfo
+
+# Test and tool caches
+.pytest_cache/
+__pycache__/
+*.py[cod]
+.impeccable/
+
+# Local runtime state and evidence
+.plan-runs/
+artifacts/
+backups/
+data/
+*.log
+*.pid
+
+# Secrets and local overrides
+.env
+.env.*
+!.env.example
+!*.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Editor and operating-system files
+.DS_Store
+.idea/
+.vscode/
+*.swp

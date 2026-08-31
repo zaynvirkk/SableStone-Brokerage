@@ -1,0 +1,8 @@
+import { PRODUCT_FAMILIES, applyInventoryRefresh, decimal, known, numericRange, qualifyBuyer, qualifySupplier, quantity, unknown } from "../dist/index.js";
+export const now = "2026-08-31T00:00:00Z";
+export const product = { family: PRODUCT_FAMILIES[0], polymer: "PP", materialClass: "RECYCLED", recycledSource: known("PCR", "doc-reg"), grade: known("injection", "doc-tds"), application: known("rigid packaging", "doc-tds"), properties: [numericRange("MFI", "11", "14", "g/10min")] };
+export const offer = { offerId: "offer-1", supplierId: "supplier-1", sourceEventId: "event-1", version: 1, supersedesOfferId: null, product, available: quantity("80", "MT"), monthlyCapacity: unknown(), moq: quantity("20", "MT"), supplierNetPrice: decimal("78"), currency: "INR", priceBasis: "EXW", incoterm: "EXW", dispatchLocation: "Ahmedabad", leadTimeDays: 5, documentIds: ["doc-reg", "doc-coa", "doc-tds"], expiresAt: "2026-09-30T00:00:00Z", verificationState: "VERIFIED", freshnessState: "CURRENT" };
+export const registration = { state: "VERIFIED", sourceReceiptId: "receipt-reg", validUntil: "2027-08-31T00:00:00Z" };
+export const documents = ["COA", "TDS"].map((kind) => ({ kind, documentId: `doc-${kind}`, checkState: "VERIFIED", validUntil: "2027-08-31T00:00:00Z" }));
+export const demand = { demandId: "demand-1", buyerId: "buyer-1", sourceEventId: "event-2", version: 1, product, quantity: quantity("40", "MT"), destination: "Pune", buyerCeiling: known({ value: decimal("84"), currency: "INR" }, "doc-demand"), requiredDocumentKinds: ["COA"], requiredAt: "2026-09-10T00:00:00Z", expiresAt: "2026-09-30T00:00:00Z", cadence: unknown(), standing: false, verificationState: "VERIFIED", freshnessState: "CURRENT" };
+export { applyInventoryRefresh, qualifyBuyer, qualifySupplier };

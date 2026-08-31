@@ -1,0 +1,1 @@
+BEGIN;DROP TABLE IF EXISTS reconciliation_results;DROP TRIGGER IF EXISTS ledger_entries_no_update_delete ON ledger_entries;DROP TRIGGER IF EXISTS ledger_transactions_no_update_delete ON ledger_transactions;DROP TABLE IF EXISTS ledger_entries;DROP TABLE IF EXISTS ledger_transactions;DROP TABLE IF EXISTS invoices;DELETE FROM schema_migrations WHERE version='0021_ledger';COMMIT;

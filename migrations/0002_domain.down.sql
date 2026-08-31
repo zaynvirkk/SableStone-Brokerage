@@ -1,0 +1,11 @@
+BEGIN;
+DROP TABLE IF EXISTS buyer_demands;
+DROP TABLE IF EXISTS supplier_offers;
+DROP TABLE IF EXISTS registrations;
+DROP TABLE IF EXISTS documents;
+DROP TABLE IF EXISTS organizations;
+DROP TYPE IF EXISTS freshness_state;
+DROP TYPE IF EXISTS verification_state;
+DROP TYPE IF EXISTS evidence_state;
+DELETE FROM schema_migrations WHERE version = '0002_domain';
+COMMIT;

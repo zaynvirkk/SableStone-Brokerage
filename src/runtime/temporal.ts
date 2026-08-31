@@ -1,0 +1,6 @@
+import {Connection,WorkflowClient} from "@temporalio/client";
+import {NativeConnection,Worker} from "@temporalio/worker";
+import {resolve} from "node:path";
+export interface TemporalRuntimeConfig{readonly address:string;readonly namespace:string;readonly taskQueue:string;readonly tls:boolean;}
+export async function createWorkflowClient(config:TemporalRuntimeConfig):Promise<WorkflowClient>{const options=config.tls?{address:config.address,tls:{}}:{address:config.address};const connection=await Connection.connect(options);return new WorkflowClient({connection,namespace:config.namespace});}
+export async function runBrokerageWorker(config:TemporalRuntimeConfig,activities:Record<string,(input:never)=>unknown>,abortSignal:AbortSignal):Promise<void>{const options=config.tls?{address:config.address,tls:{}}:{address:config.address},connection=await NativeConnection.connect(options),workflowsPath=resolve(process.cwd(),"dist/workflows/production.js"),worker=await Worker.create({connection,namespace:config.namespace,taskQueue:config.taskQueue,workflowsPath,activities,maxConcurrentActivityTaskExecutions:20,maxConcurrentWorkflowTaskExecutions:50});abortSignal.addEventListener("abort",()=>worker.shutdown(),{once:true});try{await worker.run()}finally{await connection.close()}}

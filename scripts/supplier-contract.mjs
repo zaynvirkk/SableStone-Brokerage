@@ -1,0 +1,11 @@
+import { applyInventoryRefresh, documents, now, offer, qualifySupplier, registration } from "./qualification-fixture.mjs";
+const base = { offer, registration, documents, supplierConfirmedAt: "2026-08-30T00:00:00Z", asksSableStoneToPrepay: false, now, requiredDocumentKinds: ["COA", "TDS"] };
+if (qualifySupplier(base).verdict !== "PASS") throw new Error("valid supplier rejected");
+const missing = qualifySupplier({ ...base, documents: documents.filter((d) => d.kind !== "COA") });
+const stale = qualifySupplier({ ...base, registration: { ...registration, validUntil: "2026-08-01T00:00:00Z" } });
+const prepay = qualifySupplier({ ...base, asksSableStoneToPrepay: true });
+if (missing.verdict !== "REQUEST_DOCUMENTS" || stale.verdict !== "FAIL" || prepay.verdict !== "FAIL") throw new Error("supplier failed open");
+const same = applyInventoryRefresh(offer, { previousOfferId: offer.offerId, previousVersion: 1, action: "SAME", confirmedAt: now, newSupplierNetPrice: null, newQuantityMt: null }, now);
+const sold = applyInventoryRefresh(offer, { previousOfferId: offer.offerId, previousVersion: 1, action: "SOLD_OUT", confirmedAt: now, newSupplierNetPrice: null, newQuantityMt: null }, now);
+if (same.previousState !== "OFFER_STALE" || same.nextVersion !== 2 || sold.previousState !== "OFFER_DEAD") throw new Error("refresh versioning failed");
+console.log("SUPPLIER_OK pass=true missing_coa=request stale_registration=fail prepay=fail refresh_versions=true sold_out=dead");
