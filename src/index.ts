@@ -30,6 +30,7 @@ export * from "./runtime/supervisor.js";
 export * from "./runtime/stage_handlers.js";
 export * from "./runtime/commands.js";
 export * from "./runtime/provider_factory.js";
+export * from "./runtime/provider_parties.js";
 export * from "./runtime/inbox_processors.js";
 export * from "./runtime/sensitive_data.js";
 export * from "./runtime/gmail_watch.js";
