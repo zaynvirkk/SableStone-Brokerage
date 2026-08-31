@@ -30,6 +30,7 @@ import {
   AcquisitionOutreachDispatcher,
   buildCommercialExtractor,
   AgreementAutomationDispatcher,
+  bindBrokerageActivities,
 } from "../dist/index.js";
 
 const runtime = await bootstrapProduction(process.env);
@@ -188,7 +189,7 @@ const controller = new AbortController(),
     runtime.activation.capabilities.includes("DISCOVERY") && cipher
       ? new ProductionDiscoveryService(runtime.pool, runtime.evidence, cipher)
       : undefined,
-  activities = new ProductionActivityService(
+  activityService = new ProductionActivityService(
     runtime.pool,
     buildDatabaseStageHandlers(
       runtime.pool,
@@ -197,6 +198,7 @@ const controller = new AbortController(),
       providerParties ?? undefined,
     ),
   ),
+  activities = bindBrokerageActivities(activityService),
   handlers = {
     ...buildProductionInboxHandlers({
       pool: runtime.pool,

@@ -4,6 +4,25 @@ import { DurableInboxRepository, OutboxDispatcher } from "./database.js";
 import type { Pool } from "pg";
 
 export type InboxHandler = (event: QueryResultRow) => Promise<void>;
+
+export async function startWorkflowIdempotently(
+  temporal: Pick<WorkflowClient, "start">,
+  workflow: string,
+  options: Parameters<WorkflowClient["start"]>[1],
+): Promise<"STARTED" | "ALREADY_STARTED"> {
+  try {
+    await temporal.start(workflow, options);
+    return "STARTED";
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.name === "WorkflowExecutionAlreadyStartedError"
+    )
+      return "ALREADY_STARTED";
+    throw error;
+  }
+}
+
 export class RuntimeSupervisor {
   readonly inbox: DurableInboxRepository;
   readonly outbox: OutboxDispatcher;
@@ -64,16 +83,14 @@ export class RuntimeSupervisor {
       aggregateId = String(event.aggregate_id),
       workflow = routeWorkflow(eventType);
     if (!workflow) return;
-    await this.temporal.start(workflow.name, {
+    await startWorkflowIdempotently(this.temporal, workflow.name, {
       taskQueue: this.taskQueue,
       workflowId: `${workflow.name}:${aggregateId}:${eventType}`,
       args: [workflow.args(event)],
     });
   }
 }
-function routeWorkflow(
-  eventType: string,
-): {
+function routeWorkflow(eventType: string): {
   name: string;
   args: (event: QueryResultRow) => Readonly<Record<string, unknown>>;
 } | null {
