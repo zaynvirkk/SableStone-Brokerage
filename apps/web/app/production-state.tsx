@@ -1,3 +1,43 @@
 import Link from "next/link";
-export function ProductionBoundary({state,reason}:{state:string;reason:string}){return <section className="empty production-boundary" role="status"><span className={`status ${state==="AUTH_REQUIRED"?"sealed":"blocked"}`}>{state}</span><h1>Register unavailable</h1><p>{reason}</p><Link className="primary" href="/">Return to commercial boundary</Link></section>}
-export function EmptyRegister({title,body}:{title:string;body:string}){return <section className="empty production-boundary"><span className="status unknown">EMPTY</span><h1>{title}</h1><p>{body}</p></section>}
+export function ProductionBoundary({
+  state,
+  reason,
+}: {
+  state: string;
+  reason: string;
+}) {
+  return (
+    <section className="empty production-boundary" role="status">
+      <span
+        className={`status ${state === "AUTH_REQUIRED" ? "sealed" : "blocked"}`}
+      >
+        {state}
+      </span>
+      <h1>Register unavailable</h1>
+      <p>{reason}</p>
+      <Link
+        className="primary"
+        href={state === "AUTH_REQUIRED" ? "/api/auth/sign-in" : "/"}
+      >
+        {state === "AUTH_REQUIRED"
+          ? "Sign in with verified company account"
+          : "Return to commercial boundary"}
+      </Link>
+    </section>
+  );
+}
+export function EmptyRegister({
+  title,
+  body,
+}: {
+  title: string;
+  body: string;
+}) {
+  return (
+    <section className="empty production-boundary">
+      <span className="status unknown">EMPTY</span>
+      <h1>{title}</h1>
+      <p>{body}</p>
+    </section>
+  );
+}

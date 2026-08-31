@@ -125,6 +125,31 @@ export async function createProductionApi(
     state: "OK",
     releaseDigest: deps.releaseDigest,
   }));
+  app.get(
+    "/v1/session",
+    {
+      onRequest: [app.authenticate],
+      config: { rateLimit: { max: 30, timeWindow: "1 minute" } },
+    },
+    async (request) => {
+      const p = principal(request);
+      assertAuthorized(
+        p,
+        {
+          organizationId: p.organizationId,
+          allowedRoles: ["OPERATIONS", "SYSTEM", "SUPPLIER", "BUYER"],
+        },
+        new Date().toISOString(),
+      );
+      return {
+        principalId: p.principalId,
+        role: p.role,
+        organizationId: p.organizationId,
+        emailVerified: request.user.emailVerified === true,
+        expiresAt: p.sessionExpiresAt,
+      };
+    },
+  );
   app.get("/readyz", async (_request, reply) => {
     try {
       await deps.pool.query("select 1");

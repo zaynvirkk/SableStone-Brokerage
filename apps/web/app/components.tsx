@@ -2,17 +2,223 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 const nav = [
-  ["/operations", "Operations"], ["/supplier", "Supplier desk"], ["/buyer", "Buyer desk"], ["/trade/P-10982", "Protected trade"], ["/", "Product boundary"],
+  ["/operations", "Operations"],
+  ["/supplier", "Supplier desk"],
+  ["/buyer", "Buyer desk"],
+  ["/trade/P-10982", "Protected trade"],
+  ["/", "Product boundary"],
 ] as const;
-export function Mark() { return <svg aria-hidden="true" viewBox="0 0 32 32" className="mark"><path d="M5 24 15 5h5L10 24Zm10 0 8-15h4l-8 15Z" /></svg>; }
-export function Shell({ current, children }: { current: string; children: ReactNode }) {
-  return <div className="shell"><a className="skip" href="#content">Skip to content</a><aside className="register"><div className="brand"><Mark/><span>SableStone</span></div><p className="register-label">Brokerage register</p><nav aria-label="Primary">{nav.map(([href,label])=><Link key={href} href={href} aria-current={current===href?"page":undefined}>{label}</Link>)}</nav><div className="constitution"><strong>Capital boundary</strong><span>Inventory ₹0</span><span>Cargo capital ₹0</span><span>Credit exposure ₹0</span></div></aside><main id="content" className="main">{children}</main></div>;
+export function Mark() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 32 32" className="mark">
+      <path d="M5 24 15 5h5L10 24Zm10 0 8-15h4l-8 15Z" />
+    </svg>
+  );
 }
-export function FixtureFlag(){return <span className="fixture">Synthetic fixture</span>}
-export function Status({state}:{state:"pass"|"blocked"|"unknown"|"sealed"}){return <span className={`status ${state}`}>{state}</span>}
-export const tradeStates=["Matched","Negotiating","Protected","Fee locked","Identity released","Contracted","Funded","Dispatched","In transit","Delivered","Accepted","Settled"];
-export function StateRail({active=3}:{active?:number}){return <ol className="state-rail" aria-label="Trade state">{tradeStates.map((state,index)=><li key={state} className={index<active?"done":index===active?"active":"future"}><span>{index<active?"✓":String(index+1).padStart(2,"0")}</span><b>{state}</b></li>)}</ol>}
-export function DocketHeader({title,refId,mode="Production register",rails="Policy gated"}:{title:string;refId:string;mode?:string;rails?:string}){return <header className="docket-head"><div><h1>{title}</h1><p>Receipt-backed polymer brokerage · identities sealed until fee lock</p></div><dl><div><dt>Docket</dt><dd>{refId}</dd></div><div><dt>Mode</dt><dd>{mode}</dd></div><div><dt>Live rails</dt><dd>{rails}</dd></div></dl></header>}
-export function DecisionStrip({state="unknown",title="Provider approval unavailable",body="No production settlement rail has current written use-case approval. Identity remains sealed.",action="Trade stopped safely"}:{state?:"unknown"|"blocked"|"pass";title?:string;body?:string;action?:string}){return <aside className="decision" aria-labelledby="decision-title"><p>Deterministic decision</p><div className={`stamp ${state}`}>{state}</div><h2 id="decision-title">{title}</h2><p>{body}</p><hr/><dl><div><dt>Next permitted transition</dt><dd>{action}</dd></div><div><dt>Founder action</dt><dd>None</dd></div><div><dt>Identity</dt><dd>Sealed</dd></div></dl><button type="button" disabled>Continue transaction</button><small>Disabled until every server-side prerequisite is current.</small></aside>}
-export function FieldTable({rows}:{rows:readonly (readonly [string,string,ReactNode?])[]}){return <div className="field-table">{rows.map(([label,value,state])=><div key={label}><span>{label}</span><b>{value}</b>{state??null}</div>)}</div>}
-export function Allocation(){return <section className="allocation"><h2>Settlement instruction</h2><div className="equation"><div><span>Buyer gross</span><b>₹8,500,000</b></div><i>=</i><div><span>Supplier entitlement</span><b>₹8,000,000</b></div><i>+</i><div><span>SableStone brokerage</span><b>₹500,000</b></div></div><p><FixtureFlag/> Illustrative arithmetic only. No provider approval, funding, payment, or revenue is claimed.</p></section>}
+export function Shell({
+  current,
+  children,
+}: {
+  current: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="shell">
+      <a className="skip" href="#content">
+        Skip to content
+      </a>
+      <aside className="register">
+        <div className="brand">
+          <Mark />
+          <span>SableStone</span>
+        </div>
+        <p className="register-label">Brokerage register</p>
+        <nav aria-label="Primary">
+          {nav.map(([href, label]) => (
+            <Link
+              key={href}
+              href={href}
+              aria-current={current === href ? "page" : undefined}
+            >
+              {label}
+            </Link>
+          ))}
+        </nav>
+        <form action="/api/auth/sign-out" method="post">
+          <button type="submit">Sign out</button>
+        </form>
+        <div className="constitution">
+          <strong>Capital boundary</strong>
+          <span>Inventory ₹0</span>
+          <span>Cargo capital ₹0</span>
+          <span>Credit exposure ₹0</span>
+        </div>
+      </aside>
+      <main id="content" className="main">
+        {children}
+      </main>
+    </div>
+  );
+}
+export function FixtureFlag() {
+  return <span className="fixture">Synthetic fixture</span>;
+}
+export function Status({
+  state,
+}: {
+  state: "pass" | "blocked" | "unknown" | "sealed";
+}) {
+  return <span className={`status ${state}`}>{state}</span>;
+}
+export const tradeStates = [
+  "Matched",
+  "Negotiating",
+  "Protected",
+  "Fee locked",
+  "Identity released",
+  "Contracted",
+  "Funded",
+  "Dispatched",
+  "In transit",
+  "Delivered",
+  "Accepted",
+  "Settled",
+];
+export function StateRail({ active = 3 }: { active?: number }) {
+  return (
+    <ol className="state-rail" aria-label="Trade state">
+      {tradeStates.map((state, index) => (
+        <li
+          key={state}
+          className={
+            index < active ? "done" : index === active ? "active" : "future"
+          }
+        >
+          <span>
+            {index < active ? "✓" : String(index + 1).padStart(2, "0")}
+          </span>
+          <b>{state}</b>
+        </li>
+      ))}
+    </ol>
+  );
+}
+export function DocketHeader({
+  title,
+  refId,
+  mode = "Production register",
+  rails = "Policy gated",
+}: {
+  title: string;
+  refId: string;
+  mode?: string;
+  rails?: string;
+}) {
+  return (
+    <header className="docket-head">
+      <div>
+        <h1>{title}</h1>
+        <p>
+          Receipt-backed polymer brokerage · identities sealed until fee lock
+        </p>
+      </div>
+      <dl>
+        <div>
+          <dt>Docket</dt>
+          <dd>{refId}</dd>
+        </div>
+        <div>
+          <dt>Mode</dt>
+          <dd>{mode}</dd>
+        </div>
+        <div>
+          <dt>Live rails</dt>
+          <dd>{rails}</dd>
+        </div>
+      </dl>
+    </header>
+  );
+}
+export function DecisionStrip({
+  state = "unknown",
+  title = "Provider approval unavailable",
+  body = "No production settlement rail has current written use-case approval. Identity remains sealed.",
+  action = "Trade stopped safely",
+}: {
+  state?: "unknown" | "blocked" | "pass";
+  title?: string;
+  body?: string;
+  action?: string;
+}) {
+  return (
+    <aside className="decision" aria-labelledby="decision-title">
+      <p>Deterministic decision</p>
+      <div className={`stamp ${state}`}>{state}</div>
+      <h2 id="decision-title">{title}</h2>
+      <p>{body}</p>
+      <hr />
+      <dl>
+        <div>
+          <dt>Next permitted transition</dt>
+          <dd>{action}</dd>
+        </div>
+        <div>
+          <dt>Founder action</dt>
+          <dd>None</dd>
+        </div>
+        <div>
+          <dt>Identity</dt>
+          <dd>Sealed</dd>
+        </div>
+      </dl>
+      <button type="button" disabled>
+        Continue transaction
+      </button>
+      <small>Disabled until every server-side prerequisite is current.</small>
+    </aside>
+  );
+}
+export function FieldTable({
+  rows,
+}: {
+  rows: readonly (readonly [string, string, ReactNode?])[];
+}) {
+  return (
+    <div className="field-table">
+      {rows.map(([label, value, state]) => (
+        <div key={label}>
+          <span>{label}</span>
+          <b>{value}</b>
+          {state ?? null}
+        </div>
+      ))}
+    </div>
+  );
+}
+export function Allocation() {
+  return (
+    <section className="allocation">
+      <h2>Settlement instruction</h2>
+      <div className="equation">
+        <div>
+          <span>Buyer gross</span>
+          <b>₹8,500,000</b>
+        </div>
+        <i>=</i>
+        <div>
+          <span>Supplier entitlement</span>
+          <b>₹8,000,000</b>
+        </div>
+        <i>+</i>
+        <div>
+          <span>SableStone brokerage</span>
+          <b>₹500,000</b>
+        </div>
+      </div>
+      <p>
+        <FixtureFlag /> Illustrative arithmetic only. No provider approval,
+        funding, payment, or revenue is claimed.
+      </p>
+    </section>
+  );
+}
