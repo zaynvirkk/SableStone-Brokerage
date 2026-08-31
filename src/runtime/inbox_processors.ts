@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolClient, QueryResultRow } from "pg";
 import type { GmailProductionConnector } from "../connectors/gmail.js";
 import type { ProductionSettlementHttpAdapter } from "../connectors/settlement_http.js";
+import type { EvidenceBoundCommercialExtractor } from "../connectors/commercial_extraction.js";
 import {
   classifyInboundMime,
   createReplyMime,
@@ -18,6 +19,8 @@ import {
   type NegotiationSession,
 } from "../negotiation.js";
 import { decimal } from "../money.js";
+import { compareDecimalStrings } from "../domain.js";
+import { settlementInstructionAcceptanceDigest } from "./commands.js";
 
 function path(value: unknown, dotted: string | undefined): unknown {
   return dotted
@@ -42,6 +45,7 @@ export function buildProductionInboxHandlers(input: {
   cipher: SensitiveDataCipher | null;
   gmail: GmailProductionConnector | null;
   settlementAdapters: readonly ProductionSettlementHttpAdapter[];
+  commercialExtractor?: EvidenceBoundCommercialExtractor | null;
 }): Readonly<Record<string, (event: QueryResultRow) => Promise<void>>> {
   const handlers: Record<string, (event: QueryResultRow) => Promise<void>> = {};
   if (input.gmail) {
@@ -53,6 +57,7 @@ export function buildProductionInboxHandlers(input: {
         input.cipher!,
         input.gmail!,
         event,
+        input.commercialExtractor ?? null,
       );
   }
   for (const adapter of input.settlementAdapters)
@@ -67,6 +72,7 @@ async function processGmailEvent(
   cipher: SensitiveDataCipher,
   gmail: GmailProductionConnector,
   event: QueryResultRow,
+  extractor: EvidenceBoundCommercialExtractor | null,
 ): Promise<void> {
   const envelopeBytes = await store.readVerified(
       String(event.payload_object_key),
@@ -85,7 +91,16 @@ async function processGmailEvent(
       envelope.payloadObjectKey,
       envelope.payloadSha256,
     ),
-    decision = await classifyInboundMime(raw),
+    deterministicDecision = await classifyInboundMime(raw),
+    decision =
+      extractor &&
+      !deterministicDecision.offer &&
+      !deterministicDecision.demand &&
+      deterministicDecision.state !== "DECLINE"
+        ? await extractor
+            .extract(raw, envelope.occurredAt)
+            .catch(() => deterministicDecision)
+        : deterministicDecision,
     decisionDigest = createHash("sha256")
       .update(JSON.stringify(decision))
       .digest("hex"),
@@ -368,7 +383,7 @@ async function processSettlementEvent(
       path(decoded, config.webhookEventTypePath),
       "provider event type",
     ),
-    internalType = config.webhookEventTypeMap[externalType],
+    mappedType = config.webhookEventTypeMap[externalType],
     providerReference = text(
       path(decoded, config.webhookProviderReferencePath),
       "provider reference",
@@ -377,15 +392,15 @@ async function processSettlementEvent(
       path(decoded, config.webhookOccurredAtPath),
       "provider occurred_at",
     );
-  if (!internalType || Number.isNaN(Date.parse(occurredAt)))
+  if (!mappedType || Number.isNaN(Date.parse(occurredAt)))
     throw new Error("unsupported settlement event");
-  const lock = (
+  const instruction = (
     await pool.query(
-      "select f.*,t.state trade_state from fee_locks f join trades t on t.id=f.trade_id where f.provider=$1 and f.provider_reference=$2",
+      "select i.*,t.relationship_id,t.state trade_state from settlement_instructions i join trades t on t.id=i.trade_id where i.provider=$1 and i.provider_reference=$2 and i.acknowledged",
       [adapter.provider, providerReference],
     )
   ).rows[0];
-  if (!lock) throw new Error("settlement event fee lock unknown");
+  if (!instruction) throw new Error("settlement event instruction unknown");
   const rawAmount = config.webhookAmountPath
       ? path(decoded, config.webhookAmountPath)
       : null,
@@ -404,17 +419,102 @@ async function processSettlementEvent(
     bankReference =
       rawBank === null || rawBank === undefined ? null : String(rawBank);
   if (
-    internalType === "FUNDED" &&
-    (amount !== String(lock.gross_amount) || currency !== lock.currency)
+    ["FUNDED", "ENTITLEMENT_SECURED"].includes(mappedType) &&
+    (!amount ||
+      compareDecimalStrings(
+        decimal(amount),
+        decimal(String(instruction.gross_amount)),
+      ) !== 0 ||
+      currency !== instruction.currency)
   )
     throw new Error("funding amount or currency mismatch");
   if (
-    internalType === "DISBURSEMENT_REPORTED" &&
+    mappedType === "DISBURSEMENT_REPORTED" &&
     (!bankReference ||
-      amount !== String(lock.sablestone_entitlement) ||
-      currency !== lock.currency)
+      !amount ||
+      compareDecimalStrings(
+        decimal(amount),
+        decimal(String(instruction.sablestone_entitlement)),
+      ) !== 0 ||
+      currency !== instruction.currency)
   )
     throw new Error("brokerage disbursement evidence mismatch");
+  let internalType = mappedType,
+    securityEvidenceSha256 = String(event.payload_digest),
+    platformAllocationVerified = false;
+  if (adapter.provider === "CASHFREE_EASY_SPLIT" && mappedType === "FUNDED") {
+    const split = await adapter.applyCashfreeCapturedSplit(
+      {
+        instructionId: instruction.id,
+        tradeId: instruction.trade_id,
+        provider: instruction.provider,
+        environment: "PRODUCTION",
+        commodityFamily: instruction.commodity_family,
+        buyerId: instruction.buyer_id,
+        supplierId: instruction.supplier_id,
+        sablestoneBeneficiaryId: instruction.sablestone_beneficiary_id,
+        currency: instruction.currency,
+        grossAmount: decimal(String(instruction.gross_amount)),
+        supplierEntitlement: decimal(String(instruction.supplier_entitlement)),
+        sablestoneEntitlement: decimal(
+          String(instruction.sablestone_entitlement),
+        ),
+        otherAllocations: [],
+        releaseConditions: instruction.release_conditions,
+        disputeProcedure: instruction.dispute_procedure,
+        expiresAt: new Date(instruction.expires_at).toISOString(),
+        idempotencyKey: instruction.idempotency_key,
+      },
+      occurredAt,
+    );
+    securityEvidenceSha256 = createHash("sha256")
+      .update(String(event.payload_digest))
+      .update(split.receiptSha256)
+      .digest("hex");
+    platformAllocationVerified = true;
+    internalType = "ENTITLEMENT_SECURED";
+  }
+  if (adapter.provider === "RAZORPAY_ROUTE" && mappedType === "FUNDED") {
+    if (!config.webhookPaymentReferencePath)
+      throw new Error("Razorpay captured payment reference path missing");
+    const paymentReference = text(
+        path(decoded, config.webhookPaymentReferencePath),
+        "Razorpay payment reference",
+      ),
+      transfer = await adapter.applyRazorpayCapturedTransfer(
+        {
+          instructionId: instruction.id,
+          tradeId: instruction.trade_id,
+          provider: instruction.provider,
+          environment: "PRODUCTION",
+          commodityFamily: instruction.commodity_family,
+          buyerId: instruction.buyer_id,
+          supplierId: instruction.supplier_id,
+          sablestoneBeneficiaryId: instruction.sablestone_beneficiary_id,
+          currency: instruction.currency,
+          grossAmount: decimal(String(instruction.gross_amount)),
+          supplierEntitlement: decimal(
+            String(instruction.supplier_entitlement),
+          ),
+          sablestoneEntitlement: decimal(
+            String(instruction.sablestone_entitlement),
+          ),
+          otherAllocations: [],
+          releaseConditions: instruction.release_conditions,
+          disputeProcedure: instruction.dispute_procedure,
+          expiresAt: new Date(instruction.expires_at).toISOString(),
+          idempotencyKey: instruction.idempotency_key,
+        },
+        paymentReference,
+        occurredAt,
+      );
+    securityEvidenceSha256 = createHash("sha256")
+      .update(String(event.payload_digest))
+      .update(transfer.receiptSha256)
+      .digest("hex");
+    platformAllocationVerified = true;
+    internalType = "ENTITLEMENT_SECURED";
+  }
   await inTransaction(pool, async (client) => {
     const inserted = await client.query(
       "insert into settlement_provider_events(id,provider,external_event_id,provider_reference,trade_id,event_type,amount,currency,occurred_at,payload_sha256,payload_object_key,bank_reference) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) on conflict(provider,external_event_id) do nothing returning id",
@@ -423,7 +523,7 @@ async function processSettlementEvent(
         adapter.provider,
         event.external_event_id,
         providerReference,
-        lock.trade_id,
+        instruction.trade_id,
         internalType,
         amount,
         currency,
@@ -435,39 +535,120 @@ async function processSettlementEvent(
     );
     if (!inserted.rows[0]) return;
     const outbox = new TransactionalOutboxRepository(pool);
-    if (internalType === "FUNDED" && lock.trade_state === "CONTRACTED") {
+    if (internalType === "ENTITLEMENT_SECURED") {
+      if (
+        !platformAllocationVerified &&
+        (!config.webhookSablestoneBeneficiaryPath ||
+          !config.webhookSupplierBeneficiaryPath ||
+          String(path(decoded, config.webhookSablestoneBeneficiaryPath)) !==
+            String(instruction.sablestone_beneficiary_id) ||
+          String(path(decoded, config.webhookSupplierBeneficiaryPath)) !==
+            String(instruction.supplier_id))
+      )
+        throw new Error("settlement beneficiary evidence mismatch");
+      const acceptances = (
+          await client.query(
+            "select role,instruction_digest from settlement_instruction_acceptances where instruction_id=$1",
+            [instruction.id],
+          )
+        ).rows,
+        digest = settlementInstructionAcceptanceDigest(instruction);
+      if (
+        acceptances.length !== 2 ||
+        acceptances.some((row) => row.instruction_digest !== digest) ||
+        !instruction.provider_approval_id
+      )
+        throw new Error("secured entitlement lacks exact accepted instruction");
+      const securityId = randomUUID(),
+        feeLockId = randomUUID();
+      await client.query(
+        "insert into entitlement_security_events(id,instruction_id,settlement_provider_event_id,provider,provider_reference,gross_amount,supplier_entitlement,sablestone_entitlement,currency,beneficiary_verified,funds_secured,evidence_sha256,secured_at) values($1,$2,$3,$4,$5,$6,$7,$8,$9,true,true,$10,$11)",
+        [
+          securityId,
+          instruction.id,
+          inserted.rows[0].id,
+          adapter.provider,
+          providerReference,
+          instruction.gross_amount,
+          instruction.supplier_entitlement,
+          instruction.sablestone_entitlement,
+          instruction.currency,
+          securityEvidenceSha256,
+          occurredAt,
+        ],
+      );
+      await client.query(
+        "insert into fee_locks(id,trade_id,relationship_id,instruction_id,provider,provider_approval_id,provider_reference,instruction_digest,supplier_accepted_instruction_digest,buyer_accepted_instruction_digest,supplier_entitlement,sablestone_entitlement,gross_amount,currency,state,created_at) values($1,$2,$3,$4,$5,$6,$7,$8,$8,$8,$9,$10,$11,$12,'LOCKED',$13)",
+        [
+          feeLockId,
+          instruction.trade_id,
+          instruction.relationship_id,
+          instruction.id,
+          adapter.provider,
+          instruction.provider_approval_id,
+          providerReference,
+          digest,
+          instruction.supplier_entitlement,
+          instruction.sablestone_entitlement,
+          instruction.gross_amount,
+          instruction.currency,
+          occurredAt,
+        ],
+      );
+      await client.query(
+        "update settlement_instructions set entitlement_secured_at=$2,entitlement_security_event_id=$3 where id=$1 and entitlement_secured_at is null",
+        [instruction.id, occurredAt, securityId],
+      );
+      const updated = await client.query(
+        "update trades set state='FEE_LOCKED',updated_at=now() where id=$1 and state='PROTECTED'",
+        [instruction.trade_id],
+      );
+      if ((updated.rowCount ?? 0) !== 1)
+        throw new Error("secured entitlement trade-state conflict");
+      await outbox.append(client, {
+        id: randomUUID(),
+        aggregateType: "TRADE",
+        aggregateId: instruction.trade_id,
+        eventType: "ENTITLEMENT_SECURED",
+        payload: { tradeId: instruction.trade_id, feeLockId, securityId },
+        idempotencyKey: `trade:${instruction.trade_id}:entitlement-secured`,
+      });
+    } else if (
+      internalType === "FUNDED" &&
+      instruction.trade_state === "CONTRACTED"
+    ) {
       const updated = await client.query(
         "update trades set state='FUNDED',updated_at=now() where id=$1 and state='CONTRACTED'",
-        [lock.trade_id],
+        [instruction.trade_id],
       );
       if ((updated.rowCount ?? 0) !== 1)
         throw new Error("funding transition conflict");
       await outbox.append(client, {
         id: randomUUID(),
         aggregateType: "TRADE",
-        aggregateId: lock.trade_id,
+        aggregateId: instruction.trade_id,
         eventType: "TRADE_FUNDED",
         payload: {
           provider: adapter.provider,
           externalEventId: event.external_event_id,
         },
-        idempotencyKey: `trade:${lock.trade_id}:funded`,
+        idempotencyKey: `trade:${instruction.trade_id}:funded`,
       });
     } else if (
       ["FAILED", "REVERSED"].includes(internalType) &&
-      !["SETTLED", "RECURRING"].includes(lock.trade_state)
+      !["SETTLED", "RECURRING"].includes(instruction.trade_state)
     ) {
       await client.query(
         "update trades set state='SETTLEMENT_FAILED',updated_at=now() where id=$1 and state not in('SETTLED','RECURRING','SETTLEMENT_FAILED')",
-        [lock.trade_id],
+        [instruction.trade_id],
       );
     } else if (
       internalType === "DISPUTE_OPENED" &&
-      !["SETTLED", "RECURRING"].includes(lock.trade_state)
+      !["SETTLED", "RECURRING"].includes(instruction.trade_state)
     ) {
       await client.query(
         "update trades set state='DISPUTED_FROZEN',updated_at=now() where id=$1 and state not in('SETTLED','RECURRING','DISPUTED_FROZEN')",
-        [lock.trade_id],
+        [instruction.trade_id],
       );
     }
   });

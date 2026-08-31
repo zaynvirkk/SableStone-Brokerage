@@ -354,7 +354,7 @@ export class ProductionCommandService {
       });
       const funded = (
         await client.query(
-          "select id,provider,external_event_id from settlement_provider_events where trade_id=$1 and event_type='FUNDED' order by occurred_at desc limit 1",
+          "select id,provider,external_event_id from settlement_provider_events where trade_id=$1 and event_type in('FUNDED','ENTITLEMENT_SECURED') order by occurred_at desc limit 1",
           [input.tradeId],
         )
       ).rows[0];

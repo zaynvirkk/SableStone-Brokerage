@@ -45,4 +45,4 @@ def test_firm_quote_and_negotiation_pipeline_is_reachable_and_fail_closed():
     assert "ensureEconomicJobs" in stage
     assert "EconomicQuoteJobDispatcher" in worker
     assert "CommercialNotificationDispatcher" in worker
-    assert 'eventType==="MATCH_EXECUTABLE"' in supervisor
+    assert 'eventType === "MATCH_EXECUTABLE"' in supervisor

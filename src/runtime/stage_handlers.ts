@@ -647,7 +647,6 @@ async function lockSettlement(
       [
         id,
         tradeId,
-        routed.adapter.provider,
         facts.product_family,
         facts.relationship_currency,
         gross,
@@ -716,47 +715,21 @@ async function lockSettlement(
       expiresAt: new Date(instruction.expires_at).toISOString(),
       idempotencyKey: instruction.idempotency_key,
     },
-    created = await routed.adapter.createInstruction(
-      draft,
-      new Date().toISOString(),
-    ),
-    lockId = randomUUID();
-  await inTransaction(pool, async (client: PoolClient) => {
-    const acknowledged = await client.query(
-      "update settlement_instructions set provider_reference=$2,acknowledged=true where id=$1 and acknowledged=false",
-      [instruction.id, created.providerReference],
-    );
-    if ((acknowledged.rowCount ?? 0) !== 1)
-      throw new Error("settlement instruction acknowledgement conflict");
-    await client.query(
-      "insert into fee_locks(id,trade_id,relationship_id,instruction_id,provider,provider_approval_id,provider_reference,instruction_digest,supplier_accepted_instruction_digest,buyer_accepted_instruction_digest,supplier_entitlement,sablestone_entitlement,gross_amount,currency,state,created_at) values($1,$2,$3,$4,$5,$6,$7,$8,$8,$8,$9,$10,$11,$12,'LOCKED',now())",
-      [
-        lockId,
-        tradeId,
-        facts.relationship_id,
-        instruction.id,
-        instruction.provider,
-        routed.snapshot.approvalId,
-        created.providerReference,
-        digest,
-        instruction.supplier_entitlement,
-        instruction.sablestone_entitlement,
-        instruction.gross_amount,
-        instruction.currency,
-      ],
-    );
-    const updated = await client.query(
-      "update trades set state='FEE_LOCKED',updated_at=now() where id=$1 and state='PROTECTED'",
-      [tradeId],
-    );
-    if ((updated.rowCount ?? 0) !== 1)
-      throw new Error("fee-lock trade-state conflict");
-  });
-  return accepted(`fee-lock:${lockId}`, {
-    feeLockId: lockId,
-    provider: instruction.provider,
-    instructionId: instruction.id,
-  });
+    created = instruction.acknowledged
+      ? null
+      : await routed.adapter.createInstruction(draft, new Date().toISOString());
+  if (created)
+    await inTransaction(pool, async (client: PoolClient) => {
+      const acknowledged = await client.query(
+        "update settlement_instructions set provider_reference=$2,provider_approval_id=$3,acknowledged=true where id=$1 and acknowledged=false",
+        [instruction.id, created.providerReference, routed.snapshot.approvalId],
+      );
+      if ((acknowledged.rowCount ?? 0) !== 1)
+        throw new Error("settlement instruction acknowledgement conflict");
+    });
+  return unknown(
+    `settlement instruction created; awaiting provider-confirmed secured funds and exact SableStone beneficiary:${instruction.id}`,
+  );
 }
 async function releaseIdentity(
   pool: Pool,

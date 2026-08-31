@@ -1,4 +1,118 @@
-import{randomUUID}from"node:crypto";import type{Pool}from"pg";import{HunterContactConnector,type EnrichmentApproval}from"../connectors/enrichment.js";import type{ImmutableEvidenceStore}from"./object_store.js";import type{SensitiveDataCipher}from"./sensitive_data.js";import{inTransaction}from"./database.js";
-interface EnrichmentRuntimeConfig extends EnrichmentApproval{readonly approvalReceiptId:string}
-export async function buildHunterConnector(pool:Pool,store:ImmutableEvidenceStore,serialized:string|undefined):Promise<HunterContactConnector|null>{if(!serialized)return null;const config=JSON.parse(serialized)as EnrichmentRuntimeConfig,row=(await pool.query("select 1 from authority_receipts where receipt_id=$1 and effective_at<=now() and expires_at>now()",[config.approvalReceiptId])).rows[0];if(!row)throw new Error("enrichment approval receipt unavailable");return new HunterContactConnector(config,store)}
-export class EnrichmentJobDispatcher{constructor(readonly pool:Pool,readonly cipher:SensitiveDataCipher,readonly connector:HunterContactConnector){}async dispatchBatch(limit=20):Promise<number>{const jobs=await inTransaction(this.pool,async client=>(await client.query("with claimed as(select id from enrichment_jobs where state='PENDING' or(state='PROCESSING' and claimed_at<now()-interval '10 minutes') order by created_at for update skip locked limit $1) update enrichment_jobs j set state='PROCESSING',attempts=attempts+1,claimed_at=now() from claimed where j.id=claimed.id returning j.*",[limit])).rows);let completed=0;for(const job of jobs){try{const contacts=await this.connector.domainSearch(job.domain,job.organization_id),now=new Date().toISOString();await inTransaction(this.pool,async client=>{for(const contact of contacts){const digest=contact.sourceReceiptId.split("/").at(-1);if(!digest||!/^[0-9a-f]{64}$/.test(digest))throw new Error("enrichment receipt digest invalid");let receipt=(await client.query("select id from discovery_receipts where canonical_url=$1 and body_sha256=$2",["https://api.hunter.io/v2/domain-search",digest])).rows[0];if(!receipt)receipt=(await client.query("insert into discovery_receipts(id,source_kind,canonical_url,retrieved_at,body_sha256,body_object_key,policy_version) values($1,'SEARCH',$2,$3,$4,$5,$6) returning id",[randomUUID(),"https://api.hunter.io/v2/domain-search",now,digest,contact.sourceReceiptId,contact.lawfulBasisPolicyVersion])).rows[0];await client.query("insert into contacts(id,organization_id,normalized_email_ciphertext,email_lookup_hash,source,source_receipt_id,verification,verified_at,lawful_basis_policy_version,jurisdiction) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) on conflict(organization_id,email_lookup_hash) do nothing",[randomUUID(),job.organization_id,this.cipher.encrypt(contact.email.trim().toLowerCase()),this.cipher.lookup(contact.email),contact.source,receipt.id,contact.verification,contact.verifiedAt,contact.lawfulBasisPolicyVersion,contact.jurisdiction])}await client.query("update enrichment_jobs set state='COMPLETED',completed_at=now(),claimed_at=null where id=$1 and state='PROCESSING'",[job.id])});completed++}catch(error){const unavailable=/capability unavailable/i.test((error as Error).message);await this.pool.query("update enrichment_jobs set state=case when $2 then 'UNAVAILABLE' when attempts>=5 then 'FAILED' else 'PENDING' end,completed_at=case when $2 or attempts>=5 then now() else null end,claimed_at=null,last_error_code=$3 where id=$1 and state='PROCESSING'",[job.id,unavailable,(error as Error).name.slice(0,100)])}}return completed}}
+import { randomUUID } from "node:crypto";
+import type { Pool } from "pg";
+import {
+  HunterContactConnector,
+  type EnrichmentApproval,
+} from "../connectors/enrichment.js";
+import type { ImmutableEvidenceStore } from "./object_store.js";
+import type { SensitiveDataCipher } from "./sensitive_data.js";
+import { inTransaction } from "./database.js";
+interface EnrichmentRuntimeConfig extends EnrichmentApproval {
+  readonly approvalReceiptId: string;
+}
+export async function buildHunterConnector(
+  pool: Pool,
+  store: ImmutableEvidenceStore,
+  serialized: string | undefined,
+): Promise<HunterContactConnector | null> {
+  if (!serialized) return null;
+  const config = JSON.parse(serialized) as EnrichmentRuntimeConfig,
+    row = (
+      await pool.query(
+        "select 1 from authority_receipts where receipt_id=$1 and effective_at<=now() and expires_at>now()",
+        [config.approvalReceiptId],
+      )
+    ).rows[0];
+  if (!row) throw new Error("enrichment approval receipt unavailable");
+  return new HunterContactConnector(config, store);
+}
+export class EnrichmentJobDispatcher {
+  constructor(
+    readonly pool: Pool,
+    readonly cipher: SensitiveDataCipher,
+    readonly connector: HunterContactConnector,
+  ) {}
+  async dispatchBatch(limit = 20): Promise<number> {
+    const jobs = await inTransaction(
+      this.pool,
+      async (client) =>
+        (
+          await client.query(
+            "with claimed as(select id from enrichment_jobs where state='PENDING' or(state='PROCESSING' and claimed_at<now()-interval '10 minutes') order by created_at for update skip locked limit $1) update enrichment_jobs j set state='PROCESSING',attempts=attempts+1,claimed_at=now() from claimed where j.id=claimed.id returning j.*",
+            [limit],
+          )
+        ).rows,
+    );
+    let completed = 0;
+    for (const job of jobs) {
+      try {
+        const contacts = await this.connector.domainSearch(
+            job.domain,
+            job.organization_id,
+          ),
+          now = new Date().toISOString();
+        await inTransaction(this.pool, async (client) => {
+          for (const contact of contacts) {
+            const digest = contact.sourceReceiptId.split("/").at(-1);
+            if (!digest || !/^[0-9a-f]{64}$/.test(digest))
+              throw new Error("enrichment receipt digest invalid");
+            let receipt = (
+              await client.query(
+                "select id from discovery_receipts where canonical_url=$1 and body_sha256=$2",
+                ["https://api.hunter.io/v2/domain-search", digest],
+              )
+            ).rows[0];
+            if (!receipt)
+              receipt = (
+                await client.query(
+                  "insert into discovery_receipts(id,source_kind,canonical_url,retrieved_at,body_sha256,body_object_key,policy_version) values($1,'SEARCH',$2,$3,$4,$5,$6) returning id",
+                  [
+                    randomUUID(),
+                    "https://api.hunter.io/v2/domain-search",
+                    now,
+                    digest,
+                    contact.sourceReceiptId,
+                    contact.lawfulBasisPolicyVersion,
+                  ],
+                )
+              ).rows[0];
+            await client.query(
+              "insert into contacts(id,organization_id,normalized_email_ciphertext,email_lookup_hash,source,source_receipt_id,verification,verified_at,lawful_basis_policy_version,jurisdiction) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) on conflict(organization_id,email_lookup_hash) do nothing",
+              [
+                randomUUID(),
+                job.organization_id,
+                this.cipher.encrypt(contact.email.trim().toLowerCase()),
+                this.cipher.lookup(contact.email),
+                contact.source,
+                receipt.id,
+                contact.verification,
+                contact.verifiedAt,
+                contact.lawfulBasisPolicyVersion,
+                contact.jurisdiction,
+              ],
+            );
+          }
+          await client.query(
+            "update enrichment_jobs set state='COMPLETED',completed_at=now(),claimed_at=null where id=$1 and state='PROCESSING'",
+            [job.id],
+          );
+          if (contacts.some((contact) => contact.verification === "VERIFIED"))
+            await client.query(
+              "insert into acquisition_outreach_jobs(id,organization_id,state) values($1,$2,'PENDING') on conflict(organization_id) do nothing",
+              [randomUUID(), job.organization_id],
+            );
+        });
+        completed++;
+      } catch (error) {
+        const unavailable = /capability unavailable/i.test(
+          (error as Error).message,
+        );
+        await this.pool.query(
+          "update enrichment_jobs set state=case when $2 then 'UNAVAILABLE' when attempts>=5 then 'FAILED' else 'PENDING' end,completed_at=case when $2 or attempts>=5 then now() else null end,claimed_at=null,last_error_code=$3 where id=$1 and state='PROCESSING'",
+          [job.id, unavailable, (error as Error).name.slice(0, 100)],
+        );
+      }
+    }
+    return completed;
+  }
+}

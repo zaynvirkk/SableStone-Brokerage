@@ -27,6 +27,8 @@ import {
   buildEconomicQuoteConnectors,
   EconomicQuoteJobDispatcher,
   EconomicEvaluationDispatcher,
+  AcquisitionOutreachDispatcher,
+  buildCommercialExtractor,
 } from "../dist/index.js";
 
 const runtime = await bootstrapProduction(process.env);
@@ -63,6 +65,7 @@ let gmail = null,
     : null,
   outbound = null,
   commercialNotifications = null,
+  acquisitionOutreach = null,
   watch = null;
 if (runtime.activation.capabilities.includes("OUTREACH")) {
   const gmailConfig = {
@@ -86,6 +89,12 @@ if (runtime.activation.capabilities.includes("OUTREACH")) {
     runtime.evidence,
     cipher,
     gmail,
+  );
+  acquisitionOutreach = new AcquisitionOutreachDispatcher(
+    runtime.pool,
+    runtime.evidence,
+    cipher,
+    gmailConfig.userId,
   );
   watch = new GmailWatchManager(runtime.pool, gmail);
 }
@@ -156,6 +165,13 @@ const economicConnectors = runtime.activation.capabilities.includes("TRADING")
   economicEvaluation = runtime.activation.capabilities.includes("TRADING")
     ? new EconomicEvaluationDispatcher(runtime.pool)
     : null;
+const commercialExtractor = runtime.activation.capabilities.includes("OUTREACH")
+  ? await buildCommercialExtractor(
+      runtime.pool,
+      runtime.evidence,
+      process.env.SABLESTONE_COMMERCIAL_EXTRACTOR_JSON,
+    )
+  : null;
 
 const controller = new AbortController(),
   client = await createWorkflowClient(temporalConfig),
@@ -174,6 +190,7 @@ const controller = new AbortController(),
       cipher,
       gmail,
       settlementAdapters: adapters,
+      commercialExtractor,
     }),
   },
   supervisor = new RuntimeSupervisor(
@@ -220,6 +237,7 @@ const periodic = async () => {
       if (outbound) await outbound.dispatchBatch();
       if (commercialNotifications)
         await commercialNotifications.dispatchBatch();
+      if (acquisitionOutreach) await acquisitionOutreach.dispatchBatch();
       if (documents) await documents.dispatchBatch();
       if (documentVerification) await documentVerification.dispatchBatch();
       if (qualification) await qualification.dispatchBatch();

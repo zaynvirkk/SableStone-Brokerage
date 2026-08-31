@@ -1,10 +1,290 @@
-import{generateKeyPairSync,createHash,sign}from"node:crypto";import{DocumentIngestionPipeline,GmailProductionConnector,ProductionSettlementHttpAdapter,ReviewedHttpDiscoveryConnector,StructuredRegistryParser,cashfreeSplitRequest,decimal,verifyProductionActivation}from"../dist/index.js";
-const receipts=[];const store={async preserve(prefix,body,contentType,source,storedAt="2026-08-31T00:00:00Z"){const sha256=createHash("sha256").update(body).digest("hex"),receipt={objectKey:`${prefix}/${sha256}`,sha256,bytes:body.byteLength,contentType,storedAt,source};receipts.push(receipt);return receipt}};
-const body=new TextEncoder().encode(JSON.stringify([{name:"Fixture Recycler",registration:"PWP-1"}])),fetcher=async()=>new Response(body,{status:200,headers:{"content-type":"application/json"}}),parser=new StructuredRegistryParser(text=>JSON.parse(text).map(row=>({legalName:row.name,registrationIdentifier:row.registration}))),connector=new ReviewedHttpDiscoveryConnector("CPCB_COMMON_EPR",{sourceAllowed:true,robotsAllowed:true,termsReviewed:true,maxPages:2,allowedHosts:["registry.example.test"]},store,parser,fetcher),harvest=await connector.harvest("https://registry.example.test/recyclers",()=>"2026-08-31T00:00:00Z");if(harvest.candidates.length!==1||receipts.length!==1)throw new Error("live discovery receipt boundary failed");
-let blocked=false;try{await new ReviewedHttpDiscoveryConnector("SEARCH",{sourceAllowed:false,robotsAllowed:true,termsReviewed:true,maxPages:1,allowedHosts:["x.test"]},store,parser,fetcher).harvest("https://x.test/")}catch{blocked=true}if(!blocked)throw new Error("unreviewed source survived");
-const approval={approvalId:"approval-live",provider:"CASHFREE",environment:"PRODUCTION",writtenApprovalReceiptId:"written-receipt",actualUseCase:"polymer brokerage separate supplier and broker entitlement",commodityFamilies:["RPP_NATURAL_LIGHT_INJECTION"],currencies:["INR"],minimumGross:decimal("1"),maximumGross:decimal("10000000"),capabilities:["BROKER_FEE_SPLIT","CONDITIONAL_RELEASE"],validFrom:"2026-08-01T00:00:00Z",validUntil:"2026-12-01T00:00:00Z",state:"APPROVED"},credentials={provider:"CASHFREE",environment:"PRODUCTION",state:"VALID",secretReference:"secret-manager/cashfree",verifiedAt:"2026-08-31T00:00:00Z"},draft={instructionId:"i-1",tradeId:"t-1",provider:"CASHFREE",environment:"PRODUCTION",commodityFamily:"RPP_NATURAL_LIGHT_INJECTION",buyerId:"buyer",supplierId:"supplier",sablestoneBeneficiaryId:"sablestone",currency:"INR",grossAmount:decimal("8500000"),supplierEntitlement:decimal("8000000"),sablestoneEntitlement:decimal("500000"),otherAllocations:[],releaseConditions:["delivery"],disputeProcedure:"freeze",expiresAt:"2026-09-02T00:00:00Z",idempotencyKey:"idempotency-1"},providerFetch=async(_url,request)=>{const sent=JSON.parse(request.body);if(sent.splits.length!==2)throw new Error("split payload missing");return new Response(JSON.stringify({data:{reference:"provider-ref",acknowledged:true}}),{status:200,headers:{"content-type":"application/json"}})},adapter=new ProductionSettlementHttpAdapter("CASHFREE",approval,credentials,{provider:"CASHFREE",baseUrl:"https://api.cashfree.test",createPath:"/split",authorizationHeader:"Bearer fixture",additionalHeaders:{},webhookSecret:"fixture-secret",responseReferenceField:"data.reference",responseAcknowledgedField:"data.acknowledged"},cashfreeSplitRequest,store,providerFetch),created=await adapter.createInstruction(draft,"2026-08-31T00:00:00Z");if(!created.acknowledged||created.providerReference!=="provider-ref")throw new Error("production settlement acknowledgement failed");
-blocked=false;try{await new ProductionSettlementHttpAdapter("CASHFREE",{...approval,state:"UNDER_REVIEW"},credentials,adapter.config,cashfreeSplitRequest,store,providerFetch).createInstruction(draft,"2026-08-31T00:00:00Z")}catch{blocked=true}if(!blocked)throw new Error("under-review provider survived");
-const pipeline=new DocumentIngestionPipeline(store,{async scan(){return"CLEAN"}},{async extract(input){return{kind:"COA",extractor:"fixture",modelVersion:"1",facts:[{field:"mfi",value:"12",unit:"g/10min",confidence:"0.970000",state:"SOURCE_STATED",sourceReceiptId:input.receiptId}]}}}),pdf=new TextEncoder().encode("%PDF-1.7\nfixture\n%%EOF"),document=await pipeline.ingest("coa.pdf",pdf,"application/pdf","gmail:m1");if(document.extraction.facts[0].state!=="SOURCE_STATED")throw new Error("document state inflated");
-const raw=Buffer.from("From: supplier@example.test\r\nTo: broker@example.test\r\nSubject: Offer\r\nDate: Sun, 31 Aug 2026 00:00:00 +0000\r\n\r\n80 MT rPP"),gmailApi={users:{messages:{get:async()=>({data:{raw:raw.toString("base64url"),threadId:"thread-1"}})}}},gmail=new GmailProductionConnector({userId:"broker@example.test",clientId:"client",clientSecret:"secret",refreshToken:"refresh",pubsubTopic:"topic",pushAudience:"audience",authorized:true},store,gmailApi),email=await gmail.fetchMessage("m1","2026-08-31T00:00:00Z");if(email.payloadObjectKey.length<10)throw new Error("Gmail MIME not preserved");
-const {privateKey,publicKey}=generateKeyPairSync("ed25519"),payload={releaseDigest:"a".repeat(64),operatorAuthorizationReceiptId:"operator-auth",entityReceiptId:"entity",legalReceiptId:"legal",taxReceiptId:"tax",privacyReceiptId:"privacy",deploymentReceiptId:"deploy",authorizedBy:"operator",authorizedAt:"2026-08-31T00:00:00Z",expiresAt:"2026-09-01T00:00:00Z",capabilities:["DISCOVERY"]},publicKeyPem=publicKey.export({type:"spki",format:"pem"}),keyDigest=createHash("sha256").update(publicKey.export({type:"spki",format:"der"})).digest("hex"),signatureBase64=sign(null,Buffer.from(JSON.stringify(payload)),privateKey).toString("base64");verifyProductionActivation({payload,publicKeyPem,signatureBase64},payload.releaseDigest,"2026-08-31T01:00:00Z",keyDigest);blocked=false;try{verifyProductionActivation({payload:{...payload,legalReceiptId:""},publicKeyPem,signatureBase64},payload.releaseDigest,"2026-08-31T01:00:00Z",keyDigest)}catch{blocked=true}if(!blocked)throw new Error("activation missing receipt survived");
-console.log(`PRODUCTION_BOUNDARIES_OK discovery_receipts=${harvest.pages.length} unreviewed_source=blocked settlement_http=acknowledged provider_under_review=blocked document_state=SOURCE_STATED gmail_mime=preserved activation=signature_verified total_receipts=${receipts.length}`);
+import { generateKeyPairSync, createHash, sign } from "node:crypto";
+import {
+  DocumentIngestionPipeline,
+  GmailProductionConnector,
+  ProductionSettlementHttpAdapter,
+  ReviewedHttpDiscoveryConnector,
+  StructuredRegistryParser,
+  cashfreeSplitRequest,
+  decimal,
+  verifyProductionActivation,
+} from "../dist/index.js";
+const receipts = [];
+const store = {
+  async preserve(
+    prefix,
+    body,
+    contentType,
+    source,
+    storedAt = "2026-08-31T00:00:00Z",
+  ) {
+    const sha256 = createHash("sha256").update(body).digest("hex"),
+      receipt = {
+        objectKey: `${prefix}/${sha256}`,
+        sha256,
+        bytes: body.byteLength,
+        contentType,
+        storedAt,
+        source,
+      };
+    receipts.push(receipt);
+    return receipt;
+  },
+};
+const body = new TextEncoder().encode(
+    JSON.stringify([{ name: "Fixture Recycler", registration: "PWP-1" }]),
+  ),
+  fetcher = async () =>
+    new Response(body, {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }),
+  parser = new StructuredRegistryParser((text) =>
+    JSON.parse(text).map((row) => ({
+      legalName: row.name,
+      registrationIdentifier: row.registration,
+    })),
+  ),
+  connector = new ReviewedHttpDiscoveryConnector(
+    "CPCB_COMMON_EPR",
+    {
+      sourceAllowed: true,
+      robotsAllowed: true,
+      termsReviewed: true,
+      maxPages: 2,
+      allowedHosts: ["registry.example.test"],
+    },
+    store,
+    parser,
+    fetcher,
+  ),
+  harvest = await connector.harvest(
+    "https://registry.example.test/recyclers",
+    () => "2026-08-31T00:00:00Z",
+  );
+if (harvest.candidates.length !== 1 || receipts.length !== 1)
+  throw new Error("live discovery receipt boundary failed");
+let blocked = false;
+try {
+  await new ReviewedHttpDiscoveryConnector(
+    "SEARCH",
+    {
+      sourceAllowed: false,
+      robotsAllowed: true,
+      termsReviewed: true,
+      maxPages: 1,
+      allowedHosts: ["x.test"],
+    },
+    store,
+    parser,
+    fetcher,
+  ).harvest("https://x.test/");
+} catch {
+  blocked = true;
+}
+if (!blocked) throw new Error("unreviewed source survived");
+const approval = {
+    approvalId: "approval-live",
+    provider: "CASHFREE",
+    environment: "PRODUCTION",
+    writtenApprovalReceiptId: "written-receipt",
+    actualUseCase:
+      "polymer brokerage supplier vendor and merchant-retained commission",
+    commodityFamilies: ["RPP_NATURAL_LIGHT_INJECTION"],
+    currencies: ["INR"],
+    minimumGross: decimal("1"),
+    maximumGross: decimal("10000000"),
+    capabilities: ["BROKER_FEE_SPLIT", "CONDITIONAL_RELEASE"],
+    validFrom: "2026-08-01T00:00:00Z",
+    validUntil: "2026-12-01T00:00:00Z",
+    state: "APPROVED",
+  },
+  credentials = {
+    provider: "CASHFREE",
+    environment: "PRODUCTION",
+    state: "VALID",
+    secretReference: "secret-manager/cashfree",
+    verifiedAt: "2026-08-31T00:00:00Z",
+  },
+  draft = {
+    instructionId: "i-1",
+    tradeId: "t-1",
+    provider: "CASHFREE",
+    environment: "PRODUCTION",
+    commodityFamily: "RPP_NATURAL_LIGHT_INJECTION",
+    buyerId: "buyer",
+    supplierId: "supplier",
+    sablestoneBeneficiaryId: "sablestone",
+    currency: "INR",
+    grossAmount: decimal("8500000"),
+    supplierEntitlement: decimal("8000000"),
+    sablestoneEntitlement: decimal("500000"),
+    otherAllocations: [],
+    releaseConditions: ["delivery"],
+    disputeProcedure: "freeze",
+    expiresAt: "2026-09-02T00:00:00Z",
+    idempotencyKey: "idempotency-1",
+  },
+  providerFetch = async (_url, request) => {
+    const sent = JSON.parse(request.body);
+    if (
+      sent.split.length !== 1 ||
+      sent.split[0].vendor_id !== "supplier" ||
+      sent.split.some((item) => item.vendor_id === "sablestone")
+    )
+      throw new Error("merchant-retained split payload invalid");
+    return new Response(
+      JSON.stringify({
+        data: { reference: "provider-ref", acknowledged: true },
+      }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    );
+  },
+  adapter = new ProductionSettlementHttpAdapter(
+    "CASHFREE",
+    approval,
+    credentials,
+    {
+      provider: "CASHFREE",
+      baseUrl: "https://api.cashfree.test",
+      createPath: "/split",
+      authorizationHeader: "Bearer fixture",
+      additionalHeaders: {},
+      webhookSecret: "fixture-secret",
+      responseReferenceField: "data.reference",
+      responseAcknowledgedField: "data.acknowledged",
+    },
+    cashfreeSplitRequest,
+    store,
+    providerFetch,
+  ),
+  created = await adapter.createInstruction(draft, "2026-08-31T00:00:00Z");
+if (!created.acknowledged || created.providerReference !== "provider-ref")
+  throw new Error("production settlement acknowledgement failed");
+blocked = false;
+try {
+  await new ProductionSettlementHttpAdapter(
+    "CASHFREE",
+    { ...approval, state: "UNDER_REVIEW" },
+    credentials,
+    adapter.config,
+    cashfreeSplitRequest,
+    store,
+    providerFetch,
+  ).createInstruction(draft, "2026-08-31T00:00:00Z");
+} catch {
+  blocked = true;
+}
+if (!blocked) throw new Error("under-review provider survived");
+const pipeline = new DocumentIngestionPipeline(
+    store,
+    {
+      async scan() {
+        return "CLEAN";
+      },
+    },
+    {
+      async extract(input) {
+        return {
+          kind: "COA",
+          extractor: "fixture",
+          modelVersion: "1",
+          facts: [
+            {
+              field: "mfi",
+              value: "12",
+              unit: "g/10min",
+              confidence: "0.970000",
+              state: "SOURCE_STATED",
+              sourceReceiptId: input.receiptId,
+            },
+          ],
+        };
+      },
+    },
+  ),
+  pdf = new TextEncoder().encode("%PDF-1.7\nfixture\n%%EOF"),
+  document = await pipeline.ingest(
+    "coa.pdf",
+    pdf,
+    "application/pdf",
+    "gmail:m1",
+  );
+if (document.extraction.facts[0].state !== "SOURCE_STATED")
+  throw new Error("document state inflated");
+const raw = Buffer.from(
+    "From: supplier@example.test\r\nTo: broker@example.test\r\nSubject: Offer\r\nDate: Sun, 31 Aug 2026 00:00:00 +0000\r\n\r\n80 MT rPP",
+  ),
+  gmailApi = {
+    users: {
+      messages: {
+        get: async () => ({
+          data: { raw: raw.toString("base64url"), threadId: "thread-1" },
+        }),
+      },
+    },
+  },
+  gmail = new GmailProductionConnector(
+    {
+      userId: "broker@example.test",
+      clientId: "client",
+      clientSecret: "secret",
+      refreshToken: "refresh",
+      pubsubTopic: "topic",
+      pushAudience: "audience",
+      authorized: true,
+    },
+    store,
+    gmailApi,
+  ),
+  email = await gmail.fetchMessage("m1", "2026-08-31T00:00:00Z");
+if (email.payloadObjectKey.length < 10)
+  throw new Error("Gmail MIME not preserved");
+const { privateKey, publicKey } = generateKeyPairSync("ed25519"),
+  payload = {
+    releaseDigest: "a".repeat(64),
+    operatorAuthorizationReceiptId: "operator-auth",
+    entityReceiptId: "entity",
+    legalReceiptId: "legal",
+    taxReceiptId: "tax",
+    privacyReceiptId: "privacy",
+    deploymentReceiptId: "deploy",
+    authorizedBy: "operator",
+    authorizedAt: "2026-08-31T00:00:00Z",
+    expiresAt: "2026-09-01T00:00:00Z",
+    capabilities: ["DISCOVERY"],
+  },
+  publicKeyPem = publicKey.export({ type: "spki", format: "pem" }),
+  keyDigest = createHash("sha256")
+    .update(publicKey.export({ type: "spki", format: "der" }))
+    .digest("hex"),
+  signatureBase64 = sign(
+    null,
+    Buffer.from(JSON.stringify(payload)),
+    privateKey,
+  ).toString("base64");
+verifyProductionActivation(
+  { payload, publicKeyPem, signatureBase64 },
+  payload.releaseDigest,
+  "2026-08-31T01:00:00Z",
+  keyDigest,
+);
+blocked = false;
+try {
+  verifyProductionActivation(
+    {
+      payload: { ...payload, legalReceiptId: "" },
+      publicKeyPem,
+      signatureBase64,
+    },
+    payload.releaseDigest,
+    "2026-08-31T01:00:00Z",
+    keyDigest,
+  );
+} catch {
+  blocked = true;
+}
+if (!blocked) throw new Error("activation missing receipt survived");
+console.log(
+  `PRODUCTION_BOUNDARIES_OK discovery_receipts=${harvest.pages.length} unreviewed_source=blocked settlement_http=acknowledged provider_under_review=blocked document_state=SOURCE_STATED gmail_mime=preserved activation=signature_verified total_receipts=${receipts.length}`,
+);

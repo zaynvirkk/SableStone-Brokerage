@@ -1,15 +1,532 @@
-import{createHmac,timingSafeEqual}from"node:crypto";import type{ProviderCapabilitySnapshot,SettlementAdapter,SettlementCapability,SettlementEnvironment,SettlementInstructionDraft}from"../settlement.js";import{assertAdapterAvailable,assertSettlementInstruction,evaluateProviderCapability,requiredSettlementCapabilities,type ProviderApproval,type ProviderCredentials}from"../settlement.js";import type{ReceiptWriter}from"./discovery_http.js";
-export interface ProviderHttpConfig{readonly provider:string;readonly baseUrl:string;readonly createPath:string;readonly authorizationHeader:string;readonly additionalHeaders:Readonly<Record<string,string>>;readonly webhookSecret:string;readonly webhookSignatureHeader?:string;readonly webhookEventIdPath?:string;readonly webhookEventTypePath?:string;readonly webhookProviderReferencePath?:string;readonly webhookOccurredAtPath?:string;readonly webhookAmountPath?:string;readonly webhookCurrencyPath?:string;readonly webhookBankReferencePath?:string;readonly webhookEventTypeMap?:Readonly<Record<string,"FUNDED"|"DISBURSEMENT_REPORTED"|"FAILED"|"REVERSED"|"DISPUTE_OPENED">>;readonly responseReferenceField:string;readonly responseAcknowledgedField:string;}
-export type SettlementRequestBuilder=(draft:SettlementInstructionDraft)=>Readonly<Record<string,unknown>>;
-export class ProductionSettlementHttpAdapter implements SettlementAdapter{
- readonly environment:SettlementEnvironment="PRODUCTION";constructor(readonly provider:string,readonly approval:ProviderApproval,readonly credentials:ProviderCredentials,readonly config:ProviderHttpConfig,readonly buildRequest:SettlementRequestBuilder,readonly store:ReceiptWriter,readonly fetcher:typeof fetch=fetch){if(provider!==approval.provider||provider!==credentials.provider||provider!==config.provider)throw new Error("settlement provider configuration mismatch")}
- capability(required:readonly SettlementCapability[],now:string):ProviderCapabilitySnapshot{return evaluateProviderCapability(this.approval,this.credentials,required,now)}
- async createInstruction(draft:SettlementInstructionDraft,now:string):Promise<Readonly<{state:"CREATED";providerReference:string;acknowledged:boolean}>>{const snapshot=this.capability(requiredSettlementCapabilities(this.provider),now);assertAdapterAvailable(snapshot);assertSettlementInstruction(draft,this.approval,now);if(draft.environment!=="PRODUCTION")throw new Error("production adapter requires production draft");const url=new URL(this.config.createPath,this.config.baseUrl),payload=JSON.stringify(this.buildRequest(draft)),requestReceipt=await this.store.preserve(`settlement/${this.provider}/request`,new TextEncoder().encode(payload),"application/json",url.toString(),now),response=await this.fetcher(url,{method:"POST",headers:{authorization:this.config.authorizationHeader,"content-type":"application/json","idempotency-key":draft.idempotencyKey,...this.config.additionalHeaders},body:payload,signal:AbortSignal.timeout(30_000)}),bytes=new Uint8Array(await response.arrayBuffer()),responseReceipt=await this.store.preserve(`settlement/${this.provider}/response`,bytes,response.headers.get("content-type")??"application/json",url.toString(),now);if(!response.ok)throw new Error(`${this.provider} HTTP ${response.status}; request=${requestReceipt.objectKey}; response=${responseReceipt.objectKey}`);const decoded=JSON.parse(new TextDecoder().decode(bytes))as Record<string,unknown>,reference=field(decoded,this.config.responseReferenceField),acknowledged=field(decoded,this.config.responseAcknowledgedField);if(typeof reference!=="string"||!reference.trim()||acknowledged!==true)throw new Error(`${this.provider} acknowledgement incomplete; response=${responseReceipt.objectKey}`);return Object.freeze({state:"CREATED",providerReference:reference,acknowledged:true})}
- verifyWebhook(rawBody:Uint8Array,signatureHex:string):void{if(!this.config.webhookSecret||!/^[0-9a-f]+$/i.test(signatureHex))throw new Error("settlement webhook signature malformed");const expected=createHmac("sha256",this.config.webhookSecret).update(rawBody).digest(),supplied=Buffer.from(signatureHex,"hex");if(supplied.length!==expected.length||!timingSafeEqual(supplied,expected))throw new Error("settlement webhook signature invalid")}
+import { createHmac, timingSafeEqual } from "node:crypto";
+import type {
+  ProviderCapabilitySnapshot,
+  SettlementAdapter,
+  SettlementCapability,
+  SettlementEnvironment,
+  SettlementInstructionDraft,
+} from "../settlement.js";
+import {
+  assertAdapterAvailable,
+  assertSettlementInstruction,
+  evaluateProviderCapability,
+  requiredSettlementCapabilities,
+  type ProviderApproval,
+  type ProviderCredentials,
+} from "../settlement.js";
+import type { ReceiptWriter } from "./discovery_http.js";
+
+type InternalEvent =
+  | "ENTITLEMENT_SECURED"
+  | "FUNDED"
+  | "DISBURSEMENT_REPORTED"
+  | "FAILED"
+  | "REVERSED"
+  | "DISPUTE_OPENED";
+export interface ProviderHttpConfig {
+  readonly provider: string;
+  readonly baseUrl: string;
+  readonly createPath: string;
+  readonly cashfreeSplitPathTemplate?: string;
+  readonly razorpayTransferPathTemplate?: string;
+  readonly authorizationHeader: string;
+  readonly additionalHeaders: Readonly<Record<string, string>>;
+  readonly webhookSecret: string;
+  readonly webhookSignatureHeader?: string;
+  readonly webhookTimestampHeader?: string;
+  readonly webhookEventIdPath?: string;
+  readonly webhookEventTypePath?: string;
+  readonly webhookProviderReferencePath?: string;
+  readonly webhookPaymentReferencePath?: string;
+  readonly webhookOccurredAtPath?: string;
+  readonly webhookAmountPath?: string;
+  readonly webhookCurrencyPath?: string;
+  readonly webhookBankReferencePath?: string;
+  readonly webhookSablestoneBeneficiaryPath?: string;
+  readonly webhookSupplierBeneficiaryPath?: string;
+  readonly webhookEventTypeMap?: Readonly<Record<string, InternalEvent>>;
+  readonly responseReferenceField: string;
+  readonly responseAcknowledgedField: string;
 }
-function field(value:Record<string,unknown>,path:string):unknown{return path.split(".").reduce<unknown>((current,key)=>current&&typeof current==="object"?(current as Record<string,unknown>)[key]:undefined,value)}
-export const escrowComRequest:SettlementRequestBuilder=draft=>({currency:draft.currency,description:`SableStone protected polymer trade ${draft.tradeId}`,parties:[{role:"buyer",customer:draft.buyerId},{role:"seller",customer:draft.supplierId},{role:"broker",customer:draft.sablestoneBeneficiaryId}],items:[{type:"general_merchandise",title:draft.commodityFamily,quantity:1,inspection_period:259200,fees:[{payer_customer:draft.buyerId,type:"broker_fee",amount:draft.sablestoneEntitlement}],schedule:[{amount:draft.supplierEntitlement,beneficiary_customer:draft.supplierId}]}],metadata:{instruction_id:draft.instructionId,trade_id:draft.tradeId,instruction_digest:draft.idempotencyKey}});
-export const cashfreeSplitRequest:SettlementRequestBuilder=draft=>({order_id:draft.instructionId,order_amount:draft.grossAmount,order_currency:draft.currency,splits:[{vendor_id:draft.supplierId,amount:draft.supplierEntitlement},{vendor_id:draft.sablestoneBeneficiaryId,amount:draft.sablestoneEntitlement}],order_note:`protected trade ${draft.tradeId}`});
-export const razorpayRouteRequest:SettlementRequestBuilder=draft=>({transfers:[{account:draft.supplierId,amount:draft.supplierEntitlement,currency:draft.currency,on_hold:true,notes:{trade_id:draft.tradeId}},{account:draft.sablestoneBeneficiaryId,amount:draft.sablestoneEntitlement,currency:draft.currency,on_hold:true,notes:{trade_id:draft.tradeId,kind:"brokerage"}}]});
-export const bankEscrowRequest:SettlementRequestBuilder=draft=>({instruction_id:draft.instructionId,gross_amount:draft.grossAmount,currency:draft.currency,beneficiaries:[{id:draft.supplierId,amount:draft.supplierEntitlement,role:"SELLER"},{id:draft.sablestoneBeneficiaryId,amount:draft.sablestoneEntitlement,role:"BROKER"}],release_conditions:draft.releaseConditions,dispute_procedure:draft.disputeProcedure,expires_at:draft.expiresAt});
-export const lcProceedsRequest:SettlementRequestBuilder=draft=>({instruction_id:draft.instructionId,credit_beneficiary:draft.supplierId,assignee:draft.sablestoneBeneficiaryId,assigned_amount:draft.sablestoneEntitlement,currency:draft.currency,bank_acknowledgement_required:true,trade_id:draft.tradeId});
+export type SettlementRequestBuilder = (
+  draft: SettlementInstructionDraft,
+) => Readonly<Record<string, unknown>>;
+
+export class ProductionSettlementHttpAdapter implements SettlementAdapter {
+  readonly environment: SettlementEnvironment = "PRODUCTION";
+  constructor(
+    readonly provider: string,
+    readonly approval: ProviderApproval,
+    readonly credentials: ProviderCredentials,
+    readonly config: ProviderHttpConfig,
+    readonly buildRequest: SettlementRequestBuilder,
+    readonly store: ReceiptWriter,
+    readonly fetcher: typeof fetch = fetch,
+  ) {
+    if (
+      provider !== approval.provider ||
+      provider !== credentials.provider ||
+      provider !== config.provider
+    )
+      throw new Error("settlement provider configuration mismatch");
+  }
+  capability(
+    required: readonly SettlementCapability[],
+    now: string,
+  ): ProviderCapabilitySnapshot {
+    return evaluateProviderCapability(
+      this.approval,
+      this.credentials,
+      required,
+      now,
+    );
+  }
+  async createInstruction(draft: SettlementInstructionDraft, now: string) {
+    const snapshot = this.capability(
+      requiredSettlementCapabilities(this.provider),
+      now,
+    );
+    assertAdapterAvailable(snapshot);
+    assertSettlementInstruction(draft, this.approval, now);
+    if (draft.environment !== "PRODUCTION")
+      throw new Error("production adapter requires production draft");
+    const url = new URL(this.config.createPath, this.config.baseUrl),
+      payload = JSON.stringify(this.buildRequest(draft)),
+      requestReceipt = await this.store.preserve(
+        `settlement/${this.provider}/request`,
+        new TextEncoder().encode(payload),
+        "application/json",
+        url.toString(),
+        now,
+      ),
+      response = await this.fetcher(url, {
+        method: "POST",
+        headers: {
+          authorization: this.config.authorizationHeader,
+          "content-type": "application/json",
+          "idempotency-key": draft.idempotencyKey,
+          ...this.config.additionalHeaders,
+        },
+        body: payload,
+        signal: AbortSignal.timeout(30_000),
+      }),
+      bytes = new Uint8Array(await response.arrayBuffer()),
+      responseReceipt = await this.store.preserve(
+        `settlement/${this.provider}/response`,
+        bytes,
+        response.headers.get("content-type") ?? "application/json",
+        url.toString(),
+        now,
+      );
+    if (!response.ok)
+      throw new Error(
+        `${this.provider} HTTP ${response.status}; request=${requestReceipt.objectKey}; response=${responseReceipt.objectKey}`,
+      );
+    const decoded = JSON.parse(new TextDecoder().decode(bytes)) as Record<
+        string,
+        unknown
+      >,
+      reference = field(decoded, this.config.responseReferenceField),
+      acknowledged = field(decoded, this.config.responseAcknowledgedField);
+    if (
+      (typeof reference !== "string" && typeof reference !== "number") ||
+      !String(reference).trim() ||
+      acknowledged !== true
+    )
+      throw new Error(
+        `${this.provider} instruction acknowledgement incomplete; response=${responseReceipt.objectKey}`,
+      );
+    // Creation acknowledgement is not entitlement security.
+    return Object.freeze({
+      state: "CREATED" as const,
+      providerReference: String(reference),
+      acknowledged: true,
+    });
+  }
+  async verifyWebhook(
+    raw: Uint8Array,
+    headers: Readonly<Record<string, string | undefined>>,
+  ): Promise<Uint8Array> {
+    if (this.provider === "ESCROW_COM") {
+      if (!this.config.webhookProviderReferencePath)
+        throw new Error("Escrow webhook reference path missing");
+      const decoded = JSON.parse(new TextDecoder().decode(raw)) as Record<
+          string,
+          unknown
+        >,
+        reference = field(decoded, this.config.webhookProviderReferencePath);
+      if (
+        (typeof reference !== "string" && typeof reference !== "number") ||
+        !String(reference).trim()
+      )
+        throw new Error("Escrow webhook reference missing");
+      const url = new URL(
+          `/2017-09-01/transaction/${encodeURIComponent(String(reference))}`,
+          this.config.baseUrl,
+        ),
+        response = await this.fetcher(url, {
+          headers: {
+            authorization: this.config.authorizationHeader,
+            ...this.config.additionalHeaders,
+          },
+          signal: AbortSignal.timeout(30_000),
+        }),
+        bytes = new Uint8Array(await response.arrayBuffer());
+      await this.store.preserve(
+        "settlement/ESCROW_COM/webhook-confirmation",
+        bytes,
+        response.headers.get("content-type") ?? "application/json",
+        url.toString(),
+        new Date().toISOString(),
+      );
+      if (!response.ok)
+        throw new Error(
+          `Escrow transaction confirmation HTTP ${response.status}`,
+        );
+      const confirmed = JSON.parse(new TextDecoder().decode(bytes)) as Record<
+        string,
+        unknown
+      >;
+      if (String(confirmed.id) !== String(reference))
+        throw new Error("Escrow transaction confirmation mismatch");
+      const items = Array.isArray(confirmed.items) ? confirmed.items : [],
+        secured =
+          items.length >= 2 &&
+          items.every((item) => {
+            const schedules = (item as { schedule?: unknown[] }).schedule ?? [];
+            return (
+              schedules.length > 0 &&
+              schedules.every(
+                (schedule) =>
+                  (schedule as { status?: { secured?: boolean } }).status
+                    ?.secured === true,
+              )
+            );
+          }),
+        merchandise = items.find(
+          (item) => (item as { type?: string }).type === "general_merchandise",
+        ) as
+          | { schedule?: { beneficiary_customer?: string; amount?: string }[] }
+          | undefined,
+        brokerFee = items.find(
+          (item) => (item as { type?: string }).type === "broker_fee",
+        ) as
+          | { schedule?: { beneficiary_customer?: string; amount?: string }[] }
+          | undefined,
+        sellerSchedule = merchandise?.schedule?.[0],
+        brokerSchedule = brokerFee?.schedule?.[0],
+        supplierAmount = Number(sellerSchedule?.amount),
+        brokerAmount = Number(brokerSchedule?.amount);
+      return new TextEncoder().encode(
+        JSON.stringify({
+          ...confirmed,
+          sablestone_event_type: secured ? "FUNDS_SECURED" : "PENDING",
+          sablestone_verified_at: new Date().toISOString(),
+          sablestone_supplier_beneficiary:
+            sellerSchedule?.beneficiary_customer ?? null,
+          sablestone_broker_beneficiary:
+            brokerSchedule?.beneficiary_customer ?? null,
+          sablestone_gross_amount: Number.isFinite(
+            supplierAmount + brokerAmount,
+          )
+            ? String(supplierAmount + brokerAmount)
+            : null,
+          sablestone_currency: String(confirmed.currency ?? "").toUpperCase(),
+        }),
+      );
+    }
+    const signatureName = (
+        this.config.webhookSignatureHeader ??
+        (this.provider === "CASHFREE_EASY_SPLIT"
+          ? "x-webhook-signature"
+          : "x-razorpay-signature")
+      ).toLowerCase(),
+      signature = headers[signatureName];
+    if (!signature || !this.config.webhookSecret)
+      throw new Error("settlement webhook signature missing");
+    if (this.provider === "CASHFREE_EASY_SPLIT") {
+      const timestamp =
+        headers[
+          (
+            this.config.webhookTimestampHeader ?? "x-webhook-timestamp"
+          ).toLowerCase()
+        ];
+      if (!timestamp || !/^\d+$/.test(timestamp))
+        throw new Error("Cashfree webhook timestamp missing");
+      const expected = createHmac("sha256", this.config.webhookSecret)
+        .update(timestamp)
+        .update(raw)
+        .digest("base64");
+      if (!safeEqual(signature, expected))
+        throw new Error("Cashfree webhook signature invalid");
+      return raw;
+    }
+    if (!/^[0-9a-f]+$/i.test(signature))
+      throw new Error("settlement webhook signature malformed");
+    const expected = createHmac("sha256", this.config.webhookSecret)
+        .update(raw)
+        .digest(),
+      supplied = Buffer.from(signature, "hex");
+    if (
+      supplied.length !== expected.length ||
+      !timingSafeEqual(supplied, expected)
+    )
+      throw new Error("settlement webhook signature invalid");
+    return raw;
+  }
+  async applyCashfreeCapturedSplit(
+    draft: SettlementInstructionDraft,
+    now: string,
+  ): Promise<{ receiptSha256: string }> {
+    if (this.provider !== "CASHFREE_EASY_SPLIT")
+      throw new Error("Cashfree split unavailable for provider");
+    if (!this.config.cashfreeSplitPathTemplate?.includes("{order_id}"))
+      throw new Error("Cashfree split path unavailable");
+    const url = new URL(
+        this.config.cashfreeSplitPathTemplate.replace(
+          "{order_id}",
+          encodeURIComponent(draft.instructionId),
+        ),
+        this.config.baseUrl,
+      ),
+      payload = JSON.stringify(cashfreeSplitRequest(draft)),
+      requestReceipt = await this.store.preserve(
+        "settlement/CASHFREE_EASY_SPLIT/split-request",
+        new TextEncoder().encode(payload),
+        "application/json",
+        url.toString(),
+        now,
+      ),
+      response = await this.fetcher(url, {
+        method: "POST",
+        headers: {
+          authorization: this.config.authorizationHeader,
+          "content-type": "application/json",
+          ...this.config.additionalHeaders,
+        },
+        body: payload,
+        signal: AbortSignal.timeout(30_000),
+      }),
+      bytes = new Uint8Array(await response.arrayBuffer()),
+      receipt = await this.store.preserve(
+        "settlement/CASHFREE_EASY_SPLIT/split-response",
+        bytes,
+        response.headers.get("content-type") ?? "application/json",
+        url.toString(),
+        now,
+      );
+    if (!response.ok)
+      throw new Error(
+        `Cashfree split HTTP ${response.status}; request=${requestReceipt.objectKey}; response=${receipt.objectKey}`,
+      );
+    const decoded = JSON.parse(new TextDecoder().decode(bytes)) as Record<
+      string,
+      unknown
+    >;
+    if (decoded.status !== "OK" || decoded.message !== "Order split created")
+      throw new Error(
+        `Cashfree split acknowledgement incomplete; response=${receipt.objectKey}`,
+      );
+    return { receiptSha256: receipt.sha256 };
+  }
+  async applyRazorpayCapturedTransfer(
+    draft: SettlementInstructionDraft,
+    paymentReference: string,
+    now: string,
+  ): Promise<{ receiptSha256: string }> {
+    if (this.provider !== "RAZORPAY_ROUTE")
+      throw new Error("Razorpay transfer unavailable for provider");
+    if (!this.config.razorpayTransferPathTemplate?.includes("{payment_id}"))
+      throw new Error("Razorpay transfer path unavailable");
+    const url = new URL(
+        this.config.razorpayTransferPathTemplate.replace(
+          "{payment_id}",
+          encodeURIComponent(paymentReference),
+        ),
+        this.config.baseUrl,
+      ),
+      payload = JSON.stringify(razorpayRouteRequest(draft)),
+      requestReceipt = await this.store.preserve(
+        "settlement/RAZORPAY_ROUTE/transfer-request",
+        new TextEncoder().encode(payload),
+        "application/json",
+        url.toString(),
+        now,
+      ),
+      response = await this.fetcher(url, {
+        method: "POST",
+        headers: {
+          authorization: this.config.authorizationHeader,
+          "content-type": "application/json",
+          "x-idempotency-key": draft.idempotencyKey,
+          ...this.config.additionalHeaders,
+        },
+        body: payload,
+        signal: AbortSignal.timeout(30_000),
+      }),
+      bytes = new Uint8Array(await response.arrayBuffer()),
+      receipt = await this.store.preserve(
+        "settlement/RAZORPAY_ROUTE/transfer-response",
+        bytes,
+        response.headers.get("content-type") ?? "application/json",
+        url.toString(),
+        now,
+      );
+    if (!response.ok)
+      throw new Error(
+        `Razorpay transfer HTTP ${response.status}; request=${requestReceipt.objectKey}; response=${receipt.objectKey}`,
+      );
+    const decoded = JSON.parse(new TextDecoder().decode(bytes)) as {
+        items?: { account?: string; amount?: number; currency?: string }[];
+      },
+      expected = razorpayRouteRequest(draft) as {
+        transfers: { account: string; amount: number; currency: string }[];
+      },
+      item = decoded.items?.[0];
+    if (
+      decoded.items?.length !== 1 ||
+      item?.account !== expected.transfers[0]!.account ||
+      item.amount !== expected.transfers[0]!.amount ||
+      item.currency !== "INR"
+    )
+      throw new Error(
+        `Razorpay transfer acknowledgement mismatch; response=${receipt.objectKey}`,
+      );
+    return { receiptSha256: receipt.sha256 };
+  }
+}
+function field(value: Record<string, unknown>, path: string): unknown {
+  return path
+    .split(".")
+    .reduce<unknown>(
+      (current, key) =>
+        current && typeof current === "object"
+          ? (current as Record<string, unknown>)[key]
+          : undefined,
+      value,
+    );
+}
+function safeEqual(left: string, right: string): boolean {
+  const a = Buffer.from(left),
+    b = Buffer.from(right);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+function inrPaise(value: string): number {
+  if (!/^\d+(?:\.\d{1,2})?$/.test(value))
+    throw new Error("Razorpay INR amount must have at most two decimals");
+  const [whole, fraction = ""] = value.split("."),
+    paise = BigInt(whole!) * 100n + BigInt(fraction.padEnd(2, "0"));
+  if (paise > BigInt(Number.MAX_SAFE_INTEGER))
+    throw new Error("Razorpay amount exceeds safe integer");
+  return Number(paise);
+}
+
+export const escrowComRequest: SettlementRequestBuilder = (draft) => ({
+  currency: draft.currency.toLowerCase(),
+  description: `SableStone protected polymer trade ${draft.tradeId}`,
+  parties: [
+    { role: "buyer", customer: draft.buyerId },
+    { role: "seller", customer: draft.supplierId },
+    { role: "broker", customer: draft.sablestoneBeneficiaryId },
+  ],
+  items: [
+    {
+      type: "general_merchandise",
+      category: "other_merchandise",
+      title: draft.commodityFamily,
+      description: `Protected polymer allocation ${draft.tradeId}`,
+      quantity: 1,
+      inspection_period: 259200,
+      schedule: [
+        {
+          payer_customer: draft.buyerId,
+          beneficiary_customer: draft.supplierId,
+          amount: draft.supplierEntitlement,
+        },
+      ],
+    },
+    {
+      type: "broker_fee",
+      title: "SableStone brokerage",
+      quantity: 1,
+      schedule: [
+        {
+          payer_customer: draft.buyerId,
+          beneficiary_customer: draft.sablestoneBeneficiaryId,
+          amount: draft.sablestoneEntitlement,
+        },
+      ],
+    },
+  ],
+  privacy: { buyer: true, seller: true, broker_fee: true },
+  metadata: {
+    instruction_id: draft.instructionId,
+    trade_id: draft.tradeId,
+    instruction_digest: draft.idempotencyKey,
+  },
+});
+// Split-after-payment: supplier is the only vendor; SableStone retains merchant balance.
+export const cashfreeSplitRequest: SettlementRequestBuilder = (draft) => ({
+  split: [
+    {
+      vendor_id: draft.supplierId,
+      amount: draft.supplierEntitlement,
+      tags: { trade_id: draft.tradeId, instruction_id: draft.instructionId },
+    },
+  ],
+  disable_split: true,
+});
+export const cashfreeOrderRequest: SettlementRequestBuilder = (draft) => ({
+  order_id: draft.instructionId,
+  order_amount: draft.grossAmount,
+  order_currency: draft.currency,
+  order_note: `protected trade ${draft.tradeId}`,
+});
+export const razorpayRouteRequest: SettlementRequestBuilder = (draft) => {
+  if (draft.currency !== "INR") throw new Error("Razorpay Route requires INR");
+  return {
+    transfers: [
+      {
+        account: draft.supplierId,
+        amount: inrPaise(draft.supplierEntitlement),
+        currency: "INR",
+        on_hold: true,
+        notes: { trade_id: draft.tradeId, instruction_id: draft.instructionId },
+      },
+    ],
+  };
+};
+export const razorpayOrderRequest: SettlementRequestBuilder = (draft) => {
+  if (draft.currency !== "INR") throw new Error("Razorpay Route requires INR");
+  return {
+    amount: inrPaise(draft.grossAmount),
+    currency: "INR",
+    receipt: draft.instructionId,
+    notes: { trade_id: draft.tradeId, instruction_id: draft.instructionId },
+  };
+};
+export const bankEscrowRequest: SettlementRequestBuilder = (draft) => ({
+  instruction_id: draft.instructionId,
+  gross_amount: draft.grossAmount,
+  currency: draft.currency,
+  beneficiaries: [
+    { id: draft.supplierId, amount: draft.supplierEntitlement, role: "SELLER" },
+    {
+      id: draft.sablestoneBeneficiaryId,
+      amount: draft.sablestoneEntitlement,
+      role: "BROKER",
+    },
+  ],
+  release_conditions: draft.releaseConditions,
+  dispute_procedure: draft.disputeProcedure,
+  expires_at: draft.expiresAt,
+});
+export const lcProceedsRequest: SettlementRequestBuilder = (draft) => ({
+  instruction_id: draft.instructionId,
+  credit_beneficiary: draft.supplierId,
+  assignee: draft.sablestoneBeneficiaryId,
+  assigned_amount: draft.sablestoneEntitlement,
+  currency: draft.currency,
+  bank_acknowledgement_required: true,
+  trade_id: draft.tradeId,
+});

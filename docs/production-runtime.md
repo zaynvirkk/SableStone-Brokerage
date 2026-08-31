@@ -29,6 +29,15 @@ processing. Settlement signatures are checked over those bytes, and Gmail push
 identity is verified as a Google OIDC token for the configured audience. A
 parsed or reserialized body cannot substitute for the signed input.
 
+Instruction creation is not a fee lock. `FEE_LOCKED` requires an immutable
+`entitlement_security_events` receipt proving secured funds, exact
+gross/currency, the supplier allocation and SableStone's beneficiary position.
+Escrow.com notifications are confirmed by fetching the transaction. Cashfree
+and Razorpay verify captured-payment webhooks and then create the approved
+supplier-only split or transfer; SableStone retains its merchant commission.
+Provider configuration must supply the exact reviewed event paths and the
+post-capture endpoint templates approved for that production account.
+
 ## Deployment boundary
 
 Do not copy `.example` files into source control with values. Production

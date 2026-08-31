@@ -3,10 +3,10 @@ import type { ImmutableEvidenceStore } from "./object_store.js";
 import {
   ProductionSettlementHttpAdapter,
   bankEscrowRequest,
-  cashfreeSplitRequest,
+  cashfreeOrderRequest,
   escrowComRequest,
   lcProceedsRequest,
-  razorpayRouteRequest,
+  razorpayOrderRequest,
   type ProviderHttpConfig,
   type SettlementRequestBuilder,
 } from "../connectors/settlement_http.js";
@@ -21,8 +21,8 @@ const builders: Readonly<Record<string, SettlementRequestBuilder>> =
   Object.freeze({
     ESCROW_COM: escrowComRequest,
     INDIAN_BANK_ESCROW: bankEscrowRequest,
-    CASHFREE_EASY_SPLIT: cashfreeSplitRequest,
-    RAZORPAY_ROUTE: razorpayRouteRequest,
+    CASHFREE_EASY_SPLIT: cashfreeOrderRequest,
+    RAZORPAY_ROUTE: razorpayOrderRequest,
     LC_PROCEEDS: lcProceedsRequest,
   });
 
@@ -47,7 +47,7 @@ export async function buildProductionSettlementAdapters(
     if (
       !definition.baseUrl.startsWith("https://") ||
       !definition.authorizationHeader ||
-      !definition.webhookSecret ||
+      (definition.provider !== "ESCROW_COM" && !definition.webhookSecret) ||
       !definition.credentialSecretReference
     )
       throw new Error(

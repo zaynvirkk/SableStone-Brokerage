@@ -252,3 +252,30 @@ export function createReplyMime(input: {
   ];
   return new TextEncoder().encode(lines.join("\r\n"));
 }
+
+export function createOutboundMime(input: {
+  from: string;
+  to: string;
+  subject: string;
+  messageId: string;
+  body: string;
+}): Uint8Array {
+  for (const value of [input.from, input.to, input.subject, input.messageId])
+    if (/[\r\n]/.test(value))
+      throw new Error("email header injection rejected");
+  if (!/^<[0-9a-f]{64}@mail\.sablestone\.internal>$/.test(input.messageId))
+    throw new Error("outbound Message-ID invalid");
+  return new TextEncoder().encode(
+    [
+      `From: ${input.from}`,
+      `To: ${input.to}`,
+      `Subject: ${input.subject}`,
+      `Message-ID: ${input.messageId}`,
+      "MIME-Version: 1.0",
+      "Content-Type: text/plain; charset=utf-8",
+      "Content-Transfer-Encoding: 8bit",
+      "",
+      input.body,
+    ].join("\r\n"),
+  );
+}
