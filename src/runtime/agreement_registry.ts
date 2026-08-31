@@ -1,7 +1,10 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolClient, QueryResultRow } from "pg";
 import type { AgreementKind } from "../agreements.js";
-import type { ImmutableEvidenceStore } from "./object_store.js";
+import type {
+  EvidenceReceipt,
+  ImmutableEvidenceStore,
+} from "./object_store.js";
 import { inTransaction, TransactionalOutboxRepository } from "./database.js";
 
 export type AgreementResourceType = "ORG_MASTER" | "MATCH" | "TRADE";
@@ -208,7 +211,7 @@ export class AgreementRegistry {
       }
       const agreementBindingId = randomUUID();
       await client.query(
-        "insert into agreement_resource_bindings(id,agreement_id,agreement_version,resource_type,resource_id,expected_organization_id,role,binding_sha256,legal_gate_receipt_id) values($1,$2,$3,$4,$5,$6,$7,$8,$9)",
+        "insert into agreement_resource_bindings(id,agreement_id,agreement_version,resource_type,resource_id,expected_organization_id,role,binding_sha256,legal_gate_receipt_id,agreement_kind) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",
         [
           agreementBindingId,
           input.agreementId,
@@ -219,6 +222,7 @@ export class AgreementRegistry {
           input.role,
           bindingSha256,
           input.legalGateReceiptId,
+          input.kind,
         ],
       );
       await this.outbox.append(client, {
@@ -244,6 +248,141 @@ export class AgreementRegistry {
         agreementId: input.agreementId,
         agreementBindingId,
         bodySha256: String(receipt.body_sha256),
+        bindingSha256,
+      });
+    });
+  }
+
+  async registerRendered(input: {
+    agreementId: string;
+    version: string;
+    kind: AgreementKind;
+    templateLegalReceiptId: string;
+    body: EvidenceReceipt;
+    resourceType: AgreementResourceType;
+    resourceId: string;
+    expectedOrganizationId: string;
+    role: AgreementRole;
+    effectiveAt: string;
+    expiresAt: string;
+    registeredAt: string;
+  }): Promise<
+    Readonly<{
+      agreementId: string;
+      agreementBindingId: string;
+      bodySha256: string;
+      bindingSha256: string;
+    }>
+  > {
+    if (
+      !/^[0-9a-f-]{36}$/i.test(input.agreementId) ||
+      !input.version.trim() ||
+      Date.parse(input.effectiveAt) > Date.parse(input.registeredAt) ||
+      Date.parse(input.expiresAt) <= Date.parse(input.registeredAt)
+    )
+      throw new Error("rendered agreement validity invalid");
+    agreementApprovalBindingSha256({
+      agreementId: input.agreementId,
+      version: input.version,
+      kind: input.kind,
+      bodySha256: input.body.sha256,
+      resourceType: input.resourceType,
+      resourceId: input.resourceId,
+      expectedOrganizationId: input.expectedOrganizationId,
+      role: input.role,
+      effectiveAt: input.effectiveAt,
+      expiresAt: input.expiresAt,
+    });
+    const legal = (
+      await this.pool.query(
+        "select * from authority_receipts where receipt_id=$1 and authority_kind='LEGAL_AGREEMENT_TEMPLATE' and effective_at<=$2 and expires_at>$2",
+        [input.templateLegalReceiptId, input.registeredAt],
+      )
+    ).rows[0];
+    if (!legal || Date.parse(input.expiresAt) > Date.parse(legal.expires_at))
+      throw new Error("current agreement template legal receipt missing");
+    await this.store.readVerified(input.body.objectKey, input.body.sha256);
+    return inTransaction(this.pool, async (client) => {
+      await assertResourceOwnership(
+        client,
+        input.resourceType,
+        input.resourceId,
+        input.expectedOrganizationId,
+        input.role,
+      );
+      const agreement = (
+        await client.query(
+          "select * from agreements where id=$1 and version=$2",
+          [input.agreementId, input.version],
+        )
+      ).rows[0];
+      if (agreement) throw new Error("rendered agreement id collision");
+      await client.query(
+        "insert into agreements(id,agreement_kind,version,body_sha256,body_object_key,effective_at,expires_at,legal_gate_receipt_id,seller_of_record,sablestone_role) values($1,$2,$3,$4,$5,$6,$7,$8,'SUPPLIER','COMMISSION_BROKER')",
+        [
+          input.agreementId,
+          input.kind,
+          input.version,
+          input.body.sha256,
+          input.body.objectKey,
+          input.effectiveAt,
+          input.expiresAt,
+          input.templateLegalReceiptId,
+        ],
+      );
+      const bindingSha256 = createHash("sha256")
+          .update(
+            JSON.stringify({
+              agreementId: input.agreementId,
+              version: input.version,
+              bodySha256: input.body.sha256,
+              resourceType: input.resourceType,
+              resourceId: input.resourceId,
+              expectedOrganizationId: input.expectedOrganizationId,
+              role: input.role,
+            }),
+          )
+          .digest("hex"),
+        agreementBindingId = randomUUID();
+      await client.query(
+        "insert into agreement_resource_bindings(id,agreement_id,agreement_version,resource_type,resource_id,expected_organization_id,role,binding_sha256,legal_gate_receipt_id,agreement_kind) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",
+        [
+          agreementBindingId,
+          input.agreementId,
+          input.version,
+          input.resourceType,
+          input.resourceId,
+          input.expectedOrganizationId,
+          input.role,
+          bindingSha256,
+          input.templateLegalReceiptId,
+          input.kind,
+        ],
+      );
+      await this.outbox.append(client, {
+        id: randomUUID(),
+        aggregateType: "AGREEMENT",
+        aggregateId: input.agreementId,
+        eventType: "AGREEMENT_RESOURCE_BOUND",
+        payload: {
+          agreementId: input.agreementId,
+          version: input.version,
+          agreementBindingId,
+          resourceType: input.resourceType,
+          resourceId: input.resourceId,
+          expectedOrganizationId: input.expectedOrganizationId,
+          role: input.role,
+          bodySha256: input.body.sha256,
+          bindingSha256,
+          legalGateReceiptId: input.templateLegalReceiptId,
+          generatedFromTemplate: true,
+        },
+        idempotencyKey: `agreement-binding:${bindingSha256}`,
+      });
+      return Object.freeze({
+        agreementId: input.agreementId,
+        agreementBindingId,
+        bodySha256: input.body.sha256,
         bindingSha256,
       });
     });

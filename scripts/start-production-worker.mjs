@@ -29,6 +29,7 @@ import {
   EconomicEvaluationDispatcher,
   AcquisitionOutreachDispatcher,
   buildCommercialExtractor,
+  AgreementAutomationDispatcher,
 } from "../dist/index.js";
 
 const runtime = await bootstrapProduction(process.env);
@@ -172,6 +173,9 @@ const commercialExtractor = runtime.activation.capabilities.includes("OUTREACH")
       process.env.SABLESTONE_COMMERCIAL_EXTRACTOR_JSON,
     )
   : null;
+const agreementAutomation = runtime.activation.capabilities.includes("TRADING")
+  ? new AgreementAutomationDispatcher(runtime.pool, runtime.evidence)
+  : null;
 const { ProviderPartyReferenceResolver } =
   await import("../dist/runtime/provider_parties.js");
 const providerParties = cipher
@@ -256,6 +260,7 @@ const periodic = async () => {
       if (kybJobs) await kybJobs.dispatchBatch();
       if (economicJobs) await economicJobs.dispatchBatch();
       if (economicEvaluation) await economicEvaluation.dispatchBatch();
+      if (agreementAutomation) await agreementAutomation.dispatchBatch();
       if (scheduler) await scheduler.tick();
     } catch (error) {
       console.error(

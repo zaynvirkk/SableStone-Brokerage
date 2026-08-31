@@ -32,6 +32,7 @@ export * from "./runtime/commands.js";
 export * from "./runtime/provider_factory.js";
 export * from "./runtime/provider_parties.js";
 export * from "./runtime/agreement_registry.js";
+export * from "./runtime/agreement_automation.js";
 export * from "./runtime/inbox_processors.js";
 export * from "./runtime/sensitive_data.js";
 export * from "./runtime/gmail_watch.js";

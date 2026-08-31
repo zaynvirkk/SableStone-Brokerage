@@ -23,6 +23,7 @@ import {
   type AgreementRole,
 } from "../runtime/agreement_registry.js";
 import type { AgreementKind } from "../agreements.js";
+import { AgreementTemplateRegistry } from "../runtime/agreement_automation.js";
 declare module "@fastify/jwt" {
   interface FastifyJWT {
     payload: {
@@ -90,6 +91,9 @@ export async function createProductionApi(
       : null,
     agreementRegistry = deps.evidenceStore
       ? new AgreementRegistry(deps.pool, deps.evidenceStore)
+      : null,
+    agreementTemplateRegistry = deps.evidenceStore
+      ? new AgreementTemplateRegistry(deps.pool, deps.evidenceStore)
       : null;
   await app.register(jwt, {
     secret: { public: deps.jwtPublicKey },
@@ -361,6 +365,72 @@ export async function createProductionApi(
   );
   app.post<{
     Body: {
+      kind?: AgreementKind;
+      version?: string;
+      resourceType?: AgreementResourceType;
+      role?: AgreementRole;
+      legalGateReceiptId?: string;
+      effectiveAt?: string;
+      expiresAt?: string;
+    };
+  }>(
+    "/v1/system/agreement-templates",
+    {
+      onRequest: [app.authenticate],
+      config: { rateLimit: { max: 20, timeWindow: "1 minute" } },
+    },
+    async (request, reply) => {
+      const p = principal(request),
+        body = request.body,
+        now = new Date().toISOString();
+      try {
+        assertAuthorized(
+          p,
+          { organizationId: null, allowedRoles: ["SYSTEM"] },
+          now,
+        );
+      } catch {
+        return reply.code(403).send({ error: "ROLE_FORBIDDEN" });
+      }
+      if (
+        !deps.activation?.capabilities.includes("TRADING") ||
+        !agreementTemplateRegistry
+      )
+        return reply
+          .code(503)
+          .send({ error: "AGREEMENT_TEMPLATE_PROVISIONING_UNAVAILABLE" });
+      if (
+        !body?.kind ||
+        !body.version ||
+        !body.resourceType ||
+        !body.role ||
+        !body.legalGateReceiptId ||
+        !body.effectiveAt ||
+        !body.expiresAt ||
+        Number.isNaN(Date.parse(body.effectiveAt)) ||
+        Number.isNaN(Date.parse(body.expiresAt))
+      )
+        return reply.code(400).send({ error: "AGREEMENT_TEMPLATE_INVALID" });
+      try {
+        return reply.code(201).send(
+          await agreementTemplateRegistry.register({
+            kind: body.kind,
+            version: body.version,
+            resourceType: body.resourceType,
+            role: body.role,
+            legalGateReceiptId: body.legalGateReceiptId,
+            effectiveAt: body.effectiveAt,
+            expiresAt: body.expiresAt,
+            registeredAt: now,
+          }),
+        );
+      } catch {
+        return reply.code(409).send({ error: "AGREEMENT_TEMPLATE_REJECTED" });
+      }
+    },
+  );
+  app.post<{
+    Body: {
       agreementId?: string;
       version?: string;
       kind?: AgreementKind;
@@ -627,7 +697,7 @@ export async function createProductionApi(
       return {
         items: (
           await deps.pool.query(
-            "select a.id,a.agreement_kind,a.version,a.body_sha256,a.effective_at,a.expires_at,b.id agreement_binding_id,b.resource_type,b.resource_id,b.binding_sha256,exists(select 1 from agreement_acceptances accepted where accepted.agreement_binding_id=b.id and accepted.signer_organization_id=$1) accepted,case when a.agreement_kind in('PROTECTED_ACCOUNT_NOTICE','PROTECTED_SUPPLIER_ACKNOWLEDGEMENT') then exists(select 1 from protected_match_acceptances pma join agreement_acceptances aa on aa.id=pma.agreement_acceptance_id where aa.agreement_binding_id=b.id and pma.match_id=b.resource_id and pma.organization_id=$1) when a.agreement_kind='TRANSACTION_CONFIRMATION' then exists(select 1 from trade_contract_acceptances tca join agreement_acceptances aa on aa.id=tca.agreement_acceptance_id where aa.agreement_binding_id=b.id and tca.trade_id=b.resource_id and tca.organization_id=$1) else exists(select 1 from agreement_acceptances accepted where accepted.agreement_binding_id=b.id and accepted.signer_organization_id=$1) end action_completed from agreements a join agreement_resource_bindings b on b.agreement_id=a.id and b.agreement_version=a.version join authority_receipts legal on legal.receipt_id=b.legal_gate_receipt_id where b.expected_organization_id=$1 and b.role=$2 and legal.authority_kind='LEGAL_AGREEMENT_APPROVAL' and legal.effective_at<=now() and legal.expires_at>now() and a.agreement_kind=any($3) and a.effective_at<=now() and a.expires_at>now() order by a.agreement_kind,a.version desc",
+            "select a.id,a.agreement_kind,a.version,a.body_sha256,a.effective_at,a.expires_at,b.id agreement_binding_id,b.resource_type,b.resource_id,b.binding_sha256,exists(select 1 from agreement_acceptances accepted where accepted.agreement_binding_id=b.id and accepted.signer_organization_id=$1) accepted,case when a.agreement_kind in('PROTECTED_ACCOUNT_NOTICE','PROTECTED_SUPPLIER_ACKNOWLEDGEMENT') then exists(select 1 from protected_match_acceptances pma join agreement_acceptances aa on aa.id=pma.agreement_acceptance_id where aa.agreement_binding_id=b.id and pma.match_id=b.resource_id and pma.organization_id=$1) when a.agreement_kind='TRANSACTION_CONFIRMATION' then exists(select 1 from trade_contract_acceptances tca join agreement_acceptances aa on aa.id=tca.agreement_acceptance_id where aa.agreement_binding_id=b.id and tca.trade_id=b.resource_id and tca.organization_id=$1) else exists(select 1 from agreement_acceptances accepted where accepted.agreement_binding_id=b.id and accepted.signer_organization_id=$1) end action_completed from agreements a join agreement_resource_bindings b on b.agreement_id=a.id and b.agreement_version=a.version join authority_receipts legal on legal.receipt_id=b.legal_gate_receipt_id where b.expected_organization_id=$1 and b.role=$2 and legal.authority_kind in('LEGAL_AGREEMENT_APPROVAL','LEGAL_AGREEMENT_TEMPLATE') and legal.effective_at<=now() and legal.expires_at>now() and a.agreement_kind=any($3) and a.effective_at<=now() and a.expires_at>now() order by a.agreement_kind,a.version desc",
             [p.organizationId, p.role, kinds],
           )
         ).rows,
@@ -650,7 +720,7 @@ export async function createProductionApi(
         return reply.code(503).send({ error: "AGREEMENT_BODY_UNAVAILABLE" });
       const row = (
         await deps.pool.query(
-          "select a.body_object_key,a.body_sha256 from agreements a join agreement_resource_bindings b on b.agreement_id=a.id and b.agreement_version=a.version join authority_receipts legal on legal.receipt_id=b.legal_gate_receipt_id where a.id=$1 and a.version=$2 and b.id=$3 and b.expected_organization_id=$4 and b.role=$5 and legal.authority_kind='LEGAL_AGREEMENT_APPROVAL' and legal.effective_at<=now() and legal.expires_at>now() and a.effective_at<=now() and a.expires_at>now()",
+          "select a.body_object_key,a.body_sha256 from agreements a join agreement_resource_bindings b on b.agreement_id=a.id and b.agreement_version=a.version join authority_receipts legal on legal.receipt_id=b.legal_gate_receipt_id where a.id=$1 and a.version=$2 and b.id=$3 and b.expected_organization_id=$4 and b.role=$5 and legal.authority_kind in('LEGAL_AGREEMENT_APPROVAL','LEGAL_AGREEMENT_TEMPLATE') and legal.effective_at<=now() and legal.expires_at>now() and a.effective_at<=now() and a.expires_at>now()",
           [
             request.params.id,
             request.params.version,
@@ -992,7 +1062,7 @@ async function allowedAgreement(
   return Boolean(
     (
       await pool.query(
-        "select 1 from agreements a join agreement_resource_bindings b on b.agreement_id=a.id and b.agreement_version=a.version join authority_receipts legal on legal.receipt_id=b.legal_gate_receipt_id where a.id=$1 and a.version=$2 and b.id=$3 and b.expected_organization_id=$4 and b.role=$5 and legal.authority_kind='LEGAL_AGREEMENT_APPROVAL' and legal.effective_at<=now() and legal.expires_at>now() and a.agreement_kind=any($6) and a.effective_at<=now() and a.expires_at>now()",
+        "select 1 from agreements a join agreement_resource_bindings b on b.agreement_id=a.id and b.agreement_version=a.version join authority_receipts legal on legal.receipt_id=b.legal_gate_receipt_id where a.id=$1 and a.version=$2 and b.id=$3 and b.expected_organization_id=$4 and b.role=$5 and legal.authority_kind in('LEGAL_AGREEMENT_APPROVAL','LEGAL_AGREEMENT_TEMPLATE') and legal.effective_at<=now() and legal.expires_at>now() and a.agreement_kind=any($6) and a.effective_at<=now() and a.expires_at>now()",
         [id, version, bindingId, organizationId, role, kinds],
       )
     ).rowCount,
