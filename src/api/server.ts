@@ -6,7 +6,10 @@ import type Redis from "ioredis";
 import type { Pool } from "pg";
 import { assertAuthorized, type Principal, type Role } from "../security.js";
 import type { ProductionActivationPayload } from "../runtime/activation.js";
-import { ProductionCommandService } from "../runtime/commands.js";
+import {
+  ProductionCommandService,
+  settlementInstructionAcceptanceDigest,
+} from "../runtime/commands.js";
 import type { SensitiveDataCipher } from "../runtime/sensitive_data.js";
 import { createHash } from "node:crypto";
 import {
@@ -229,7 +232,7 @@ export async function createProductionApi(
       const instruction =
           (
             await deps.pool.query(
-              "select id,provider,currency,gross_amount,supplier_entitlement,sablestone_entitlement,expires_at,acknowledged from settlement_instructions where trade_id=$1 order by created_at desc limit 1",
+              "select * from settlement_instructions where trade_id=$1 order by created_at desc limit 1",
               [row.id],
             )
           ).rows[0] ?? null,
@@ -238,9 +241,21 @@ export async function createProductionApi(
             "select role from trade_contract_acceptances where trade_id=$1 order by role",
             [row.id],
           )
-        ).rows.map((value) => value.role);
+        ).rows.map((value) => value.role),
+        settlementAcceptances = instruction
+          ? (
+              await deps.pool.query(
+                "select role from settlement_instruction_acceptances where instruction_id=$1 and instruction_digest=$2 order by role",
+                [
+                  instruction.id,
+                  settlementInstructionAcceptanceDigest(instruction),
+                ],
+              )
+            ).rows.map((value) => value.role)
+          : [];
       return {
         id: row.id,
+        viewerRole: p.role,
         state: row.state,
         relationshipId: row.relationship_id,
         supplierId:
@@ -252,7 +267,21 @@ export async function createProductionApi(
             ? row.buyer_id
             : "SEALED",
         updatedAt: row.updated_at,
-        settlement: instruction,
+        settlement: instruction
+          ? {
+              id: instruction.id,
+              provider: instruction.provider,
+              currency: instruction.currency,
+              gross_amount: instruction.gross_amount,
+              supplier_entitlement: instruction.supplier_entitlement,
+              sablestone_entitlement: instruction.sablestone_entitlement,
+              expires_at: instruction.expires_at,
+              acknowledged: instruction.acknowledged,
+              instructionDigest:
+                settlementInstructionAcceptanceDigest(instruction),
+              acceptances: settlementAcceptances,
+            }
+          : null,
         contractAcceptances,
         nextAction: tradeNextAction(
           row.state,
@@ -598,7 +627,7 @@ export async function createProductionApi(
       return {
         items: (
           await deps.pool.query(
-            "select a.id,a.agreement_kind,a.version,a.body_sha256,a.effective_at,a.expires_at,b.id agreement_binding_id,b.resource_type,b.resource_id,b.binding_sha256 from agreements a join agreement_resource_bindings b on b.agreement_id=a.id and b.agreement_version=a.version join authority_receipts legal on legal.receipt_id=b.legal_gate_receipt_id where b.expected_organization_id=$1 and b.role=$2 and legal.authority_kind='LEGAL_AGREEMENT_APPROVAL' and legal.effective_at<=now() and legal.expires_at>now() and a.agreement_kind=any($3) and a.effective_at<=now() and a.expires_at>now() order by a.agreement_kind,a.version desc",
+            "select a.id,a.agreement_kind,a.version,a.body_sha256,a.effective_at,a.expires_at,b.id agreement_binding_id,b.resource_type,b.resource_id,b.binding_sha256,exists(select 1 from agreement_acceptances accepted where accepted.agreement_binding_id=b.id and accepted.signer_organization_id=$1) accepted,case when a.agreement_kind in('PROTECTED_ACCOUNT_NOTICE','PROTECTED_SUPPLIER_ACKNOWLEDGEMENT') then exists(select 1 from protected_match_acceptances pma join agreement_acceptances aa on aa.id=pma.agreement_acceptance_id where aa.agreement_binding_id=b.id and pma.match_id=b.resource_id and pma.organization_id=$1) when a.agreement_kind='TRANSACTION_CONFIRMATION' then exists(select 1 from trade_contract_acceptances tca join agreement_acceptances aa on aa.id=tca.agreement_acceptance_id where aa.agreement_binding_id=b.id and tca.trade_id=b.resource_id and tca.organization_id=$1) else exists(select 1 from agreement_acceptances accepted where accepted.agreement_binding_id=b.id and accepted.signer_organization_id=$1) end action_completed from agreements a join agreement_resource_bindings b on b.agreement_id=a.id and b.agreement_version=a.version join authority_receipts legal on legal.receipt_id=b.legal_gate_receipt_id where b.expected_organization_id=$1 and b.role=$2 and legal.authority_kind='LEGAL_AGREEMENT_APPROVAL' and legal.effective_at<=now() and legal.expires_at>now() and a.agreement_kind=any($3) and a.effective_at<=now() and a.expires_at>now() order by a.agreement_kind,a.version desc",
             [p.organizationId, p.role, kinds],
           )
         ).rows,
