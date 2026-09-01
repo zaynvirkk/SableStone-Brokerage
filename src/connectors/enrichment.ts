@@ -3,6 +3,7 @@ import type { ContactRecord, ContactSource } from "../contacts.js";
 import type { ReceiptWriter } from "./discovery_http.js";
 import type { CredentialUseGuard } from "../runtime/production_credentials.js";
 import type { AuthorityUseGuard } from "../runtime/authority_receipts.js";
+import { readBoundedResponseBody } from "../runtime/public_network.js";
 export interface EnrichmentApproval {
   readonly provider: "HUNTER" | "APOLLO";
   readonly state: "APPROVED" | "UNDER_REVIEW" | "REVOKED";
@@ -41,7 +42,7 @@ export class HunterContactConnector {
         headers: { accept: "application/json" },
         signal: AbortSignal.timeout(15_000),
       }),
-      body = new Uint8Array(await response.arrayBuffer()),
+      body = await readBoundedResponseBody(response, 2_000_000),
       receipt = await this.store.preserve(
         "enrichment/hunter",
         body,

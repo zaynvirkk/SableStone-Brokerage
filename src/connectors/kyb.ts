@@ -1,6 +1,7 @@
 import type { ReceiptWriter } from "./discovery_http.js";
 import type { CredentialUseGuard } from "../runtime/production_credentials.js";
 import type { AuthorityUseGuard } from "../runtime/authority_receipts.js";
+import { readBoundedResponseBody } from "../runtime/public_network.js";
 export type KybOutcome = "VERIFIED" | "FAILED" | "UNKNOWN" | "CONFLICTING";
 export interface KybResult {
   readonly provider: string;
@@ -66,7 +67,7 @@ export class ProductionKybConnector {
         body: payload,
         signal: AbortSignal.timeout(30_000),
       }),
-      bytes = new Uint8Array(await response.arrayBuffer()),
+      bytes = await readBoundedResponseBody(response, 2_000_000),
       receipt = await this.store.preserve(
         `kyb/${this.config.provider}/response`,
         bytes,
@@ -131,7 +132,7 @@ export class ConsolidatedScreeningListConnector {
         headers: { accept: "application/json" },
         signal: AbortSignal.timeout(20_000),
       }),
-      bytes = new Uint8Array(await response.arrayBuffer()),
+      bytes = await readBoundedResponseBody(response, 5_000_000),
       receipt = await this.store.preserve(
         "screening/csl",
         bytes,

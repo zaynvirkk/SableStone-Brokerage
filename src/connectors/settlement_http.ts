@@ -18,6 +18,7 @@ import {
 import type { ReceiptWriter } from "./discovery_http.js";
 import type { CredentialUseGuard } from "../runtime/production_credentials.js";
 import type { AuthorityUseGuard } from "../runtime/authority_receipts.js";
+import { readBoundedResponseBody } from "../runtime/public_network.js";
 
 type InternalEvent =
   | "ENTITLEMENT_SECURED"
@@ -121,7 +122,7 @@ export class ProductionSettlementHttpAdapter implements SettlementAdapter {
         body: payload,
         signal: AbortSignal.timeout(30_000),
       }),
-      bytes = new Uint8Array(await response.arrayBuffer()),
+      bytes = await readBoundedResponseBody(response, 2_000_000),
       responseReceipt = await this.store.preserve(
         `settlement/${this.provider}/response`,
         bytes,
@@ -188,7 +189,7 @@ export class ProductionSettlementHttpAdapter implements SettlementAdapter {
           },
           signal: AbortSignal.timeout(30_000),
         }),
-        bytes = new Uint8Array(await response.arrayBuffer());
+        bytes = await readBoundedResponseBody(response, 2_000_000);
       await this.store.preserve(
         "settlement/ESCROW_COM/webhook-confirmation",
         bytes,
@@ -333,7 +334,7 @@ export class ProductionSettlementHttpAdapter implements SettlementAdapter {
         body: payload,
         signal: AbortSignal.timeout(30_000),
       }),
-      bytes = new Uint8Array(await response.arrayBuffer()),
+      bytes = await readBoundedResponseBody(response, 2_000_000),
       receipt = await this.store.preserve(
         "settlement/CASHFREE_EASY_SPLIT/split-response",
         bytes,
@@ -429,7 +430,7 @@ export class ProductionSettlementHttpAdapter implements SettlementAdapter {
         body: payload,
         signal: AbortSignal.timeout(30_000),
       }),
-      bytes = new Uint8Array(await response.arrayBuffer()),
+      bytes = await readBoundedResponseBody(response, 2_000_000),
       receipt = await this.store.preserve(
         "settlement/RAZORPAY_ROUTE/transfer-response",
         bytes,

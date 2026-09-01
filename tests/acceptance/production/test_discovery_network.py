@@ -1,0 +1,56 @@
+import subprocess
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[3]
+
+
+def test_reviewed_discovery_pins_only_public_dns_answers():
+    build = subprocess.run(
+        ["npm", "run", "build"], cwd=ROOT, text=True, capture_output=True
+    )
+    assert build.returncode == 0, build.stdout + build.stderr
+    result = subprocess.run(
+        ["node", "scripts/discovery-network-contract.mjs"],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    for claim in (
+        "public=accepted",
+        "private_blocked=18",
+        "mixed_rebinding=blocked",
+        "family_mismatch=blocked",
+        "empty_dns=blocked",
+        "literal_ip=blocked",
+        "pinned=true",
+        "response_stream=bounded",
+    ):
+        assert claim in result.stdout
+
+
+def test_production_discovery_default_uses_connection_time_pin():
+    connector = (ROOT / "src/connectors/discovery_http.ts").read_text()
+    boundary = (ROOT / "src/runtime/public_network.ts").read_text()
+    assert "fetcher: typeof fetch = createPinnedPublicFetch()" in connector
+    assert "isIP(hostname) !== 0" in connector
+    assert "connect: { lookup: createPinnedPublicLookup(resolver) }" in boundary
+    assert "dnsLookup(hostname, { all: true, verbatim: true })" in boundary
+    assert "for (const result of addresses)" in boundary
+
+
+def test_all_production_http_connector_responses_are_stream_bounded():
+    connectors = (
+        "acquisition_graph.ts",
+        "commercial_extraction.ts",
+        "discovery_http.ts",
+        "documents.ts",
+        "economic_quotes.ts",
+        "enrichment.ts",
+        "kyb.ts",
+        "settlement_http.ts",
+    )
+    for name in connectors:
+        source = (ROOT / "src/connectors" / name).read_text()
+        assert "response.arrayBuffer()" not in source, name
+        assert "readBoundedResponseBody" in source, name

@@ -14,6 +14,7 @@ import {
   DatabaseAuthorityUseGuard,
   type AuthorityUseGuard,
 } from "../runtime/authority_receipts.js";
+import { readBoundedResponseBody } from "../runtime/public_network.js";
 
 type Field = {
   value: string | null;
@@ -154,7 +155,7 @@ export class EvidenceBoundCommercialExtractor {
         body: requestBytes,
         signal: AbortSignal.timeout(30_000),
       }),
-      bytes = new Uint8Array(await response.arrayBuffer()),
+      bytes = await readBoundedResponseBody(response, 2_000_000),
       receipt = await this.store.preserve(
         "commercial-extraction/response",
         bytes,

@@ -5,6 +5,7 @@ import type { ReceiptWriter } from "./discovery_http.js";
 import type { CredentialUseGuard } from "../runtime/production_credentials.js";
 import type { AuthorityUseGuard } from "../runtime/authority_receipts.js";
 import { simpleParser } from "mailparser";
+import { readBoundedResponseBody } from "../runtime/public_network.js";
 export type DocumentKind =
   | "COA"
   | "TDS"
@@ -209,7 +210,7 @@ export class ProductionDocumentHttpExtractor implements StructuredDocumentExtrac
         body: payload,
         signal: AbortSignal.timeout(60_000),
       }),
-      bytes = new Uint8Array(await response.arrayBuffer()),
+      bytes = await readBoundedResponseBody(response, 5_000_000),
       receipt = await this.store.preserve(
         `documents/${this.config.provider}/response`,
         bytes,
@@ -367,7 +368,7 @@ export class ProductionDocumentVerifier {
         body: payload,
         signal: AbortSignal.timeout(60_000),
       }),
-      bytes = new Uint8Array(await response.arrayBuffer()),
+      bytes = await readBoundedResponseBody(response, 5_000_000),
       receipt = await this.store.preserve(
         `documents/${this.config.provider}/verification-response`,
         bytes,

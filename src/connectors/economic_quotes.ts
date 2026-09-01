@@ -3,6 +3,7 @@ import { decimal, type DecimalString } from "../money.js";
 import type { ReceiptWriter } from "./discovery_http.js";
 import type { CredentialUseGuard } from "../runtime/production_credentials.js";
 import type { AuthorityUseGuard } from "../runtime/authority_receipts.js";
+import { readBoundedResponseBody } from "../runtime/public_network.js";
 
 export type QuotedCostKind = Exclude<CostKind, "SUPPLIER_NET">;
 export interface EconomicQuoteHttpConfig {
@@ -77,7 +78,7 @@ export class ProductionEconomicQuoteConnector {
         body: payload,
         signal: AbortSignal.timeout(30_000),
       }),
-      bytes = new Uint8Array(await response.arrayBuffer()),
+      bytes = await readBoundedResponseBody(response, 2_000_000),
       receipt = await this.store.preserve(
         `economics/${this.config.provider}/response`,
         bytes,

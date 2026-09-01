@@ -7,6 +7,11 @@ Status: `BLOCKED_OPERATOR`.
 Deploy the exact release digest. Verify TLS/domain ownership, secret isolation,
 object-level authorization, redaction, encrypted backup plus independent
 restore, monitoring/alerts, kill switches and rollback. Preserve receipts.
+Reviewed-source discovery must retain its public-address DNS pin at socket
+connection time; literal IP, private/link-local/multicast/documentation ranges,
+mixed public/private answers and DNS family mismatches are deployment failures.
+Production HTTP responses are streamed through connector-specific byte limits
+before preservation or parsing.
 
 ## Populate without contact
 
