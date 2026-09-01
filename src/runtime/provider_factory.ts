@@ -53,6 +53,16 @@ export async function buildProductionSettlementAdapters(
       throw new Error(
         `provider secrets/config incomplete: ${definition.provider}`,
       );
+    if (
+      definition.provider === "CASHFREE_EASY_SPLIT" &&
+      (!definition.cashfreeSplitPathTemplate?.includes("{order_id}") ||
+        !definition.cashfreeSplitVerificationPathTemplate?.includes(
+          "{order_id}",
+        ))
+    )
+      throw new Error(
+        "Cashfree split creation and exact verification paths required",
+      );
     const verifiedAt = Date.parse(definition.credentialVerifiedAt);
     if (
       !Number.isFinite(verifiedAt) ||

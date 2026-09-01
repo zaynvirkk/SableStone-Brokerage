@@ -1,4 +1,5 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { decimal } from "../money.js";
 import type {
   ProviderCapabilitySnapshot,
   SettlementAdapter,
@@ -28,6 +29,7 @@ export interface ProviderHttpConfig {
   readonly baseUrl: string;
   readonly createPath: string;
   readonly cashfreeSplitPathTemplate?: string;
+  readonly cashfreeSplitVerificationPathTemplate?: string;
   readonly razorpayTransferPathTemplate?: string;
   readonly authorizationHeader: string;
   readonly additionalHeaders: Readonly<Record<string, string>>;
@@ -282,6 +284,10 @@ export class ProductionSettlementHttpAdapter implements SettlementAdapter {
       throw new Error("Cashfree split unavailable for provider");
     if (!this.config.cashfreeSplitPathTemplate?.includes("{order_id}"))
       throw new Error("Cashfree split path unavailable");
+    if (
+      !this.config.cashfreeSplitVerificationPathTemplate?.includes("{order_id}")
+    )
+      throw new Error("Cashfree split verification path unavailable");
     const url = new URL(
         this.config.cashfreeSplitPathTemplate.replace(
           "{order_id}",
@@ -302,6 +308,7 @@ export class ProductionSettlementHttpAdapter implements SettlementAdapter {
         headers: {
           authorization: this.config.authorizationHeader,
           "content-type": "application/json",
+          "x-idempotency-key": draft.instructionId,
           ...this.config.additionalHeaders,
         },
         body: payload,
@@ -327,7 +334,44 @@ export class ProductionSettlementHttpAdapter implements SettlementAdapter {
       throw new Error(
         `Cashfree split acknowledgement incomplete; response=${receipt.objectKey}`,
       );
-    return { receiptSha256: receipt.sha256 };
+    const verificationUrl = new URL(
+        this.config.cashfreeSplitVerificationPathTemplate.replace(
+          "{order_id}",
+          encodeURIComponent(draft.instructionId),
+        ),
+        this.config.baseUrl,
+      ),
+      verificationResponse = await this.fetcher(verificationUrl, {
+        headers: {
+          authorization: this.config.authorizationHeader,
+          ...this.config.additionalHeaders,
+        },
+        signal: AbortSignal.timeout(30_000),
+      }),
+      verificationBytes = new Uint8Array(
+        await verificationResponse.arrayBuffer(),
+      ),
+      verificationReceipt = await this.store.preserve(
+        "settlement/CASHFREE_EASY_SPLIT/split-verification",
+        verificationBytes,
+        verificationResponse.headers.get("content-type") ?? "application/json",
+        verificationUrl.toString(),
+        now,
+      );
+    if (!verificationResponse.ok)
+      throw new Error(
+        `Cashfree split verification HTTP ${verificationResponse.status}; response=${verificationReceipt.objectKey}`,
+      );
+    assertCashfreeSplitVerification(
+      JSON.parse(new TextDecoder().decode(verificationBytes)),
+      draft,
+    );
+    return {
+      receiptSha256: createHash("sha256")
+        .update(receipt.sha256)
+        .update(verificationReceipt.sha256)
+        .digest("hex"),
+    };
   }
   async applyRazorpayCapturedTransfer(
     draft: SettlementInstructionDraft,
@@ -393,6 +437,58 @@ export class ProductionSettlementHttpAdapter implements SettlementAdapter {
         `Razorpay transfer acknowledgement mismatch; response=${receipt.objectKey}`,
       );
     return { receiptSha256: receipt.sha256 };
+  }
+}
+
+export function assertCashfreeSplitVerification(
+  decoded: unknown,
+  draft: SettlementInstructionDraft,
+): void {
+  if (!decoded || typeof decoded !== "object")
+    throw new Error("Cashfree split verification malformed");
+  const result = decoded as {
+      settlement?: {
+        order_id?: unknown;
+        order_currency?: unknown;
+        order_amount?: unknown;
+        settlement_amount?: unknown;
+      };
+      vendors?: unknown;
+    },
+    settlement = result.settlement,
+    vendors = Array.isArray(result.vendors) ? result.vendors : [],
+    expectedVendor = providerReference(
+      draft.providerParties.supplier,
+      "vendor_id",
+    );
+  if (
+    !settlement ||
+    String(settlement.order_id ?? "") !== draft.instructionId ||
+    String(settlement.order_currency ?? "").toUpperCase() !== draft.currency ||
+    !sameDecimal(settlement.order_amount, draft.grossAmount) ||
+    !sameDecimal(settlement.settlement_amount, draft.sablestoneEntitlement) ||
+    vendors.length !== 1
+  )
+    throw new Error("Cashfree split verification economics mismatch");
+  const vendor = vendors[0] as {
+    vendor_id?: unknown;
+    settlement_amount?: unknown;
+  };
+  if (
+    String(vendor.vendor_id ?? "") !== expectedVendor ||
+    !sameDecimal(vendor.settlement_amount, draft.supplierEntitlement)
+  )
+    throw new Error("Cashfree split verification beneficiary mismatch");
+}
+
+function sameDecimal(actual: unknown, expected: string): boolean {
+  try {
+    return (
+      (typeof actual === "string" || typeof actual === "number") &&
+      decimal(String(actual)) === decimal(expected)
+    );
+  } catch {
+    return false;
   }
 }
 function field(value: Record<string, unknown>, path: string): unknown {

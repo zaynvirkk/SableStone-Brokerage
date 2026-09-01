@@ -1,6 +1,7 @@
 import { createHash, createHmac } from "node:crypto";
 import {
   ProductionSettlementHttpAdapter,
+  assertCashfreeSplitVerification,
   cashfreeOrderRequest,
   cashfreeSplitRequest,
   decimal,
@@ -156,6 +157,7 @@ const receipts = [],
       baseUrl: "https://cashfree.test",
       createPath: "/split",
       cashfreeSplitPathTemplate: "/pg/easy-split/orders/{order_id}/split",
+      cashfreeSplitVerificationPathTemplate: "/pg/easy-split/orders/{order_id}",
       authorizationHeader: "auth",
       additionalHeaders: {},
       webhookSecret: "secret",
@@ -164,11 +166,29 @@ const receipts = [],
     },
     cashfreeSplitRequest,
     store,
-    async () =>
-      new Response(
-        JSON.stringify({ message: "Order split created", status: "OK" }),
-        { status: 200, headers: { "content-type": "application/json" } },
-      ),
+    async (_url, init) => {
+      const body =
+        init?.method === "POST"
+          ? { message: "Order split created", status: "OK" }
+          : {
+              settlement: {
+                order_id: draft.instructionId,
+                order_currency: "INR",
+                order_amount: 1000,
+                settlement_amount: 100,
+              },
+              vendors: [
+                {
+                  vendor_id: draft.providerParties.supplier.vendor_id,
+                  settlement_amount: 900,
+                },
+              ],
+            };
+      return new Response(JSON.stringify(body), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    },
   );
 await cashfreeAdapter.verifyWebhook(raw, {
   "x-webhook-timestamp": timestamp,
@@ -190,6 +210,58 @@ const splitReceipt = await cashfreeAdapter.applyCashfreeCapturedSplit(
 );
 if (!/^[0-9a-f]{64}$/.test(splitReceipt.receiptSha256))
   throw new Error("Cashfree captured split receipt missing");
+let reconciliationRejected = 0;
+for (const changed of [
+  {
+    settlement: {
+      order_id: draft.instructionId,
+      order_currency: "INR",
+      order_amount: 1000,
+      settlement_amount: 99,
+    },
+    vendors: [
+      {
+        vendor_id: draft.providerParties.supplier.vendor_id,
+        settlement_amount: 900,
+      },
+    ],
+  },
+  {
+    settlement: {
+      order_id: draft.instructionId,
+      order_currency: "INR",
+      order_amount: 1000,
+      settlement_amount: 100,
+    },
+    vendors: [{ vendor_id: "wrong-vendor", settlement_amount: 900 }],
+  },
+  {
+    settlement: {
+      order_id: draft.instructionId,
+      order_currency: "INR",
+      order_amount: 1000,
+      settlement_amount: 100,
+    },
+    vendors: [
+      {
+        vendor_id: draft.providerParties.supplier.vendor_id,
+        settlement_amount: 899,
+      },
+    ],
+  },
+]) {
+  try {
+    assertCashfreeSplitVerification(changed, {
+      ...draft,
+      provider: "CASHFREE_EASY_SPLIT",
+      currency: "INR",
+    });
+  } catch {
+    reconciliationRejected++;
+  }
+}
+if (reconciliationRejected !== 3)
+  throw new Error("Cashfree split reconciliation mismatch survived");
 const escrowApproval = {
     ...approval,
     provider: "ESCROW_COM",
@@ -267,5 +339,5 @@ if (
 )
   throw new Error("Escrow fetch confirmation did not prove entitlement");
 console.log(
-  "PROVIDER_SEMANTICS_OK escrow=separate_broker_item escrow_webhook=fetch_confirmed cashfree=order_capture_then_supplier_split cashfree_commission=merchant_retained razorpay=order_capture_then_integer_paise_transfer webhooks=provider_specific instruction_created=not_fee_locked",
+  "PROVIDER_SEMANTICS_OK escrow=separate_broker_item escrow_webhook=fetch_confirmed cashfree=order_capture_then_supplier_split cashfree_reconciliation=exact cashfree_commission=merchant_retained razorpay=order_capture_then_integer_paise_transfer webhooks=provider_specific instruction_created=not_fee_locked",
 );
