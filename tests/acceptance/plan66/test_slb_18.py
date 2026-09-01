@@ -7,8 +7,12 @@ def test_settlement_sdk_requires_current_approval_credentials_and_capabilities()
     assert build.returncode == 0, build.stdout + build.stderr
     result = run("node", "scripts/settlement-capability-contract.mjs")
     assert result.returncode == 0, result.stdout + result.stderr
-    for claim in ("missing_approval=unavailable", "missing_credentials=unavailable", "under_review=blocked", "public_docs=not_approval", "capabilities_exact=true"):
+    for claim in ("missing_approval=unavailable", "missing_credentials=unavailable", "under_review=blocked", "public_docs=not_approval", "capabilities_exact=true", "production_fixture_adapters=blocked", "real_http_factory=required"):
         assert claim in result.stdout
+    adapters = (ROOT / "src" / "settlement_adapters.ts").read_text()
+    assert "environment !== \"SANDBOX\"" in adapters
+    production_factory = (ROOT / "src" / "runtime" / "provider_factory.ts").read_text()
+    assert "new ProductionSettlementHttpAdapter" in production_factory
 def test_provider_approval_and_capability_history_is_append_only() -> None:
     migration = (ROOT / "migrations" / "0017_settlement_capabilities.sql").read_text()
     assert "written_approval_receipt_id uuid NOT NULL REFERENCES authority_receipts" in migration
