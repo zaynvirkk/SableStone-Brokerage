@@ -3,6 +3,7 @@ import { createConnection } from "node:net";
 import { fileTypeFromBuffer } from "file-type";
 import type { ReceiptWriter } from "./discovery_http.js";
 import type { CredentialUseGuard } from "../runtime/production_credentials.js";
+import type { AuthorityUseGuard } from "../runtime/authority_receipts.js";
 import { simpleParser } from "mailparser";
 export type DocumentKind =
   | "COA"
@@ -170,6 +171,7 @@ export class ProductionDocumentHttpExtractor implements StructuredDocumentExtrac
     readonly store: ReceiptWriter,
     readonly fetcher: typeof fetch = fetch,
     readonly credentialGuard?: CredentialUseGuard,
+    readonly authorityGuard?: AuthorityUseGuard,
   ) {
     if (
       !config.baseUrl.startsWith("https://") ||
@@ -184,6 +186,7 @@ export class ProductionDocumentHttpExtractor implements StructuredDocumentExtrac
     mediaType: string;
     receiptId: string;
   }): Promise<DocumentExtraction> {
+    await this.authorityGuard?.assertCurrent();
     await this.credentialGuard?.assertCurrent();
     const url = new URL(this.config.extractionPath, this.config.baseUrl),
       payload = JSON.stringify({
@@ -321,6 +324,7 @@ export class ProductionDocumentVerifier {
     readonly store: ReceiptWriter,
     readonly fetcher: typeof fetch = fetch,
     readonly credentialGuard?: CredentialUseGuard,
+    readonly authorityGuard?: AuthorityUseGuard,
   ) {
     if (
       !config.baseUrl.startsWith("https://") ||
@@ -337,6 +341,7 @@ export class ProductionDocumentVerifier {
     extraction: DocumentExtraction;
     documentId: string;
   }): Promise<DocumentVerificationResult> {
+    await this.authorityGuard?.assertCurrent();
     await this.credentialGuard?.assertCurrent();
     if (Date.parse(this.config.validUntil) <= Date.now())
       throw new Error("document verifier approval expired");

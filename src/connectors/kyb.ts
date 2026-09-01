@@ -1,5 +1,6 @@
 import type { ReceiptWriter } from "./discovery_http.js";
 import type { CredentialUseGuard } from "../runtime/production_credentials.js";
+import type { AuthorityUseGuard } from "../runtime/authority_receipts.js";
 export type KybOutcome = "VERIFIED" | "FAILED" | "UNKNOWN" | "CONFLICTING";
 export interface KybResult {
   readonly provider: string;
@@ -26,6 +27,7 @@ export class ProductionKybConnector {
     readonly store: ReceiptWriter,
     readonly fetcher: typeof fetch = fetch,
     readonly credentialGuard?: CredentialUseGuard,
+    readonly authorityGuard?: AuthorityUseGuard,
   ) {}
   async verify(
     input: {
@@ -35,6 +37,7 @@ export class ProductionKybConnector {
     },
     now = new Date().toISOString(),
   ): Promise<KybResult> {
+    await this.authorityGuard?.assertCurrent();
     await this.credentialGuard?.assertCurrent();
     if (
       this.config.state !== "APPROVED" ||

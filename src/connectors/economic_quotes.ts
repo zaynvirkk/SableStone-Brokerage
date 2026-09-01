@@ -2,6 +2,7 @@ import type { CostKind } from "../costs.js";
 import { decimal, type DecimalString } from "../money.js";
 import type { ReceiptWriter } from "./discovery_http.js";
 import type { CredentialUseGuard } from "../runtime/production_credentials.js";
+import type { AuthorityUseGuard } from "../runtime/authority_receipts.js";
 
 export type QuotedCostKind = Exclude<CostKind, "SUPPLIER_NET">;
 export interface EconomicQuoteHttpConfig {
@@ -30,6 +31,7 @@ export class ProductionEconomicQuoteConnector {
     readonly store: ReceiptWriter,
     readonly fetcher: typeof fetch = fetch,
     readonly credentialGuard?: CredentialUseGuard,
+    readonly authorityGuard?: AuthorityUseGuard,
   ) {
     if (
       !config.provider ||
@@ -50,6 +52,7 @@ export class ProductionEconomicQuoteConnector {
     demandSpec: unknown;
     currency: string;
   }): Promise<EconomicQuote> {
+    await this.authorityGuard?.assertCurrent();
     await this.credentialGuard?.assertCurrent();
     if (
       !this.config.costKinds.includes(input.costKind) ||

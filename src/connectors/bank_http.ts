@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import type { ReceiptWriter } from "./discovery_http.js";
 import type { DurableInboxRepository } from "../runtime/database.js";
 import type { CredentialUseGuard } from "../runtime/production_credentials.js";
+import type { AuthorityUseGuard } from "../runtime/authority_receipts.js";
 export interface BankWebhookConfig {
   readonly provider: string;
   readonly webhookSecret: string;
@@ -30,11 +31,13 @@ export function createBankWebhookHandler(input: {
   store: ReceiptWriter;
   inbox: DurableInboxRepository;
   credentialGuard?: CredentialUseGuard;
+  authorityGuard?: AuthorityUseGuard;
 }) {
   return async (
     raw: Uint8Array,
     headers: Readonly<Record<string, string | undefined>>,
   ): Promise<string> => {
+    await input.authorityGuard?.assertCurrent();
     await input.credentialGuard?.assertCurrent();
     const signature = headers[input.config.signatureHeader.toLowerCase()];
     if (!signature || !/^[0-9a-f]+$/i.test(signature))

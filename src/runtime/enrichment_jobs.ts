@@ -8,6 +8,7 @@ import type { ImmutableEvidenceStore } from "./object_store.js";
 import type { SensitiveDataCipher } from "./sensitive_data.js";
 import { inTransaction } from "./database.js";
 import { assertCurrentAuthorityReceipt } from "./authority_receipts.js";
+import { DatabaseAuthorityUseGuard } from "./authority_receipts.js";
 import {
   assertCurrentCredentialBinding,
   DatabaseCredentialUseGuard,
@@ -39,6 +40,11 @@ export async function buildHunterConnector(
     store,
     fetch,
     new DatabaseCredentialUseGuard(pool, credentialInput),
+    new DatabaseAuthorityUseGuard(
+      pool,
+      config.approvalReceiptId,
+      "CONTACT_ENRICHMENT_APPROVAL",
+    ),
   );
 }
 export class EnrichmentJobDispatcher {

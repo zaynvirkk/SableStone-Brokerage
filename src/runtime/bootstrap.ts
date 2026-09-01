@@ -12,12 +12,14 @@ import {
   type ProductionActivationPayload,
   type SignedProductionActivation,
 } from "./activation.js";
+import type { AuthorityUseGuard } from "./authority_receipts.js";
 export interface ProductionRuntime {
   readonly activation: Readonly<ProductionActivationPayload>;
   readonly pool: Pool;
   readonly redis: Redis;
   readonly evidence: ImmutableEvidenceStore;
   readonly releaseDigest: string;
+  readonly activationGuard: AuthorityUseGuard;
 }
 function required(
   env: Readonly<Record<string, string | undefined>>,
@@ -81,16 +83,31 @@ export async function bootstrapProduction(
     redis.disconnect();
     throw error;
   }
-  return Object.freeze({ activation, pool, redis, evidence, releaseDigest });
+  return Object.freeze({
+    activation,
+    pool,
+    redis,
+    evidence,
+    releaseDigest,
+    activationGuard: new DatabaseActivationUseGuard(
+      pool,
+      activation,
+      releaseDigest,
+    ),
+  });
 }
-async function assertActivationReceiptBindings(
+export async function assertActivationReceiptBindings(
   pool: Pool,
   activation: Readonly<ProductionActivationPayload>,
   releaseDigest: string,
   now: string,
 ): Promise<void> {
   const requiredBindings: Array<readonly [string | null, string, string]> = [
-    [activation.operatorAuthorizationReceiptId, "OPERATOR_AUTHORIZATION", "OPERATOR_AUTHORIZATION"],
+    [
+      activation.operatorAuthorizationReceiptId,
+      "OPERATOR_AUTHORIZATION",
+      "OPERATOR_AUTHORIZATION",
+    ],
     [activation.entityReceiptId, "ENTITY", "ENTITY_REGISTRATION"],
     [activation.legalReceiptId, "LEGAL", "PROFESSIONAL_LEGAL_MEMO"],
     [activation.taxReceiptId, "TAX", "PROFESSIONAL_TAX_MEMO"],
@@ -113,5 +130,30 @@ async function assertActivationReceiptBindings(
       throw new Error(
         `activation ${purpose.toLowerCase()} receipt not current or release-bound`,
       );
+  }
+}
+
+export class DatabaseActivationUseGuard implements AuthorityUseGuard {
+  constructor(
+    readonly pool: Pool,
+    readonly activation: Readonly<ProductionActivationPayload>,
+    readonly releaseDigest: string,
+    readonly requiredCapability?: ProductionActivationPayload["capabilities"][number],
+  ) {}
+
+  async assertCurrent(): Promise<void> {
+    const now = new Date().toISOString();
+    if (
+      Date.parse(now) >= Date.parse(this.activation.expiresAt) ||
+      (this.requiredCapability &&
+        !this.activation.capabilities.includes(this.requiredCapability))
+    )
+      throw new Error("production activation no longer current");
+    await assertActivationReceiptBindings(
+      this.pool,
+      this.activation,
+      this.releaseDigest,
+      now,
+    );
   }
 }

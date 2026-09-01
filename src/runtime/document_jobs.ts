@@ -13,6 +13,7 @@ import type { ImmutableEvidenceStore } from "./object_store.js";
 import { inTransaction, TransactionalOutboxRepository } from "./database.js";
 import { SensitiveDataCipher } from "./sensitive_data.js";
 import { assertCurrentAuthorityReceipt } from "./authority_receipts.js";
+import { DatabaseAuthorityUseGuard } from "./authority_receipts.js";
 import {
   assertCurrentCredentialBinding,
   DatabaseCredentialUseGuard,
@@ -48,6 +49,11 @@ export async function buildProductionDocumentPipeline(
       store,
       fetch,
       new DatabaseCredentialUseGuard(pool, credentialInput),
+      new DatabaseAuthorityUseGuard(
+        pool,
+        config.approvalReceiptId,
+        "DOCUMENT_EXTRACTION_APPROVAL",
+      ),
     ),
   );
 }
@@ -75,6 +81,11 @@ export async function buildProductionDocumentVerifier(
     store,
     fetch,
     new DatabaseCredentialUseGuard(pool, credentialInput),
+    new DatabaseAuthorityUseGuard(
+      pool,
+      config.approvalReceiptId,
+      "DOCUMENT_VERIFICATION_APPROVAL",
+    ),
   );
 }
 

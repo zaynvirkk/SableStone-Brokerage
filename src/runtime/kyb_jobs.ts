@@ -8,6 +8,7 @@ import {
 import type { ImmutableEvidenceStore } from "./object_store.js";
 import { inTransaction } from "./database.js";
 import { assertCurrentAuthorityReceipt } from "./authority_receipts.js";
+import { DatabaseAuthorityUseGuard } from "./authority_receipts.js";
 import {
   assertCurrentCredentialBinding,
   DatabaseCredentialUseGuard,
@@ -46,6 +47,11 @@ export async function buildProductionKyb(
       store,
       fetch,
       new DatabaseCredentialUseGuard(pool, credentialInput),
+      new DatabaseAuthorityUseGuard(
+        pool,
+        config.authorityReceiptId,
+        "KYB_PROVIDER_APPROVAL",
+      ),
     ),
     csl: new ConsolidatedScreeningListConnector(config.cslEndpoint, store),
     config,

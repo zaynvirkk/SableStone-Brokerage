@@ -24,6 +24,7 @@ import {
 } from "../runtime/agreement_registry.js";
 import type { AgreementKind } from "../agreements.js";
 import { AgreementTemplateRegistry } from "../runtime/agreement_automation.js";
+import type { AuthorityUseGuard } from "../runtime/authority_receipts.js";
 declare module "@fastify/jwt" {
   interface FastifyJWT {
     payload: {
@@ -53,6 +54,7 @@ export interface ApiDependencies {
   readonly jwtAudience: string;
   readonly activation: Readonly<ProductionActivationPayload> | null;
   readonly releaseDigest: string;
+  readonly activationGuard?: AuthorityUseGuard;
   readonly sensitiveDataCipher?: SensitiveDataCipher;
   readonly evidenceStore?: ImmutableEvidenceStore;
   readonly redis: Redis;
@@ -116,6 +118,10 @@ export async function createProductionApi(
     redis: deps.redis,
     keyGenerator: (request) => request.ip,
   });
+  app.addHook("preHandler", async (request) => {
+    if (!["GET", "HEAD", "OPTIONS"].includes(request.method))
+      await deps.activationGuard?.assertCurrent();
+  });
   app.decorate("authenticate", async (request: FastifyRequest) => {
     await request.jwtVerify();
     if (
@@ -160,6 +166,7 @@ export async function createProductionApi(
   app.get("/readyz", async (_request, reply) => {
     try {
       await deps.pool.query("select 1");
+      await deps.activationGuard?.assertCurrent();
       return {
         state: "READY",
         liveCapabilities: deps.activation?.capabilities ?? [],
@@ -180,15 +187,30 @@ export async function createProductionApi(
         { organizationId: null, allowedRoles: ["OPERATIONS", "SYSTEM"] },
         new Date().toISOString(),
       );
+      let activationCurrent = false;
+      try {
+        if (deps.activationGuard) {
+          await deps.activationGuard.assertCurrent();
+          activationCurrent = deps.activation !== null;
+        }
+      } catch {
+        activationCurrent = false;
+      }
       return {
         releaseDigest: deps.releaseDigest,
-        activation: deps.activation
+        activation: deps.activation && activationCurrent
           ? {
+              state: "CURRENT",
               authorizedAt: deps.activation.authorizedAt,
               expiresAt: deps.activation.expiresAt,
               capabilities: deps.activation.capabilities,
             }
-          : { state: "BLOCKED_OPERATOR" },
+          : {
+              state: deps.activation
+                ? "EXPIRED_OR_REVOKED"
+                : "BLOCKED_OPERATOR",
+              capabilities: [],
+            },
         constitutionalLimits: {
           inventory: "0",
           cargoCapital: "0",

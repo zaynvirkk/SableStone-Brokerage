@@ -14,14 +14,17 @@ import {
 } from "../connectors/bank_http.js";
 import { inTransaction, TransactionalOutboxRepository } from "./database.js";
 import type { CredentialUseGuard } from "./production_credentials.js";
+import type { AuthorityUseGuard } from "./authority_receipts.js";
 
 export function createBankInboxProcessor(input: {
   pool: Pool;
   store: ImmutableEvidenceStore;
   config: BankWebhookConfig;
   credentialGuard?: CredentialUseGuard;
+  authorityGuard?: AuthorityUseGuard;
 }) {
   return async (event: QueryResultRow) => {
+    await input.authorityGuard?.assertCurrent();
     await input.credentialGuard?.assertCurrent();
     const raw = await input.store.readVerified(
         String(event.payload_object_key),

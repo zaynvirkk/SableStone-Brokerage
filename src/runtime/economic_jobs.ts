@@ -11,6 +11,7 @@ import { priceMatch, type PricingPolicy } from "../pricing.js";
 import type { ImmutableEvidenceStore } from "./object_store.js";
 import { inTransaction, TransactionalOutboxRepository } from "./database.js";
 import { assertCurrentAuthorityReceipt } from "./authority_receipts.js";
+import { DatabaseAuthorityUseGuard } from "./authority_receipts.js";
 import {
   assertCurrentCredentialBinding,
   DatabaseCredentialUseGuard,
@@ -45,6 +46,11 @@ export async function buildEconomicQuoteConnectors(
         store,
         fetch,
         new DatabaseCredentialUseGuard(pool, credentialInput),
+        new DatabaseAuthorityUseGuard(
+          pool,
+          config.approvalReceiptId,
+          "ECONOMIC_QUOTE_PROVIDER_APPROVAL",
+        ),
       ),
     );
   }

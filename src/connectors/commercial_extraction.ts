@@ -10,6 +10,10 @@ import {
   DatabaseCredentialUseGuard,
   type CredentialUseGuard,
 } from "../runtime/production_credentials.js";
+import {
+  DatabaseAuthorityUseGuard,
+  type AuthorityUseGuard,
+} from "../runtime/authority_receipts.js";
 
 type Field = {
   value: string | null;
@@ -51,6 +55,11 @@ export async function buildCommercialExtractor(
     store,
     fetch,
     new DatabaseCredentialUseGuard(pool, credentialInput),
+    new DatabaseAuthorityUseGuard(
+      pool,
+      config.approvalReceiptId,
+      "COMMERCIAL_EXTRACTION_APPROVAL",
+    ),
   );
 }
 
@@ -63,6 +72,7 @@ export class EvidenceBoundCommercialExtractor {
     readonly store: ReceiptWriter,
     readonly fetcher: typeof fetch = fetch,
     readonly credentialGuard?: CredentialUseGuard,
+    readonly authorityGuard?: AuthorityUseGuard,
   ) {
     if (
       !config.endpoint.startsWith("https://") ||
@@ -75,6 +85,7 @@ export class EvidenceBoundCommercialExtractor {
     raw: Uint8Array,
     occurredAt: string,
   ): Promise<CommunicationDecision> {
+    await this.authorityGuard?.assertCurrent();
     await this.credentialGuard?.assertCurrent();
     const parsed = await simpleParser(Buffer.from(raw)),
       text = (parsed.text ?? "").trim(),

@@ -2,6 +2,7 @@ import type { QueryResultRow } from "pg";
 import type { WorkflowClient } from "@temporalio/client";
 import { DurableInboxRepository, OutboxDispatcher } from "./database.js";
 import type { Pool } from "pg";
+import type { AuthorityUseGuard } from "./authority_receipts.js";
 
 export type InboxHandler = (event: QueryResultRow) => Promise<void>;
 
@@ -31,11 +32,13 @@ export class RuntimeSupervisor {
     readonly temporal: WorkflowClient,
     readonly taskQueue: string,
     readonly inboxHandlers: Readonly<Record<string, InboxHandler>>,
+    readonly activationGuard?: AuthorityUseGuard,
   ) {
     this.inbox = new DurableInboxRepository(pool);
     this.outbox = new OutboxDispatcher(pool, (event) => this.publish(event));
   }
   async tick(): Promise<{ inbox: number; outbox: number }> {
+    await this.activationGuard?.assertCurrent();
     let processed = 0;
     for (const event of await this.inbox.claim(50)) {
       const provider = String(event.provider),

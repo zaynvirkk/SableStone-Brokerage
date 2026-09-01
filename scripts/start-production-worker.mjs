@@ -34,6 +34,7 @@ import {
   assertCurrentAuthorityReceipt,
   assertCurrentCredentialBinding,
   DatabaseCredentialUseGuard,
+  DatabaseAuthorityUseGuard,
 } from "../dist/index.js";
 
 const runtime = await bootstrapProduction(process.env);
@@ -101,6 +102,7 @@ if (runtime.activation.capabilities.includes("OUTREACH")) {
     runtime.evidence,
     undefined,
     new DatabaseCredentialUseGuard(runtime.pool, gmailCredentialInput),
+    runtime.activationGuard,
   );
   outbound = new OutboundGmailDispatcher(
     runtime.pool,
@@ -219,6 +221,7 @@ const controller = new AbortController(),
       discovery,
       providerParties ?? undefined,
     ),
+    runtime.activationGuard,
   ),
   activities = bindBrokerageActivities(activityService),
   handlers = {
@@ -237,6 +240,7 @@ const controller = new AbortController(),
     client,
     temporalConfig.taskQueue,
     handlers,
+    runtime.activationGuard,
   ),
   scheduler = discovery
     ? new ProductionWorkflowScheduler(
@@ -272,6 +276,11 @@ if (runtime.activation.capabilities.includes("SETTLEMENT")) {
         runtime.pool,
         credentialInput,
       ),
+      authorityGuard: new DatabaseAuthorityUseGuard(
+        runtime.pool,
+        config.approvalReceiptId,
+        "BANK_WEBHOOK_PROVIDER_APPROVAL",
+      ),
     });
   }
 }
@@ -279,6 +288,7 @@ if (runtime.activation.capabilities.includes("SETTLEMENT")) {
 const periodic = async () => {
   while (!controller.signal.aborted) {
     try {
+      await runtime.activationGuard.assertCurrent();
       if (watch) await watch.renewIfDue();
       if (outbound) await outbound.dispatchBatch();
       if (commercialNotifications)

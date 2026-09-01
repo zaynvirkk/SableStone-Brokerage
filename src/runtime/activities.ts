@@ -5,6 +5,7 @@ import type {
   BrokerageActivities,
   WorkflowReceipt,
 } from "../workflows/production.js";
+import type { AuthorityUseGuard } from "./authority_receipts.js";
 export type StageName =
   | "DISCOVER_SUPPLIER"
   | "DISCOVER_BUYER"
@@ -30,6 +31,7 @@ export class ProductionActivityService implements BrokerageActivities {
   constructor(
     readonly pool: Pool,
     readonly handlers: Readonly<Partial<Record<StageName, StageHandler>>>,
+    readonly activationGuard?: AuthorityUseGuard,
   ) {
     this.outbox = new TransactionalOutboxRepository(pool);
   }
@@ -37,6 +39,7 @@ export class ProductionActivityService implements BrokerageActivities {
     stage: StageName,
     input: Readonly<Record<string, unknown>>,
   ): Promise<WorkflowReceipt> {
+    await this.activationGuard?.assertCurrent();
     const handler = this.handlers[stage];
     if (!handler)
       return Object.freeze({

@@ -4,6 +4,7 @@ import { simpleParser } from "mailparser";
 import type { EmailEvent, OutboundEmail } from "../email.js";
 import type { ReceiptWriter } from "./discovery_http.js";
 import type { CredentialUseGuard } from "../runtime/production_credentials.js";
+import type { AuthorityUseGuard } from "../runtime/authority_receipts.js";
 export interface GmailProductionConfig {
   readonly userId: string;
   readonly clientId: string;
@@ -28,6 +29,7 @@ export class GmailProductionConnector {
     readonly store: ReceiptWriter,
     gmail?: gmail_v1.Gmail,
     readonly credentialGuard?: CredentialUseGuard,
+    readonly authorityGuard?: AuthorityUseGuard,
   ) {
     if (!config.authorized) throw new Error("production Gmail unavailable");
     if (
@@ -45,6 +47,7 @@ export class GmailProductionConnector {
     }
   }
   async startWatch(): Promise<{ historyId: bigint; expiration: string }> {
+    await this.authorityGuard?.assertCurrent();
     await this.credentialGuard?.assertCurrent();
     const result = await this.gmail.users.watch({
       userId: this.config.userId,
@@ -62,6 +65,7 @@ export class GmailProductionConnector {
     authenticatedAudience: string,
     fromExclusive: bigint,
   ): Promise<{ toInclusive: bigint; events: readonly EmailEvent[] }> {
+    await this.authorityGuard?.assertCurrent();
     await this.credentialGuard?.assertCurrent();
     if (authenticatedAudience !== this.config.pushAudience)
       throw new Error("Gmail push audience invalid");
@@ -97,6 +101,7 @@ export class GmailProductionConnector {
     messageId: string,
     receivedAt: string,
   ): Promise<EmailEvent> {
+    await this.authorityGuard?.assertCurrent();
     await this.credentialGuard?.assertCurrent();
     const response = await this.gmail.users.messages.get({
         userId: this.config.userId,
@@ -140,6 +145,7 @@ export class GmailProductionConnector {
     message: OutboundEmail,
     body: Uint8Array,
   ): Promise<{ messageId: string; threadId: string; receiptId: string }> {
+    await this.authorityGuard?.assertCurrent();
     await this.credentialGuard?.assertCurrent();
     if (!message.idempotencyKey.trim())
       throw new Error("Gmail idempotency key required");

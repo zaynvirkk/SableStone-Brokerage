@@ -14,6 +14,7 @@ import {
   assertCurrentAuthorityReceipt,
   assertCurrentCredentialBinding,
   DatabaseCredentialUseGuard,
+  DatabaseAuthorityUseGuard,
 } from "../dist/index.js";
 
 const runtime = await bootstrapProduction(process.env);
@@ -83,6 +84,11 @@ if (runtime.activation.capabilities.includes("SETTLEMENT")) {
         runtime.pool,
         credentialInput,
       ),
+      authorityGuard: new DatabaseAuthorityUseGuard(
+        runtime.pool,
+        config.approvalReceiptId,
+        "BANK_WEBHOOK_PROVIDER_APPROVAL",
+      ),
     });
   }
 }
@@ -116,6 +122,7 @@ if (runtime.activation.capabilities.includes("OUTREACH")) {
     runtime.evidence,
     undefined,
     new DatabaseCredentialUseGuard(runtime.pool, gmailCredentialInput),
+    runtime.activationGuard,
   );
   webhookHandlers.gmail = createGmailPushHandler({
     connector: gmail,
@@ -134,6 +141,7 @@ const app = await createProductionApi({
   jwtAudience,
   activation: runtime.activation,
   releaseDigest: runtime.releaseDigest,
+  activationGuard: runtime.activationGuard,
   sensitiveDataCipher,
   evidenceStore: runtime.evidence,
   redis: runtime.redis,

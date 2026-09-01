@@ -17,6 +17,7 @@ import {
 } from "../settlement.js";
 import type { ReceiptWriter } from "./discovery_http.js";
 import type { CredentialUseGuard } from "../runtime/production_credentials.js";
+import type { AuthorityUseGuard } from "../runtime/authority_receipts.js";
 
 type InternalEvent =
   | "ENTITLEMENT_SECURED"
@@ -69,6 +70,7 @@ export class ProductionSettlementHttpAdapter implements SettlementAdapter {
     readonly fetcher: typeof fetch = fetch,
     readonly apiCredentialGuard?: CredentialUseGuard,
     readonly webhookCredentialGuard?: CredentialUseGuard,
+    readonly authorityGuard?: AuthorityUseGuard,
   ) {
     if (
       provider !== approval.provider ||
@@ -89,6 +91,7 @@ export class ProductionSettlementHttpAdapter implements SettlementAdapter {
     );
   }
   async createInstruction(draft: SettlementInstructionDraft, now: string) {
+    await this.authorityGuard?.assertCurrent();
     await this.apiCredentialGuard?.assertCurrent();
     const snapshot = this.capability(
       requiredSettlementCapabilities(this.provider),
@@ -155,6 +158,7 @@ export class ProductionSettlementHttpAdapter implements SettlementAdapter {
     raw: Uint8Array,
     headers: Readonly<Record<string, string | undefined>>,
   ): Promise<Uint8Array> {
+    await this.authorityGuard?.assertCurrent();
     await (
       this.provider === "ESCROW_COM"
         ? this.apiCredentialGuard
@@ -293,6 +297,7 @@ export class ProductionSettlementHttpAdapter implements SettlementAdapter {
     draft: SettlementInstructionDraft,
     now: string,
   ): Promise<{ receiptSha256: string }> {
+    await this.authorityGuard?.assertCurrent();
     await this.apiCredentialGuard?.assertCurrent();
     if (this.provider !== "CASHFREE_EASY_SPLIT")
       throw new Error("Cashfree split unavailable for provider");
@@ -392,6 +397,7 @@ export class ProductionSettlementHttpAdapter implements SettlementAdapter {
     paymentReference: string,
     now: string,
   ): Promise<{ receiptSha256: string }> {
+    await this.authorityGuard?.assertCurrent();
     await this.apiCredentialGuard?.assertCurrent();
     if (this.provider !== "RAZORPAY_ROUTE")
       throw new Error("Razorpay transfer unavailable for provider");

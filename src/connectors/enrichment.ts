@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { ContactRecord, ContactSource } from "../contacts.js";
 import type { ReceiptWriter } from "./discovery_http.js";
 import type { CredentialUseGuard } from "../runtime/production_credentials.js";
+import type { AuthorityUseGuard } from "../runtime/authority_receipts.js";
 export interface EnrichmentApproval {
   readonly provider: "HUNTER" | "APOLLO";
   readonly state: "APPROVED" | "UNDER_REVIEW" | "REVOKED";
@@ -16,12 +17,14 @@ export class HunterContactConnector {
     readonly store: ReceiptWriter,
     readonly fetcher: typeof fetch = fetch,
     readonly credentialGuard?: CredentialUseGuard,
+    readonly authorityGuard?: AuthorityUseGuard,
   ) {}
   async domainSearch(
     domain: string,
     organizationId: string,
     now = new Date().toISOString(),
   ): Promise<readonly ContactRecord[]> {
+    await this.authorityGuard?.assertCurrent();
     await this.credentialGuard?.assertCurrent();
     if (
       this.approval.provider !== "HUNTER" ||

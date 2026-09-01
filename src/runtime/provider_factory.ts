@@ -16,6 +16,7 @@ import {
   assertCurrentCredentialBinding,
   DatabaseCredentialUseGuard,
 } from "./production_credentials.js";
+import { DatabaseProviderApprovalUseGuard } from "./authority_receipts.js";
 
 interface ProviderEnvironmentConfig extends ProviderHttpConfig {
   readonly credentialSecretReference: string;
@@ -164,6 +165,12 @@ export async function buildProductionSettlementAdapters(
         fetch,
         apiGuard,
         webhookGuard,
+        new DatabaseProviderApprovalUseGuard(
+          pool,
+          approval.approvalId,
+          approval.provider,
+          approval.writtenApprovalReceiptId,
+        ),
       ),
     );
   }
