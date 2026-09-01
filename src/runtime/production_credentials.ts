@@ -35,6 +35,25 @@ export interface CurrentCredentialBinding {
   readonly validUntil: string;
 }
 
+export interface CredentialUseGuard {
+  assertCurrent(): Promise<CurrentCredentialBinding>;
+}
+
+export class DatabaseCredentialUseGuard implements CredentialUseGuard {
+  constructor(
+    readonly pool: Pick<Pool, "query">,
+    readonly input: {
+      provider: string;
+      capability: ProductionCredentialCapability;
+      environment: "PRODUCTION";
+      credentialParts: readonly string[];
+    },
+  ) {}
+  assertCurrent(): Promise<CurrentCredentialBinding> {
+    return assertCurrentCredentialBinding(this.pool, this.input);
+  }
+}
+
 export async function assertCurrentCredentialBinding(
   pool: Pick<Pool, "query">,
   input: {

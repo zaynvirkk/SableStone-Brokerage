@@ -5,7 +5,11 @@ import type { CommunicationDecision } from "./communication_brain.js";
 import type { ReceiptWriter } from "./discovery_http.js";
 import type { Pool } from "pg";
 import { assertCurrentAuthorityReceipt } from "../runtime/authority_receipts.js";
-import { assertCurrentCredentialBinding } from "../runtime/production_credentials.js";
+import {
+  assertCurrentCredentialBinding,
+  DatabaseCredentialUseGuard,
+  type CredentialUseGuard,
+} from "../runtime/production_credentials.js";
 
 type Field = {
   value: string | null;
@@ -35,13 +39,19 @@ export async function buildCommercialExtractor(
     config.approvalReceiptId,
     "COMMERCIAL_EXTRACTION_APPROVAL",
   );
-  await assertCurrentCredentialBinding(pool, {
+  const credentialInput = {
     provider: new URL(config.endpoint).hostname,
     capability: "COMMERCIAL_EXTRACTION_API",
     environment: "PRODUCTION",
     credentialParts: [config.authorizationHeader],
-  });
-  return new EvidenceBoundCommercialExtractor(config, store);
+  } as const;
+  await assertCurrentCredentialBinding(pool, credentialInput);
+  return new EvidenceBoundCommercialExtractor(
+    config,
+    store,
+    fetch,
+    new DatabaseCredentialUseGuard(pool, credentialInput),
+  );
 }
 
 /** The model translates language only. Every non-null value must cite a
@@ -52,6 +62,7 @@ export class EvidenceBoundCommercialExtractor {
     readonly config: CommercialExtractionConfig,
     readonly store: ReceiptWriter,
     readonly fetcher: typeof fetch = fetch,
+    readonly credentialGuard?: CredentialUseGuard,
   ) {
     if (
       !config.endpoint.startsWith("https://") ||
@@ -64,6 +75,7 @@ export class EvidenceBoundCommercialExtractor {
     raw: Uint8Array,
     occurredAt: string,
   ): Promise<CommunicationDecision> {
+    await this.credentialGuard?.assertCurrent();
     const parsed = await simpleParser(Buffer.from(raw)),
       text = (parsed.text ?? "").trim(),
       digest = createHash("sha256").update(raw).digest("hex");

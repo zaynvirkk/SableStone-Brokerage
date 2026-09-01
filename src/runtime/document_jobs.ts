@@ -13,7 +13,10 @@ import type { ImmutableEvidenceStore } from "./object_store.js";
 import { inTransaction, TransactionalOutboxRepository } from "./database.js";
 import { SensitiveDataCipher } from "./sensitive_data.js";
 import { assertCurrentAuthorityReceipt } from "./authority_receipts.js";
-import { assertCurrentCredentialBinding } from "./production_credentials.js";
+import {
+  assertCurrentCredentialBinding,
+  DatabaseCredentialUseGuard,
+} from "./production_credentials.js";
 export async function buildProductionDocumentPipeline(
   pool: Pool,
   store: ImmutableEvidenceStore,
@@ -28,18 +31,24 @@ export async function buildProductionDocumentPipeline(
     config.approvalReceiptId,
     "DOCUMENT_EXTRACTION_APPROVAL",
   );
-  await assertCurrentCredentialBinding(pool, {
+  const credentialInput = {
     provider: config.provider,
     capability: "DOCUMENT_EXTRACTION_API",
     environment: "PRODUCTION",
     credentialParts: [config.authorizationHeader],
-  });
+  } as const;
+  await assertCurrentCredentialBinding(pool, credentialInput);
   if (!clamHost || !clamPort || !Number.isInteger(Number(clamPort)))
     throw new Error("ClamAV production configuration incomplete");
   return new DocumentIngestionPipeline(
     store,
     new ClamAvTcpScanner(clamHost, Number(clamPort)),
-    new ProductionDocumentHttpExtractor(config, store),
+    new ProductionDocumentHttpExtractor(
+      config,
+      store,
+      fetch,
+      new DatabaseCredentialUseGuard(pool, credentialInput),
+    ),
   );
 }
 export async function buildProductionDocumentVerifier(
@@ -54,13 +63,19 @@ export async function buildProductionDocumentVerifier(
     config.approvalReceiptId,
     "DOCUMENT_VERIFICATION_APPROVAL",
   );
-  await assertCurrentCredentialBinding(pool, {
+  const credentialInput = {
     provider: config.provider,
     capability: "DOCUMENT_VERIFICATION_API",
     environment: "PRODUCTION",
     credentialParts: [config.authorizationHeader],
-  });
-  return new ProductionDocumentVerifier(config, store);
+  } as const;
+  await assertCurrentCredentialBinding(pool, credentialInput);
+  return new ProductionDocumentVerifier(
+    config,
+    store,
+    fetch,
+    new DatabaseCredentialUseGuard(pool, credentialInput),
+  );
 }
 
 export class DocumentJobDispatcher {

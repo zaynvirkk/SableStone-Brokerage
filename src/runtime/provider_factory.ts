@@ -12,7 +12,10 @@ import {
 } from "../connectors/settlement_http.js";
 import type { ProviderApproval, ProviderCredentials } from "../settlement.js";
 import { decimal } from "../money.js";
-import { assertCurrentCredentialBinding } from "./production_credentials.js";
+import {
+  assertCurrentCredentialBinding,
+  DatabaseCredentialUseGuard,
+} from "./production_credentials.js";
 
 interface ProviderEnvironmentConfig extends ProviderHttpConfig {
   readonly credentialSecretReference: string;
@@ -90,7 +93,28 @@ export async function buildProductionSettlementAdapters(
         definition.authorizationHeader,
       ],
     });
-    if (definition.provider !== "ESCROW_COM")
+    const apiGuard = new DatabaseCredentialUseGuard(pool, {
+        provider: definition.provider,
+        capability: "SETTLEMENT_API",
+        environment: "PRODUCTION",
+        credentialParts: [
+          definition.credentialSecretReference,
+          definition.authorizationHeader,
+        ],
+      }),
+      webhookGuard =
+        definition.provider === "ESCROW_COM"
+          ? undefined
+          : new DatabaseCredentialUseGuard(pool, {
+              provider: definition.provider,
+              capability: "SETTLEMENT_WEBHOOK",
+              environment: "PRODUCTION",
+              credentialParts: [
+                definition.webhookCredentialSecretReference!,
+                definition.webhookSecret,
+              ],
+            });
+    if (webhookGuard)
       await assertCurrentCredentialBinding(pool, {
         provider: definition.provider,
         capability: "SETTLEMENT_WEBHOOK",
@@ -137,6 +161,9 @@ export async function buildProductionSettlementAdapters(
         definition,
         builder,
         store,
+        fetch,
+        apiGuard,
+        webhookGuard,
       ),
     );
   }

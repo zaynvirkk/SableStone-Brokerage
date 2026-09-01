@@ -1,6 +1,7 @@
 import {
   assertCurrentCredentialBinding,
   credentialFingerprint,
+  DatabaseCredentialUseGuard,
 } from "../dist/index.js";
 
 const secret = "Bearer production-scoped-secret",
@@ -13,7 +14,9 @@ const secret = "Bearer production-scoped-secret",
         !sql.includes("r.id is null") ||
         !sql.includes("b.valid_until>now()")
       )
-        throw new Error("credential binding query is not receipt/revocation bound");
+        throw new Error(
+          "credential binding query is not receipt/revocation bound",
+        );
       const matches =
         values[0] === "ESCROW_COM" &&
         values[1] === "SETTLEMENT_API" &&
@@ -22,7 +25,13 @@ const secret = "Bearer production-scoped-secret",
       return {
         rowCount: matches ? 1 : 0,
         rows: matches
-          ? [{ id: "binding-1", verified_at: "2026-09-01T00:00:00.000Z", valid_until: "2026-12-01T00:00:00.000Z" }]
+          ? [
+              {
+                id: "binding-1",
+                verified_at: "2026-09-01T00:00:00.000Z",
+                valid_until: "2026-12-01T00:00:00.000Z",
+              },
+            ]
           : [],
       };
     },
@@ -54,6 +63,49 @@ for (const changed of [
   }
 }
 if (rejected !== 4) throw new Error("unbound credential survived");
+let current = true,
+  perUseChecks = 0;
+const mutablePool = {
+    async query(_sql, values) {
+      perUseChecks++;
+      const matches =
+        current &&
+        values[0] === "ESCROW_COM" &&
+        values[1] === "SETTLEMENT_API" &&
+        values[2] === "PRODUCTION" &&
+        values[3] === fingerprint;
+      return {
+        rowCount: matches ? 1 : 0,
+        rows: matches
+          ? [
+              {
+                id: "binding-1",
+                verified_at: "2026-09-01T00:00:00.000Z",
+                valid_until: "2026-12-01T00:00:00.000Z",
+              },
+            ]
+          : [],
+      };
+    },
+  },
+  guard = new DatabaseCredentialUseGuard(mutablePool, {
+    provider: "ESCROW_COM",
+    capability: "SETTLEMENT_API",
+    environment: "PRODUCTION",
+    credentialParts: ["secret://provider/api", secret],
+  });
+await guard.assertCurrent();
+current = false;
+try {
+  await guard.assertCurrent();
+  throw new Error("revoked credential survived per-use check");
+} catch (error) {
+  if (
+    !String(error).includes("current production credential binding unavailable")
+  )
+    throw error;
+}
+if (perUseChecks !== 2) throw new Error("credential guard cached authority");
 console.log(
-  "PRODUCTION_CREDENTIAL_OK fingerprint=bound wrong_secret=blocked wrong_scope=blocked wrong_provider=blocked missing=blocked revocation=checked self_assertion=removed",
+  "PRODUCTION_CREDENTIAL_OK fingerprint=bound wrong_secret=blocked wrong_scope=blocked wrong_provider=blocked missing=blocked revocation=checked self_assertion=removed per_use=required revoked_after_start=blocked authority_cache=none",
 );

@@ -16,6 +16,7 @@ import {
   type ProviderCredentials,
 } from "../settlement.js";
 import type { ReceiptWriter } from "./discovery_http.js";
+import type { CredentialUseGuard } from "../runtime/production_credentials.js";
 
 type InternalEvent =
   | "ENTITLEMENT_SECURED"
@@ -66,6 +67,8 @@ export class ProductionSettlementHttpAdapter implements SettlementAdapter {
     readonly buildRequest: SettlementRequestBuilder,
     readonly store: ReceiptWriter,
     readonly fetcher: typeof fetch = fetch,
+    readonly apiCredentialGuard?: CredentialUseGuard,
+    readonly webhookCredentialGuard?: CredentialUseGuard,
   ) {
     if (
       provider !== approval.provider ||
@@ -86,6 +89,7 @@ export class ProductionSettlementHttpAdapter implements SettlementAdapter {
     );
   }
   async createInstruction(draft: SettlementInstructionDraft, now: string) {
+    await this.apiCredentialGuard?.assertCurrent();
     const snapshot = this.capability(
       requiredSettlementCapabilities(this.provider),
       now,
@@ -151,6 +155,11 @@ export class ProductionSettlementHttpAdapter implements SettlementAdapter {
     raw: Uint8Array,
     headers: Readonly<Record<string, string | undefined>>,
   ): Promise<Uint8Array> {
+    await (
+      this.provider === "ESCROW_COM"
+        ? this.apiCredentialGuard
+        : this.webhookCredentialGuard
+    )?.assertCurrent();
     if (this.provider === "ESCROW_COM") {
       if (!this.config.webhookProviderReferencePath)
         throw new Error("Escrow webhook reference path missing");
@@ -284,6 +293,7 @@ export class ProductionSettlementHttpAdapter implements SettlementAdapter {
     draft: SettlementInstructionDraft,
     now: string,
   ): Promise<{ receiptSha256: string }> {
+    await this.apiCredentialGuard?.assertCurrent();
     if (this.provider !== "CASHFREE_EASY_SPLIT")
       throw new Error("Cashfree split unavailable for provider");
     if (!this.config.cashfreeSplitPathTemplate?.includes("{order_id}"))
@@ -382,6 +392,7 @@ export class ProductionSettlementHttpAdapter implements SettlementAdapter {
     paymentReference: string,
     now: string,
   ): Promise<{ receiptSha256: string }> {
+    await this.apiCredentialGuard?.assertCurrent();
     if (this.provider !== "RAZORPAY_ROUTE")
       throw new Error("Razorpay transfer unavailable for provider");
     if (!this.config.razorpayTransferPathTemplate?.includes("{payment_id}"))

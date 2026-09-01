@@ -1,5 +1,91 @@
-import{createHmac,timingSafeEqual}from"node:crypto";import type{ReceiptWriter}from"./discovery_http.js";import type{DurableInboxRepository}from"../runtime/database.js";
-export interface BankWebhookConfig{readonly provider:string;readonly webhookSecret:string;readonly signatureHeader:string;readonly eventIdPath:string;readonly bankReferencePath:string;readonly beneficiaryIdPath:string;readonly amountPath:string;readonly currencyPath:string;readonly valueAtPath:string;readonly approvalReceiptId:string;}
-function field(value:unknown,path:string):unknown{return path.split(".").reduce<unknown>((current,key)=>current&&typeof current==="object"?(current as Record<string,unknown>)[key]:undefined,value)}
-export function createBankWebhookHandler(input:{config:BankWebhookConfig;store:ReceiptWriter;inbox:DurableInboxRepository}){return async(raw:Uint8Array,headers:Readonly<Record<string,string|undefined>>):Promise<string>=>{const signature=headers[input.config.signatureHeader.toLowerCase()];if(!signature||!/^[0-9a-f]+$/i.test(signature))throw new Error("bank webhook signature missing");const expected=createHmac("sha256",input.config.webhookSecret).update(raw).digest(),supplied=Buffer.from(signature,"hex");if(supplied.length!==expected.length||!timingSafeEqual(supplied,expected))throw new Error("bank webhook signature invalid");const decoded=JSON.parse(new TextDecoder().decode(raw)),eventId=field(decoded,input.config.eventIdPath);if(typeof eventId!=="string"||!eventId.trim())throw new Error("bank event id missing");for(const path of [input.config.bankReferencePath,input.config.beneficiaryIdPath,input.config.amountPath,input.config.currencyPath,input.config.valueAtPath])if(field(decoded,path)===undefined)throw new Error("bank event field missing");const now=new Date().toISOString(),receipt=await input.store.preserve(`webhooks/bank/${input.config.provider}`,raw,"application/json",input.config.provider,now);await input.inbox.insert({provider:`BANK:${input.config.provider}`,externalEventId:eventId,payloadDigest:receipt.sha256,payloadObjectKey:receipt.objectKey,receivedAt:now,signatureVerified:true});return eventId}}
-export function bankEventFields(config:BankWebhookConfig,decoded:unknown){return{bankReference:field(decoded,config.bankReferencePath),beneficiaryId:field(decoded,config.beneficiaryIdPath),amount:field(decoded,config.amountPath),currency:field(decoded,config.currencyPath),valueAt:field(decoded,config.valueAtPath)}}
+import { createHmac, timingSafeEqual } from "node:crypto";
+import type { ReceiptWriter } from "./discovery_http.js";
+import type { DurableInboxRepository } from "../runtime/database.js";
+import type { CredentialUseGuard } from "../runtime/production_credentials.js";
+export interface BankWebhookConfig {
+  readonly provider: string;
+  readonly webhookSecret: string;
+  readonly signatureHeader: string;
+  readonly eventIdPath: string;
+  readonly bankReferencePath: string;
+  readonly beneficiaryIdPath: string;
+  readonly amountPath: string;
+  readonly currencyPath: string;
+  readonly valueAtPath: string;
+  readonly approvalReceiptId: string;
+}
+function field(value: unknown, path: string): unknown {
+  return path
+    .split(".")
+    .reduce<unknown>(
+      (current, key) =>
+        current && typeof current === "object"
+          ? (current as Record<string, unknown>)[key]
+          : undefined,
+      value,
+    );
+}
+export function createBankWebhookHandler(input: {
+  config: BankWebhookConfig;
+  store: ReceiptWriter;
+  inbox: DurableInboxRepository;
+  credentialGuard?: CredentialUseGuard;
+}) {
+  return async (
+    raw: Uint8Array,
+    headers: Readonly<Record<string, string | undefined>>,
+  ): Promise<string> => {
+    await input.credentialGuard?.assertCurrent();
+    const signature = headers[input.config.signatureHeader.toLowerCase()];
+    if (!signature || !/^[0-9a-f]+$/i.test(signature))
+      throw new Error("bank webhook signature missing");
+    const expected = createHmac("sha256", input.config.webhookSecret)
+        .update(raw)
+        .digest(),
+      supplied = Buffer.from(signature, "hex");
+    if (
+      supplied.length !== expected.length ||
+      !timingSafeEqual(supplied, expected)
+    )
+      throw new Error("bank webhook signature invalid");
+    const decoded = JSON.parse(new TextDecoder().decode(raw)),
+      eventId = field(decoded, input.config.eventIdPath);
+    if (typeof eventId !== "string" || !eventId.trim())
+      throw new Error("bank event id missing");
+    for (const path of [
+      input.config.bankReferencePath,
+      input.config.beneficiaryIdPath,
+      input.config.amountPath,
+      input.config.currencyPath,
+      input.config.valueAtPath,
+    ])
+      if (field(decoded, path) === undefined)
+        throw new Error("bank event field missing");
+    const now = new Date().toISOString(),
+      receipt = await input.store.preserve(
+        `webhooks/bank/${input.config.provider}`,
+        raw,
+        "application/json",
+        input.config.provider,
+        now,
+      );
+    await input.inbox.insert({
+      provider: `BANK:${input.config.provider}`,
+      externalEventId: eventId,
+      payloadDigest: receipt.sha256,
+      payloadObjectKey: receipt.objectKey,
+      receivedAt: now,
+      signatureVerified: true,
+    });
+    return eventId;
+  };
+}
+export function bankEventFields(config: BankWebhookConfig, decoded: unknown) {
+  return {
+    bankReference: field(decoded, config.bankReferencePath),
+    beneficiaryId: field(decoded, config.beneficiaryIdPath),
+    amount: field(decoded, config.amountPath),
+    currency: field(decoded, config.currencyPath),
+    valueAt: field(decoded, config.valueAtPath),
+  };
+}

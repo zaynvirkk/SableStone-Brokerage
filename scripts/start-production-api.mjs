@@ -13,6 +13,7 @@ import {
   SensitiveDataCipher,
   assertCurrentAuthorityReceipt,
   assertCurrentCredentialBinding,
+  DatabaseCredentialUseGuard,
 } from "../dist/index.js";
 
 const runtime = await bootstrapProduction(process.env);
@@ -65,15 +66,24 @@ if (runtime.activation.capabilities.includes("SETTLEMENT")) {
       config.approvalReceiptId,
       "BANK_WEBHOOK_PROVIDER_APPROVAL",
     );
-    await assertCurrentCredentialBinding(runtime.pool, {
+    const credentialInput = {
       provider: config.provider,
       capability: "BANK_WEBHOOK",
       environment: "PRODUCTION",
       credentialParts: [config.webhookSecret],
-    });
+    };
+    await assertCurrentCredentialBinding(runtime.pool, credentialInput);
     webhookHandlers[
       `bank-${config.provider.toLowerCase().replaceAll("_", "-")}`
-    ] = createBankWebhookHandler({ config, store: runtime.evidence, inbox });
+    ] = createBankWebhookHandler({
+      config,
+      store: runtime.evidence,
+      inbox,
+      credentialGuard: new DatabaseCredentialUseGuard(
+        runtime.pool,
+        credentialInput,
+      ),
+    });
   }
 }
 
@@ -87,7 +97,7 @@ if (runtime.activation.capabilities.includes("OUTREACH")) {
     pushAudience: process.env.SABLESTONE_GMAIL_PUSH_AUDIENCE ?? "",
     authorized: true,
   };
-  await assertCurrentCredentialBinding(runtime.pool, {
+  const gmailCredentialInput = {
     provider: "GMAIL",
     capability: "GMAIL_OAUTH",
     environment: "PRODUCTION",
@@ -99,8 +109,14 @@ if (runtime.activation.capabilities.includes("OUTREACH")) {
       gmailConfig.pubsubTopic,
       gmailConfig.pushAudience,
     ],
-  });
-  const gmail = new GmailProductionConnector(gmailConfig, runtime.evidence);
+  };
+  await assertCurrentCredentialBinding(runtime.pool, gmailCredentialInput);
+  const gmail = new GmailProductionConnector(
+    gmailConfig,
+    runtime.evidence,
+    undefined,
+    new DatabaseCredentialUseGuard(runtime.pool, gmailCredentialInput),
+  );
   webhookHandlers.gmail = createGmailPushHandler({
     connector: gmail,
     store: runtime.evidence,

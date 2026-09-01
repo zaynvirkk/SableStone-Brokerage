@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { createConnection } from "node:net";
 import { fileTypeFromBuffer } from "file-type";
 import type { ReceiptWriter } from "./discovery_http.js";
+import type { CredentialUseGuard } from "../runtime/production_credentials.js";
 import { simpleParser } from "mailparser";
 export type DocumentKind =
   | "COA"
@@ -163,13 +164,12 @@ export interface DocumentExtractorHttpConfig {
   readonly validUntil: string;
   readonly modelVersion: string;
 }
-export class ProductionDocumentHttpExtractor
-  implements StructuredDocumentExtractor
-{
+export class ProductionDocumentHttpExtractor implements StructuredDocumentExtractor {
   constructor(
     readonly config: DocumentExtractorHttpConfig,
     readonly store: ReceiptWriter,
     readonly fetcher: typeof fetch = fetch,
+    readonly credentialGuard?: CredentialUseGuard,
   ) {
     if (
       !config.baseUrl.startsWith("https://") ||
@@ -184,6 +184,7 @@ export class ProductionDocumentHttpExtractor
     mediaType: string;
     receiptId: string;
   }): Promise<DocumentExtraction> {
+    await this.credentialGuard?.assertCurrent();
     const url = new URL(this.config.extractionPath, this.config.baseUrl),
       payload = JSON.stringify({
         contentBase64: Buffer.from(input.bytes).toString("base64"),
@@ -319,6 +320,7 @@ export class ProductionDocumentVerifier {
     readonly config: DocumentVerifierHttpConfig,
     readonly store: ReceiptWriter,
     readonly fetcher: typeof fetch = fetch,
+    readonly credentialGuard?: CredentialUseGuard,
   ) {
     if (
       !config.baseUrl.startsWith("https://") ||
@@ -335,6 +337,7 @@ export class ProductionDocumentVerifier {
     extraction: DocumentExtraction;
     documentId: string;
   }): Promise<DocumentVerificationResult> {
+    await this.credentialGuard?.assertCurrent();
     if (Date.parse(this.config.validUntil) <= Date.now())
       throw new Error("document verifier approval expired");
     const url = new URL(this.config.verificationPath, this.config.baseUrl),

@@ -3,6 +3,7 @@ import { google, type gmail_v1 } from "googleapis";
 import { simpleParser } from "mailparser";
 import type { EmailEvent, OutboundEmail } from "../email.js";
 import type { ReceiptWriter } from "./discovery_http.js";
+import type { CredentialUseGuard } from "../runtime/production_credentials.js";
 export interface GmailProductionConfig {
   readonly userId: string;
   readonly clientId: string;
@@ -26,6 +27,7 @@ export class GmailProductionConnector {
     readonly config: GmailProductionConfig,
     readonly store: ReceiptWriter,
     gmail?: gmail_v1.Gmail,
+    readonly credentialGuard?: CredentialUseGuard,
   ) {
     if (!config.authorized) throw new Error("production Gmail unavailable");
     if (
@@ -43,6 +45,7 @@ export class GmailProductionConnector {
     }
   }
   async startWatch(): Promise<{ historyId: bigint; expiration: string }> {
+    await this.credentialGuard?.assertCurrent();
     const result = await this.gmail.users.watch({
       userId: this.config.userId,
       requestBody: { topicName: this.config.pubsubTopic, labelIds: ["INBOX"] },
@@ -59,6 +62,7 @@ export class GmailProductionConnector {
     authenticatedAudience: string,
     fromExclusive: bigint,
   ): Promise<{ toInclusive: bigint; events: readonly EmailEvent[] }> {
+    await this.credentialGuard?.assertCurrent();
     if (authenticatedAudience !== this.config.pushAudience)
       throw new Error("Gmail push audience invalid");
     const decoded = JSON.parse(
@@ -93,6 +97,7 @@ export class GmailProductionConnector {
     messageId: string,
     receivedAt: string,
   ): Promise<EmailEvent> {
+    await this.credentialGuard?.assertCurrent();
     const response = await this.gmail.users.messages.get({
         userId: this.config.userId,
         id: messageId,
@@ -135,12 +140,36 @@ export class GmailProductionConnector {
     message: OutboundEmail,
     body: Uint8Array,
   ): Promise<{ messageId: string; threadId: string; receiptId: string }> {
+    await this.credentialGuard?.assertCurrent();
     if (!message.idempotencyKey.trim())
       throw new Error("Gmail idempotency key required");
-    const deterministicMessageId=`<${createHash("sha256").update(message.idempotencyKey).digest("hex")}@mail.sablestone.internal>`;
-    if(message.messageId!==deterministicMessageId||!new TextDecoder().decode(body).includes(`Message-ID: ${deterministicMessageId}`))throw new Error("deterministic outbound Message-ID missing");
-    const prior=await this.gmail.users.messages.list({userId:this.config.userId,q:`rfc822msgid:${deterministicMessageId} in:sent`,maxResults:1});
-    if(prior.data.messages?.[0]?.id){const found=await this.gmail.users.messages.get({userId:this.config.userId,id:prior.data.messages[0].id,format:"metadata"});if(!found.data.id||!found.data.threadId)throw new Error("Gmail idempotency lookup incomplete");return{messageId:found.data.id,threadId:found.data.threadId,receiptId:message.bodyObjectKey}}
+    const deterministicMessageId = `<${createHash("sha256").update(message.idempotencyKey).digest("hex")}@mail.sablestone.internal>`;
+    if (
+      message.messageId !== deterministicMessageId ||
+      !new TextDecoder()
+        .decode(body)
+        .includes(`Message-ID: ${deterministicMessageId}`)
+    )
+      throw new Error("deterministic outbound Message-ID missing");
+    const prior = await this.gmail.users.messages.list({
+      userId: this.config.userId,
+      q: `rfc822msgid:${deterministicMessageId} in:sent`,
+      maxResults: 1,
+    });
+    if (prior.data.messages?.[0]?.id) {
+      const found = await this.gmail.users.messages.get({
+        userId: this.config.userId,
+        id: prior.data.messages[0].id,
+        format: "metadata",
+      });
+      if (!found.data.id || !found.data.threadId)
+        throw new Error("Gmail idempotency lookup incomplete");
+      return {
+        messageId: found.data.id,
+        threadId: found.data.threadId,
+        receiptId: message.bodyObjectKey,
+      };
+    }
     const receipt = await this.store.preserve(
         "email/outbound",
         body,
