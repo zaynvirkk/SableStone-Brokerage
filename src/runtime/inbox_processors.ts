@@ -12,7 +12,10 @@ import type { EmailEvent, OutboundEmail } from "../email.js";
 import type { ImmutableEvidenceStore } from "./object_store.js";
 import { inTransaction, TransactionalOutboxRepository } from "./database.js";
 import { SensitiveDataCipher } from "./sensitive_data.js";
-import type { ProviderPartyReferenceResolver } from "./provider_parties.js";
+import type {
+  ProviderPartyReferenceResolver,
+  ProviderPartyReferences,
+} from "./provider_parties.js";
 import {
   negotiate,
   type NegotiationIntent,
@@ -38,6 +41,83 @@ function text(value: unknown, label: string): string {
   if (typeof value !== "string" || !value.trim())
     throw new Error(`${label} missing`);
   return value;
+}
+
+export function assertProviderEntitlementEvidence(input: {
+  provider: string;
+  decoded: unknown;
+  config: Readonly<{
+    webhookSablestoneBeneficiaryPath?: string;
+    webhookSupplierBeneficiaryPath?: string;
+    webhookSablestoneAmountPath?: string;
+    webhookSupplierAmountPath?: string;
+  }>;
+  parties: ProviderPartyReferences;
+  supplierEntitlement: string;
+  sablestoneEntitlement: string;
+}): void {
+  const keys: Readonly<
+      Record<string, Readonly<{ supplier: string; sablestone: string }>>
+    > = Object.freeze({
+      ESCROW_COM: Object.freeze({
+        supplier: "customer",
+        sablestone: "customer",
+      }),
+      INDIAN_BANK_ESCROW: Object.freeze({
+        supplier: "beneficiary_id",
+        sablestone: "beneficiary_id",
+      }),
+      LC_PROCEEDS: Object.freeze({
+        supplier: "credit_beneficiary_id",
+        sablestone: "assignee_id",
+      }),
+    }),
+    schema = keys[input.provider],
+    config = input.config;
+  if (
+    !schema ||
+    !config.webhookSablestoneBeneficiaryPath ||
+    !config.webhookSupplierBeneficiaryPath ||
+    !config.webhookSablestoneAmountPath ||
+    !config.webhookSupplierAmountPath
+  )
+    throw new Error("provider entitlement evidence mapping incomplete");
+  const actualSupplier = path(
+      input.decoded,
+      config.webhookSupplierBeneficiaryPath,
+    ),
+    actualSablestone = path(
+      input.decoded,
+      config.webhookSablestoneBeneficiaryPath,
+    ),
+    supplierAmount = path(input.decoded, config.webhookSupplierAmountPath),
+    sablestoneAmount = path(input.decoded, config.webhookSablestoneAmountPath);
+  if (
+    String(actualSupplier ?? "") !== input.parties.supplier[schema.supplier] ||
+    String(actualSablestone ?? "") !==
+      input.parties.sablestone[schema.sablestone]
+  )
+    throw new Error("settlement provider beneficiary evidence mismatch");
+  try {
+    if (
+      compareDecimalStrings(
+        decimal(String(supplierAmount)),
+        decimal(input.supplierEntitlement),
+      ) !== 0 ||
+      compareDecimalStrings(
+        decimal(String(sablestoneAmount)),
+        decimal(input.sablestoneEntitlement),
+      ) !== 0
+    )
+      throw new Error("settlement provider allocation evidence mismatch");
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      error.message === "settlement provider allocation evidence mismatch"
+    )
+      throw error;
+    throw new Error("settlement provider allocation evidence invalid");
+  }
 }
 
 export function buildProductionInboxHandlers(input: {
@@ -538,6 +618,19 @@ async function processSettlementEvent(
     platformAllocationVerified = true;
     internalType = "ENTITLEMENT_SECURED";
   }
+  if (internalType === "ENTITLEMENT_SECURED" && !platformAllocationVerified) {
+    if (!providerParties)
+      throw new Error("provider party resolver unavailable");
+    assertProviderEntitlementEvidence({
+      provider: adapter.provider,
+      decoded,
+      config,
+      parties: await providerParties.resolveAndBind(instruction, occurredAt),
+      supplierEntitlement: String(instruction.supplier_entitlement),
+      sablestoneEntitlement: String(instruction.sablestone_entitlement),
+    });
+    platformAllocationVerified = true;
+  }
   await inTransaction(pool, async (client) => {
     const inserted = await client.query(
       "insert into settlement_provider_events(id,provider,external_event_id,provider_reference,trade_id,event_type,amount,currency,occurred_at,payload_sha256,payload_object_key,bank_reference) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) on conflict(provider,external_event_id) do nothing returning id",
@@ -559,15 +652,7 @@ async function processSettlementEvent(
     if (!inserted.rows[0]) return;
     const outbox = new TransactionalOutboxRepository(pool);
     if (internalType === "ENTITLEMENT_SECURED") {
-      if (
-        !platformAllocationVerified &&
-        (!config.webhookSablestoneBeneficiaryPath ||
-          !config.webhookSupplierBeneficiaryPath ||
-          String(path(decoded, config.webhookSablestoneBeneficiaryPath)) !==
-            String(instruction.sablestone_beneficiary_id) ||
-          String(path(decoded, config.webhookSupplierBeneficiaryPath)) !==
-            String(instruction.supplier_id))
-      )
+      if (!platformAllocationVerified)
         throw new Error("settlement beneficiary evidence mismatch");
       const acceptances = (
           await client.query(

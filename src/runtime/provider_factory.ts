@@ -63,6 +63,21 @@ export async function buildProductionSettlementAdapters(
       throw new Error(
         "Cashfree split creation and exact verification paths required",
       );
+    if (
+      Object.values(definition.webhookEventTypeMap ?? {}).includes(
+        "ENTITLEMENT_SECURED",
+      ) &&
+      !["CASHFREE_EASY_SPLIT", "RAZORPAY_ROUTE"].includes(
+        definition.provider,
+      ) &&
+      (!definition.webhookSupplierBeneficiaryPath ||
+        !definition.webhookSablestoneBeneficiaryPath ||
+        !definition.webhookSupplierAmountPath ||
+        !definition.webhookSablestoneAmountPath)
+    )
+      throw new Error(
+        "provider entitlement beneficiary and allocation paths required",
+      );
     const verifiedAt = Date.parse(definition.credentialVerifiedAt);
     if (
       !Number.isFinite(verifiedAt) ||

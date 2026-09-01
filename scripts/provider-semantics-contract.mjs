@@ -2,6 +2,7 @@ import { createHash, createHmac } from "node:crypto";
 import {
   ProductionSettlementHttpAdapter,
   assertCashfreeSplitVerification,
+  assertProviderEntitlementEvidence,
   cashfreeOrderRequest,
   cashfreeSplitRequest,
   decimal,
@@ -285,7 +286,7 @@ const escrowApproval = {
             schedule: [
               {
                 amount: "900",
-                beneficiary_customer: draft.supplierId,
+                beneficiary_customer: draft.providerParties.supplier.customer,
                 status: { secured: true },
               },
             ],
@@ -335,9 +336,52 @@ if (
   verifiedEscrow.sablestone_event_type !== "FUNDS_SECURED" ||
   verifiedEscrow.sablestone_broker_beneficiary !==
     draft.providerParties.sablestone.customer ||
+  verifiedEscrow.sablestone_supplier_beneficiary !==
+    draft.providerParties.supplier.customer ||
+  verifiedEscrow.sablestone_supplier_amount !== "900" ||
+  verifiedEscrow.sablestone_broker_amount !== "100" ||
   verifiedEscrow.sablestone_gross_amount !== "1000"
 )
   throw new Error("Escrow fetch confirmation did not prove entitlement");
+const escrowEvidence = {
+    webhookSupplierBeneficiaryPath: "sablestone_supplier_beneficiary",
+    webhookSablestoneBeneficiaryPath: "sablestone_broker_beneficiary",
+    webhookSupplierAmountPath: "sablestone_supplier_amount",
+    webhookSablestoneAmountPath: "sablestone_broker_amount",
+  },
+  partyMappings = {
+    ...draft.providerParties,
+    mappingIds: { buyer: "pb", supplier: "ps", sablestone: "pz" },
+  };
+assertProviderEntitlementEvidence({
+  provider: "ESCROW_COM",
+  decoded: verifiedEscrow,
+  config: escrowEvidence,
+  parties: partyMappings,
+  supplierEntitlement: "900",
+  sablestoneEntitlement: "100",
+});
+let beneficiaryEvidenceRejected = 0;
+for (const changed of [
+  { ...verifiedEscrow, sablestone_broker_beneficiary: "internal-org-uuid" },
+  { ...verifiedEscrow, sablestone_supplier_amount: "899" },
+  { ...verifiedEscrow, sablestone_broker_amount: "101" },
+]) {
+  try {
+    assertProviderEntitlementEvidence({
+      provider: "ESCROW_COM",
+      decoded: changed,
+      config: escrowEvidence,
+      parties: partyMappings,
+      supplierEntitlement: "900",
+      sablestoneEntitlement: "100",
+    });
+  } catch {
+    beneficiaryEvidenceRejected++;
+  }
+}
+if (beneficiaryEvidenceRejected !== 3)
+  throw new Error("provider beneficiary/allocation mismatch survived");
 console.log(
-  "PROVIDER_SEMANTICS_OK escrow=separate_broker_item escrow_webhook=fetch_confirmed cashfree=order_capture_then_supplier_split cashfree_reconciliation=exact cashfree_commission=merchant_retained razorpay=order_capture_then_integer_paise_transfer webhooks=provider_specific instruction_created=not_fee_locked",
+  "PROVIDER_SEMANTICS_OK escrow=separate_broker_item escrow_webhook=fetch_confirmed provider_beneficiaries=verified_accounts provider_allocations=exact cashfree=order_capture_then_supplier_split cashfree_reconciliation=exact cashfree_commission=merchant_retained razorpay=order_capture_then_integer_paise_transfer webhooks=provider_specific instruction_created=not_fee_locked",
 );

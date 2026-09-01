@@ -1,5 +1,5 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
-import { decimal } from "../money.js";
+import { addDecimal, decimal } from "../money.js";
 import type {
   ProviderCapabilitySnapshot,
   SettlementAdapter,
@@ -46,6 +46,8 @@ export interface ProviderHttpConfig {
   readonly webhookBankReferencePath?: string;
   readonly webhookSablestoneBeneficiaryPath?: string;
   readonly webhookSupplierBeneficiaryPath?: string;
+  readonly webhookSablestoneAmountPath?: string;
+  readonly webhookSupplierAmountPath?: string;
   readonly webhookEventTypeMap?: Readonly<Record<string, InternalEvent>>;
   readonly responseReferenceField: string;
   readonly responseAcknowledgedField: string;
@@ -217,8 +219,12 @@ export class ProductionSettlementHttpAdapter implements SettlementAdapter {
           | undefined,
         sellerSchedule = merchandise?.schedule?.[0],
         brokerSchedule = brokerFee?.schedule?.[0],
-        supplierAmount = Number(sellerSchedule?.amount),
-        brokerAmount = Number(brokerSchedule?.amount);
+        supplierAmount = exactProviderDecimal(sellerSchedule?.amount),
+        brokerAmount = exactProviderDecimal(brokerSchedule?.amount),
+        grossAmount =
+          supplierAmount && brokerAmount
+            ? addDecimal(supplierAmount, brokerAmount)
+            : null;
       return new TextEncoder().encode(
         JSON.stringify({
           ...confirmed,
@@ -228,11 +234,9 @@ export class ProductionSettlementHttpAdapter implements SettlementAdapter {
             sellerSchedule?.beneficiary_customer ?? null,
           sablestone_broker_beneficiary:
             brokerSchedule?.beneficiary_customer ?? null,
-          sablestone_gross_amount: Number.isFinite(
-            supplierAmount + brokerAmount,
-          )
-            ? String(supplierAmount + brokerAmount)
-            : null,
+          sablestone_supplier_amount: supplierAmount,
+          sablestone_broker_amount: brokerAmount,
+          sablestone_gross_amount: grossAmount,
           sablestone_currency: String(confirmed.currency ?? "").toUpperCase(),
         }),
       );
@@ -489,6 +493,16 @@ function sameDecimal(actual: unknown, expected: string): boolean {
     );
   } catch {
     return false;
+  }
+}
+
+function exactProviderDecimal(value: unknown) {
+  try {
+    return typeof value === "string" || typeof value === "number"
+      ? decimal(String(value))
+      : null;
+  } catch {
+    return null;
   }
 }
 function field(value: Record<string, unknown>, path: string): unknown {
