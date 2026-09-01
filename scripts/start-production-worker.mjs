@@ -12,6 +12,7 @@ import {
   QualificationJobDispatcher,
   buildProductionDocumentVerifier,
   buildHunterConnector,
+  buildBraveSearchConnector,
   EnrichmentJobDispatcher,
   createBankInboxProcessor,
   buildProductionKyb,
@@ -170,6 +171,13 @@ const hunter = runtime.activation.capabilities.includes("OUTREACH")
     hunter && cipher
       ? new EnrichmentJobDispatcher(runtime.pool, cipher, hunter)
       : null;
+const brave = runtime.activation.capabilities.includes("DISCOVERY")
+  ? await buildBraveSearchConnector(
+      runtime.pool,
+      runtime.evidence,
+      process.env.SABLESTONE_SEARCH_JSON,
+    )
+  : null;
 const kybRuntime = runtime.activation.capabilities.includes("DISCOVERY")
     ? await buildProductionKyb(
         runtime.pool,
@@ -211,7 +219,12 @@ const controller = new AbortController(),
   client = await createWorkflowClient(temporalConfig),
   discovery =
     runtime.activation.capabilities.includes("DISCOVERY") && cipher
-      ? new ProductionDiscoveryService(runtime.pool, runtime.evidence, cipher)
+      ? new ProductionDiscoveryService(
+          runtime.pool,
+          runtime.evidence,
+          cipher,
+          brave ?? undefined,
+        )
       : undefined,
   activityService = new ProductionActivityService(
     runtime.pool,

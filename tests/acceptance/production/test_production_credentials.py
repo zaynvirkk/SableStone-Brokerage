@@ -21,6 +21,7 @@ def test_every_live_counterparty_connector_requires_a_credential_binding():
         "src/runtime/document_jobs.ts": ("DOCUMENT_EXTRACTION_API", "DOCUMENT_VERIFICATION_API"),
         "src/runtime/kyb_jobs.ts": "KYB_API",
         "src/runtime/economic_jobs.ts": "ECONOMIC_QUOTE_API",
+        "src/runtime/search.ts": "SEARCH_API",
         "scripts/start-production-api.mjs": ("GMAIL_OAUTH", "BANK_WEBHOOK"),
         "scripts/start-production-worker.mjs": ("GMAIL_OAUTH", "BANK_WEBHOOK"),
     }
@@ -53,6 +54,7 @@ def test_every_live_counterparty_connector_requires_a_credential_binding():
         "src/runtime/document_jobs.ts",
         "src/runtime/kyb_jobs.ts",
         "src/runtime/economic_jobs.ts",
+        "src/runtime/search.ts",
         "scripts/start-production-api.mjs",
         "scripts/start-production-worker.mjs",
     )

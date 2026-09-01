@@ -42,6 +42,7 @@ export * from "./runtime/discovery_service.js";
 export * from "./runtime/scheduler.js";
 export * from "./runtime/document_jobs.js";
 export * from "./runtime/enrichment_jobs.js";
+export * from "./runtime/search.js";
 export * from "./runtime/accounting.js";
 export * from "./connectors/bank_http.js";
 export * from "./runtime/kyb_jobs.js";

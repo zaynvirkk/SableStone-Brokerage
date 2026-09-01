@@ -10,6 +10,7 @@ export type AuthorityKind =
   | "MARKETING_PAGE"
   | "DISCOVERY_SOURCE_REVIEW"
   | "CONTACT_ENRICHMENT_APPROVAL"
+  | "SEARCH_PROVIDER_APPROVAL"
   | "COMMERCIAL_EXTRACTION_APPROVAL"
   | "DOCUMENT_EXTRACTION_APPROVAL"
   | "DOCUMENT_VERIFICATION_APPROVAL"
@@ -52,13 +53,14 @@ export type GateName =
   | "ELECTRONIC_ACCEPTANCE"
   | "SETTLEMENT_USE_CASE";
 
-const gateKinds: Readonly<Record<GateName, readonly AuthorityKind[]>> = Object.freeze({
-  BROKER_NOT_SELLER: ["PROFESSIONAL_LEGAL_MEMO"],
-  GST_TAX: ["PROFESSIONAL_TAX_MEMO"],
-  PRIVACY_OUTREACH: ["PROFESSIONAL_LEGAL_MEMO"],
-  ELECTRONIC_ACCEPTANCE: ["PROFESSIONAL_LEGAL_MEMO"],
-  SETTLEMENT_USE_CASE: ["PROVIDER_WRITTEN_APPROVAL"],
-});
+const gateKinds: Readonly<Record<GateName, readonly AuthorityKind[]>> =
+  Object.freeze({
+    BROKER_NOT_SELLER: ["PROFESSIONAL_LEGAL_MEMO"],
+    GST_TAX: ["PROFESSIONAL_TAX_MEMO"],
+    PRIVACY_OUTREACH: ["PROFESSIONAL_LEGAL_MEMO"],
+    ELECTRONIC_ACCEPTANCE: ["PROFESSIONAL_LEGAL_MEMO"],
+    SETTLEMENT_USE_CASE: ["PROVIDER_WRITTEN_APPROVAL"],
+  });
 
 export interface GateEvaluation {
   readonly gate: GateName;
@@ -68,16 +70,29 @@ export interface GateEvaluation {
 }
 
 export function assertAuthorityReceipt(receipt: AuthorityReceipt): void {
-  if (!/^https:\/\//.test(receipt.canonicalUrl)) throw new Error("authority URL must use HTTPS");
-  if (!/^[0-9a-f]{64}$/.test(receipt.bodySha256)) throw new Error("authority body digest invalid");
-  if (!receipt.bodyObjectKey.trim()) throw new Error("preserved source body required");
-  if (!receipt.proposition.trim() || !receipt.jurisdiction.trim()) throw new Error("bounded proposition required");
-  if (!receipt.reviewedBy.trim()) throw new Error("review attribution required");
-  for (const time of [receipt.retrievedAt, receipt.effectiveAt, receipt.reviewAt, receipt.expiresAt]) {
-    if (Number.isNaN(Date.parse(time))) throw new Error("authority time invalid");
+  if (!/^https:\/\//.test(receipt.canonicalUrl))
+    throw new Error("authority URL must use HTTPS");
+  if (!/^[0-9a-f]{64}$/.test(receipt.bodySha256))
+    throw new Error("authority body digest invalid");
+  if (!receipt.bodyObjectKey.trim())
+    throw new Error("preserved source body required");
+  if (!receipt.proposition.trim() || !receipt.jurisdiction.trim())
+    throw new Error("bounded proposition required");
+  if (!receipt.reviewedBy.trim())
+    throw new Error("review attribution required");
+  for (const time of [
+    receipt.retrievedAt,
+    receipt.effectiveAt,
+    receipt.reviewAt,
+    receipt.expiresAt,
+  ]) {
+    if (Number.isNaN(Date.parse(time)))
+      throw new Error("authority time invalid");
   }
-  if (Date.parse(receipt.reviewAt) < Date.parse(receipt.retrievedAt)) throw new Error("review precedes retrieval");
-  if (Date.parse(receipt.expiresAt) <= Date.parse(receipt.reviewAt)) throw new Error("receipt expires before review");
+  if (Date.parse(receipt.reviewAt) < Date.parse(receipt.retrievedAt))
+    throw new Error("review precedes retrieval");
+  if (Date.parse(receipt.expiresAt) <= Date.parse(receipt.reviewAt))
+    throw new Error("receipt expires before review");
 }
 
 export function evaluateGate(
@@ -89,18 +104,45 @@ export function evaluateGate(
   const nowMs = Date.parse(now);
   if (Number.isNaN(nowMs)) throw new Error("evaluation time invalid");
   const allowed = gateKinds[gate];
-  const candidates = receipts.filter((receipt) => allowed.includes(receipt.kind));
+  const candidates = receipts.filter((receipt) =>
+    allowed.includes(receipt.kind),
+  );
   if (candidates.length === 0) {
-    return Object.freeze({ gate, state: "UNAVAILABLE", receiptId: null, reason: "required reviewed authority missing" });
+    return Object.freeze({
+      gate,
+      state: "UNAVAILABLE",
+      receiptId: null,
+      reason: "required reviewed authority missing",
+    });
   }
   const current = candidates
     .filter((receipt) => {
-      try { assertAuthorityReceipt(receipt); } catch { return false; }
-      return Date.parse(receipt.effectiveAt) <= nowMs && nowMs < Date.parse(receipt.expiresAt);
+      try {
+        assertAuthorityReceipt(receipt);
+      } catch {
+        return false;
+      }
+      return (
+        Date.parse(receipt.effectiveAt) <= nowMs &&
+        nowMs < Date.parse(receipt.expiresAt)
+      );
     })
-    .find((receipt) => currentSourceDigests[receipt.canonicalUrl] === receipt.bodySha256);
+    .find(
+      (receipt) =>
+        currentSourceDigests[receipt.canonicalUrl] === receipt.bodySha256,
+    );
   if (!current) {
-    return Object.freeze({ gate, state: "REVOKED", receiptId: null, reason: "authority expired invalid or source drifted" });
+    return Object.freeze({
+      gate,
+      state: "REVOKED",
+      receiptId: null,
+      reason: "authority expired invalid or source drifted",
+    });
   }
-  return Object.freeze({ gate, state: "AVAILABLE", receiptId: current.receiptId, reason: "current reviewed receipt" });
+  return Object.freeze({
+    gate,
+    state: "AVAILABLE",
+    receiptId: current.receiptId,
+    reason: "current reviewed receipt",
+  });
 }

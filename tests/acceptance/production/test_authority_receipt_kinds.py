@@ -34,6 +34,7 @@ def test_capability_receipts_are_exactly_typed_and_current():
 def test_every_load_bearing_production_gate_names_its_authority_kind():
     expected = {
         "src/runtime/discovery_service.ts": "DISCOVERY_SOURCE_REVIEW",
+        "src/runtime/search.ts": "SEARCH_PROVIDER_APPROVAL",
         "src/runtime/enrichment_jobs.ts": "CONTACT_ENRICHMENT_APPROVAL",
         "src/connectors/commercial_extraction.ts": "COMMERCIAL_EXTRACTION_APPROVAL",
         "src/runtime/document_jobs.ts": (
@@ -91,6 +92,7 @@ def test_every_load_bearing_production_gate_names_its_authority_kind():
         "src/runtime/document_jobs.ts",
         "src/runtime/kyb_jobs.ts",
         "src/runtime/economic_jobs.ts",
+        "src/runtime/search.ts",
         "scripts/start-production-api.mjs",
         "scripts/start-production-worker.mjs",
     )

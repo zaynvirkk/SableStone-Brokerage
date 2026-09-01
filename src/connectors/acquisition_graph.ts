@@ -8,6 +8,8 @@ import {
 import type { OrganizationCandidate } from "../discovery.js";
 import type { ContactRecord } from "../contacts.js";
 import type { ReceiptWriter } from "./discovery_http.js";
+import type { CredentialUseGuard } from "../runtime/production_credentials.js";
+import type { AuthorityUseGuard } from "../runtime/authority_receipts.js";
 export type PolymerSignal =
   | "RPP"
   | "RHDPE"
@@ -144,17 +146,22 @@ export interface SearchApproval {
   readonly apiKey: string | null;
   readonly expiresAt: string;
   readonly maximumResults: number;
+  readonly approvalReceiptId?: string;
 }
 export class BraveSearchConnector {
   constructor(
     readonly approval: SearchApproval,
     readonly store: ReceiptWriter,
     readonly fetcher: typeof fetch = fetch,
+    readonly credentialGuard?: CredentialUseGuard,
+    readonly authorityGuard?: AuthorityUseGuard,
   ) {}
   async search(
     query: string,
     now = new Date().toISOString(),
   ): Promise<readonly AcquisitionEvidence[]> {
+    await this.authorityGuard?.assertCurrent();
+    await this.credentialGuard?.assertCurrent();
     if (
       this.approval.state !== "APPROVED" ||
       !this.approval.apiKey ||
