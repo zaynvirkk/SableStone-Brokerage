@@ -14,3 +14,10 @@ expiry independently. `AVAILABLE` is forbidden until both approval and current
 credentials pass. Marketing pages, docs, sales calls and sandbox access are not
 approval.
 
+Each production API, OAuth or webhook secret must also be registered through
+the immutable `production_credential_bindings` registry. Registration stores
+only a SHA-256 fingerprint of the supplied credential tuple and requires a
+current `PRODUCTION_CREDENTIAL_VERIFICATION` receipt. Rotation creates a new
+binding; compromise or withdrawal creates an append-only revocation backed by
+`PRODUCTION_CREDENTIAL_REVOCATION`. Configuration flags and timestamps cannot
+self-assert that a credential is valid.

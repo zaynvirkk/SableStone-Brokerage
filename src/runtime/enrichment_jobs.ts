@@ -8,6 +8,7 @@ import type { ImmutableEvidenceStore } from "./object_store.js";
 import type { SensitiveDataCipher } from "./sensitive_data.js";
 import { inTransaction } from "./database.js";
 import { assertCurrentAuthorityReceipt } from "./authority_receipts.js";
+import { assertCurrentCredentialBinding } from "./production_credentials.js";
 interface EnrichmentRuntimeConfig extends EnrichmentApproval {
   readonly approvalReceiptId: string;
 }
@@ -23,6 +24,12 @@ export async function buildHunterConnector(
     config.approvalReceiptId,
     "CONTACT_ENRICHMENT_APPROVAL",
   );
+  await assertCurrentCredentialBinding(pool, {
+    provider: config.provider,
+    capability: "CONTACT_ENRICHMENT_API",
+    environment: "PRODUCTION",
+    credentialParts: [config.credentialSecret ?? ""],
+  });
   return new HunterContactConnector(config, store);
 }
 export class EnrichmentJobDispatcher {

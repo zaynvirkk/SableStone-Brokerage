@@ -45,3 +45,11 @@ secrets must be mounted by the deployment environment. Run the migration
 container first, verify backup/restore and readiness, then start API/web while
 all operational capabilities remain absent. Enabling a capability requires a
 new signed activation artifact bound to the exact release digest.
+Production connector configuration cannot self-assert credential validity.
+Before constructing Gmail, settlement, bank-webhook, enrichment, commercial
+extraction, document, KYB or economic-quote connectors, startup hashes the
+exact supplied credential tuple and requires a current matching immutable
+`production_credential_bindings` row backed by a
+`PRODUCTION_CREDENTIAL_VERIFICATION` receipt. Revoked, expired, rotated,
+wrong-provider or wrong-capability material fails closed; raw credentials are
+never stored in the registry.

@@ -12,6 +12,7 @@ import {
   PostgresHistoryCursorRepository,
   SensitiveDataCipher,
   assertCurrentAuthorityReceipt,
+  assertCurrentCredentialBinding,
 } from "../dist/index.js";
 
 const runtime = await bootstrapProduction(process.env);
@@ -64,6 +65,12 @@ if (runtime.activation.capabilities.includes("SETTLEMENT")) {
       config.approvalReceiptId,
       "BANK_WEBHOOK_PROVIDER_APPROVAL",
     );
+    await assertCurrentCredentialBinding(runtime.pool, {
+      provider: config.provider,
+      capability: "BANK_WEBHOOK",
+      environment: "PRODUCTION",
+      credentialParts: [config.webhookSecret],
+    });
     webhookHandlers[
       `bank-${config.provider.toLowerCase().replaceAll("_", "-")}`
     ] = createBankWebhookHandler({ config, store: runtime.evidence, inbox });
@@ -78,8 +85,21 @@ if (runtime.activation.capabilities.includes("OUTREACH")) {
     refreshToken: process.env.SABLESTONE_GMAIL_REFRESH_TOKEN ?? "",
     pubsubTopic: process.env.SABLESTONE_GMAIL_PUBSUB_TOPIC ?? "",
     pushAudience: process.env.SABLESTONE_GMAIL_PUSH_AUDIENCE ?? "",
-    authorized: process.env.SABLESTONE_GMAIL_AUTHORIZED === "true",
+    authorized: true,
   };
+  await assertCurrentCredentialBinding(runtime.pool, {
+    provider: "GMAIL",
+    capability: "GMAIL_OAUTH",
+    environment: "PRODUCTION",
+    credentialParts: [
+      gmailConfig.userId,
+      gmailConfig.clientId,
+      gmailConfig.clientSecret,
+      gmailConfig.refreshToken,
+      gmailConfig.pubsubTopic,
+      gmailConfig.pushAudience,
+    ],
+  });
   const gmail = new GmailProductionConnector(gmailConfig, runtime.evidence);
   webhookHandlers.gmail = createGmailPushHandler({
     connector: gmail,

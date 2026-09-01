@@ -12,10 +12,11 @@ import {
 } from "../connectors/settlement_http.js";
 import type { ProviderApproval, ProviderCredentials } from "../settlement.js";
 import { decimal } from "../money.js";
+import { assertCurrentCredentialBinding } from "./production_credentials.js";
 
 interface ProviderEnvironmentConfig extends ProviderHttpConfig {
   readonly credentialSecretReference: string;
-  readonly credentialVerifiedAt: string;
+  readonly webhookCredentialSecretReference?: string;
 }
 const builders: Readonly<Record<string, SettlementRequestBuilder>> =
   Object.freeze({
@@ -48,7 +49,9 @@ export async function buildProductionSettlementAdapters(
       !definition.baseUrl.startsWith("https://") ||
       !definition.authorizationHeader ||
       (definition.provider !== "ESCROW_COM" && !definition.webhookSecret) ||
-      !definition.credentialSecretReference
+      !definition.credentialSecretReference ||
+      (definition.provider !== "ESCROW_COM" &&
+        !definition.webhookCredentialSecretReference)
     )
       throw new Error(
         `provider secrets/config incomplete: ${definition.provider}`,
@@ -78,15 +81,25 @@ export async function buildProductionSettlementAdapters(
       throw new Error(
         "provider entitlement beneficiary and allocation paths required",
       );
-    const verifiedAt = Date.parse(definition.credentialVerifiedAt);
-    if (
-      !Number.isFinite(verifiedAt) ||
-      verifiedAt > Date.now() ||
-      verifiedAt < Date.now() - 30 * 86400_000
-    )
-      throw new Error(
-        `provider credential verification stale: ${definition.provider}`,
-      );
+    const apiCredential = await assertCurrentCredentialBinding(pool, {
+      provider: definition.provider,
+      capability: "SETTLEMENT_API",
+      environment: "PRODUCTION",
+      credentialParts: [
+        definition.credentialSecretReference,
+        definition.authorizationHeader,
+      ],
+    });
+    if (definition.provider !== "ESCROW_COM")
+      await assertCurrentCredentialBinding(pool, {
+        provider: definition.provider,
+        capability: "SETTLEMENT_WEBHOOK",
+        environment: "PRODUCTION",
+        credentialParts: [
+          definition.webhookCredentialSecretReference!,
+          definition.webhookSecret,
+        ],
+      });
     const row = (
       await pool.query(
         "select pa.* from provider_approvals pa join authority_receipts ar on ar.receipt_id=pa.written_approval_receipt_id where pa.provider=$1 and pa.environment='PRODUCTION' and pa.state='APPROVED' and pa.valid_from<=now() and pa.valid_until>now() and ar.authority_kind='PROVIDER_WRITTEN_APPROVAL' and ar.retrieved_at<=now() and ar.effective_at<=now() and ar.expires_at>now() order by pa.valid_from desc limit 1",
@@ -114,7 +127,7 @@ export async function buildProductionSettlementAdapters(
         environment: "PRODUCTION",
         state: "VALID",
         secretReference: definition.credentialSecretReference,
-        verifiedAt: definition.credentialVerifiedAt,
+        verifiedAt: apiCredential.verifiedAt,
       };
     adapters.push(
       new ProductionSettlementHttpAdapter(

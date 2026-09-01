@@ -1,0 +1,7 @@
+begin;
+drop trigger if exists production_credential_revocations_no_update_delete on production_credential_revocations;
+drop trigger if exists production_credential_bindings_no_update_delete on production_credential_bindings;
+drop table if exists production_credential_revocations;
+drop table if exists production_credential_bindings;
+delete from schema_migrations where version='0050_production_credentials';
+commit;

@@ -11,6 +11,7 @@ import { priceMatch, type PricingPolicy } from "../pricing.js";
 import type { ImmutableEvidenceStore } from "./object_store.js";
 import { inTransaction, TransactionalOutboxRepository } from "./database.js";
 import { assertCurrentAuthorityReceipt } from "./authority_receipts.js";
+import { assertCurrentCredentialBinding } from "./production_credentials.js";
 
 export async function buildEconomicQuoteConnectors(
   pool: Pool,
@@ -28,6 +29,12 @@ export async function buildEconomicQuoteConnectors(
       config.approvalReceiptId,
       "ECONOMIC_QUOTE_PROVIDER_APPROVAL",
     );
+    await assertCurrentCredentialBinding(pool, {
+      provider: config.provider,
+      capability: "ECONOMIC_QUOTE_API",
+      environment: "PRODUCTION",
+      credentialParts: [config.authorizationHeader],
+    });
     connectors.push(new ProductionEconomicQuoteConnector(config, store));
   }
   return Object.freeze(connectors);

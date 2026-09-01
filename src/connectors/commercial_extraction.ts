@@ -5,6 +5,7 @@ import type { CommunicationDecision } from "./communication_brain.js";
 import type { ReceiptWriter } from "./discovery_http.js";
 import type { Pool } from "pg";
 import { assertCurrentAuthorityReceipt } from "../runtime/authority_receipts.js";
+import { assertCurrentCredentialBinding } from "../runtime/production_credentials.js";
 
 type Field = {
   value: string | null;
@@ -34,6 +35,12 @@ export async function buildCommercialExtractor(
     config.approvalReceiptId,
     "COMMERCIAL_EXTRACTION_APPROVAL",
   );
+  await assertCurrentCredentialBinding(pool, {
+    provider: new URL(config.endpoint).hostname,
+    capability: "COMMERCIAL_EXTRACTION_API",
+    environment: "PRODUCTION",
+    credentialParts: [config.authorizationHeader],
+  });
   return new EvidenceBoundCommercialExtractor(config, store);
 }
 

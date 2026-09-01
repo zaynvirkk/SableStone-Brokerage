@@ -21,6 +21,8 @@ existing release or provider binding where applicable.
 | Settlement provider use case | `PROVIDER_WRITTEN_APPROVAL` |
 | Provider party account mapping | `PROVIDER_ACCOUNT_VERIFICATION` |
 | Provider party account revocation | `PROVIDER_ACCOUNT_REVOCATION` |
+| Production credential verification | `PRODUCTION_CREDENTIAL_VERIFICATION` |
+| Production credential revocation | `PRODUCTION_CREDENTIAL_REVOCATION` |
 | Counsel-approved agreement | `LEGAL_AGREEMENT_APPROVAL` |
 | Counsel-approved deterministic template | `LEGAL_AGREEMENT_TEMPLATE` |
 
