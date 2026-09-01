@@ -27,3 +27,7 @@ receipts before any later task can proceed:
 
 No public documentation, sandbox response or synthetic fixture may satisfy one
 of these rows.
+
+Operational receipt registration must also use the exact capability-specific
+kind in [the authority-kind matrix](authority-kind-matrix.md). A current but
+unrelated receipt is rejected rather than treated as generic approval.

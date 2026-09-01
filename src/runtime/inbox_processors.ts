@@ -416,7 +416,7 @@ async function applyNegotiationIntent(
   if (!parsed) throw new Error("commercial intent incomplete");
   const row = (
     await client.query(
-      "select n.*,m.offer_id,m.demand_id,ef.amount_per_kg,pp.commission_floor_per_kg,np.maximum_concession_per_kg,np.version negotiation_policy_version,np.valid_until policy_valid_until from negotiations n join matches m on m.id=n.match_id join buyer_demands d on d.id=m.demand_id and d.version=m.demand_version join economic_floors ef on ef.match_id=m.id and ef.state='KNOWN' join pricing_decisions pd on pd.match_id=m.id and pd.state='EXECUTABLE' join pricing_policies pp on pp.id=pd.policy_id and pp.version=pd.policy_version join negotiation_policies np on np.currency=n.currency and np.valid_from<=$2 and np.valid_until>$2 join authority_receipts ar on ar.receipt_id=np.authority_receipt_id and ar.effective_at<=$2 and ar.expires_at>$2 where d.buyer_id=$1 and n.status='OPEN' and n.expires_at>$2 order by n.expires_at limit 1 for update",
+      "select n.*,m.offer_id,m.demand_id,ef.amount_per_kg,pp.commission_floor_per_kg,np.maximum_concession_per_kg,np.version negotiation_policy_version,np.valid_until policy_valid_until from negotiations n join matches m on m.id=n.match_id join buyer_demands d on d.id=m.demand_id and d.version=m.demand_version join economic_floors ef on ef.match_id=m.id and ef.state='KNOWN' join pricing_decisions pd on pd.match_id=m.id and pd.state='EXECUTABLE' join pricing_policies pp on pp.id=pd.policy_id and pp.version=pd.policy_version join negotiation_policies np on np.currency=n.currency and np.valid_from<=$2 and np.valid_until>$2 join authority_receipts ar on ar.receipt_id=np.authority_receipt_id and ar.authority_kind='NEGOTIATION_POLICY_APPROVAL' and ar.retrieved_at<=$2 and ar.effective_at<=$2 and ar.expires_at>$2 where d.buyer_id=$1 and n.status='OPEN' and n.expires_at>$2 order by n.expires_at limit 1 for update",
       [buyerId, occurredAt],
     )
   ).rows[0];
@@ -727,7 +727,7 @@ async function processSettlementEvent(
         ).rows[0],
         approval = (
           await client.query(
-            "select pa.state,pa.valid_from,pa.valid_until,ar.effective_at authority_effective_at,ar.expires_at authority_expires_at,now() transaction_now from provider_approvals pa join authority_receipts ar on ar.receipt_id=pa.written_approval_receipt_id where pa.id=$1 and pa.provider=$2 and pa.environment='PRODUCTION' and ar.authority_kind='PROVIDER_WRITTEN_APPROVAL'",
+            "select pa.state,pa.valid_from,pa.valid_until,ar.effective_at authority_effective_at,ar.expires_at authority_expires_at,now() transaction_now from provider_approvals pa join authority_receipts ar on ar.receipt_id=pa.written_approval_receipt_id where pa.id=$1 and pa.provider=$2 and pa.environment='PRODUCTION' and ar.authority_kind='PROVIDER_WRITTEN_APPROVAL' and ar.retrieved_at<=now()",
             [instruction.provider_approval_id, adapter.provider],
           )
         ).rows[0];

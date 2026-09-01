@@ -31,6 +31,7 @@ import {
   buildCommercialExtractor,
   AgreementAutomationDispatcher,
   bindBrokerageActivities,
+  assertCurrentAuthorityReceipt,
 } from "../dist/index.js";
 
 const runtime = await bootstrapProduction(process.env);
@@ -230,15 +231,11 @@ if (runtime.activation.capabilities.includes("SETTLEMENT")) {
   if (!Array.isArray(bankConfigs))
     throw new Error("bank webhook configuration invalid");
   for (const config of bankConfigs) {
-    if (
-      !(
-        await runtime.pool.query(
-          "select 1 from authority_receipts where receipt_id=$1 and effective_at<=now() and expires_at>now()",
-          [config.approvalReceiptId],
-        )
-      ).rowCount
-    )
-      throw new Error(`bank webhook approval unavailable: ${config.provider}`);
+    await assertCurrentAuthorityReceipt(
+      runtime.pool,
+      config.approvalReceiptId,
+      "BANK_WEBHOOK_PROVIDER_APPROVAL",
+    );
     handlers[`BANK:${config.provider}`] = createBankInboxProcessor({
       pool: runtime.pool,
       store: runtime.evidence,

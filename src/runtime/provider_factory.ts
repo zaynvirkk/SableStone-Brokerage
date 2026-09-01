@@ -89,7 +89,7 @@ export async function buildProductionSettlementAdapters(
       );
     const row = (
       await pool.query(
-        "select pa.* from provider_approvals pa join authority_receipts ar on ar.receipt_id=pa.written_approval_receipt_id where pa.provider=$1 and pa.environment='PRODUCTION' and pa.state='APPROVED' and pa.valid_from<=now() and pa.valid_until>now() and ar.authority_kind='PROVIDER_WRITTEN_APPROVAL' and ar.effective_at<=now() and ar.expires_at>now() order by pa.valid_from desc limit 1",
+        "select pa.* from provider_approvals pa join authority_receipts ar on ar.receipt_id=pa.written_approval_receipt_id where pa.provider=$1 and pa.environment='PRODUCTION' and pa.state='APPROVED' and pa.valid_from<=now() and pa.valid_until>now() and ar.authority_kind='PROVIDER_WRITTEN_APPROVAL' and ar.retrieved_at<=now() and ar.effective_at<=now() and ar.expires_at>now() order by pa.valid_from desc limit 1",
         [definition.provider],
       )
     ).rows[0];

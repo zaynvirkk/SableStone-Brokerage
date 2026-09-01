@@ -295,7 +295,7 @@ export class AgreementRegistry {
     });
     const legal = (
       await this.pool.query(
-        "select * from authority_receipts where receipt_id=$1 and authority_kind='LEGAL_AGREEMENT_TEMPLATE' and effective_at<=$2 and expires_at>$2",
+        "select * from authority_receipts where receipt_id=$1 and authority_kind='LEGAL_AGREEMENT_TEMPLATE' and retrieved_at<=$2 and effective_at<=$2 and expires_at>$2",
         [input.templateLegalReceiptId, input.registeredAt],
       )
     ).rows[0];

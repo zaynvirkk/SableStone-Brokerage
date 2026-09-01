@@ -117,7 +117,7 @@ export class ProviderPartyAccountRegistry {
         throw new Error("provider party organization role mismatch");
       const approval = (
         await client.query(
-          "select pa.id from provider_approvals pa join authority_receipts ar on ar.receipt_id=pa.written_approval_receipt_id where pa.provider=$1 and pa.environment='PRODUCTION' and pa.state='APPROVED' and pa.valid_from<=$2 and pa.valid_until>$2 and ar.authority_kind='PROVIDER_WRITTEN_APPROVAL' and ar.effective_at<=$2 and ar.expires_at>$2 order by pa.valid_from desc limit 1",
+          "select pa.id from provider_approvals pa join authority_receipts ar on ar.receipt_id=pa.written_approval_receipt_id where pa.provider=$1 and pa.environment='PRODUCTION' and pa.state='APPROVED' and pa.valid_from<=$2 and pa.valid_until>$2 and ar.authority_kind='PROVIDER_WRITTEN_APPROVAL' and ar.retrieved_at<=$2 and ar.effective_at<=$2 and ar.expires_at>$2 order by pa.valid_from desc limit 1",
           [input.provider, input.registeredAt],
         )
       ).rows[0];
@@ -372,11 +372,11 @@ export class ProviderPartyReferenceResolver {
   ) {
     const result = boundId
       ? await client.query(
-          "select p.*,r.revoked_at registry_revoked_at,a.authority_kind verification_authority_kind,a.effective_at verification_effective_at,a.expires_at verification_expires_at from provider_party_accounts p join authority_receipts a on a.receipt_id=p.verification_receipt_id left join provider_party_account_revocations r on r.provider_party_account_id=p.id where p.id=$1",
+          "select p.*,r.revoked_at registry_revoked_at,a.authority_kind verification_authority_kind,a.retrieved_at verification_retrieved_at,a.effective_at verification_effective_at,a.expires_at verification_expires_at from provider_party_accounts p join authority_receipts a on a.receipt_id=p.verification_receipt_id left join provider_party_account_revocations r on r.provider_party_account_id=p.id where p.id=$1",
           [boundId],
         )
       : await client.query(
-          "select p.*,r.revoked_at registry_revoked_at,a.authority_kind verification_authority_kind,a.effective_at verification_effective_at,a.expires_at verification_expires_at from provider_party_accounts p join authority_receipts a on a.receipt_id=p.verification_receipt_id left join provider_party_account_revocations r on r.provider_party_account_id=p.id where p.provider=$1 and p.organization_id=$2 and p.party_role=$3 and p.revoked_at is null and r.id is null and p.verified_at <= $4 and p.valid_until > $4 and a.authority_kind='PROVIDER_ACCOUNT_VERIFICATION' and a.effective_at <= $4 and a.expires_at > $4 order by p.verified_at desc limit 1",
+          "select p.*,r.revoked_at registry_revoked_at,a.authority_kind verification_authority_kind,a.retrieved_at verification_retrieved_at,a.effective_at verification_effective_at,a.expires_at verification_expires_at from provider_party_accounts p join authority_receipts a on a.receipt_id=p.verification_receipt_id left join provider_party_account_revocations r on r.provider_party_account_id=p.id where p.provider=$1 and p.organization_id=$2 and p.party_role=$3 and p.revoked_at is null and r.id is null and p.verified_at <= $4 and p.valid_until > $4 and a.authority_kind='PROVIDER_ACCOUNT_VERIFICATION' and a.retrieved_at <= $4 and a.effective_at <= $4 and a.expires_at > $4 order by p.verified_at desc limit 1",
           [provider, organizationId, role, now],
         );
     const row = result.rows[0];
@@ -388,6 +388,7 @@ export class ProviderPartyReferenceResolver {
       row.revoked_at ||
       row.registry_revoked_at ||
       row.verification_authority_kind !== "PROVIDER_ACCOUNT_VERIFICATION" ||
+      Date.parse(row.verification_retrieved_at) > Date.parse(now) ||
       Date.parse(row.verification_effective_at) > Date.parse(now) ||
       Date.parse(row.verification_expires_at) <= Date.parse(now) ||
       Date.parse(row.verified_at) > Date.parse(now) ||

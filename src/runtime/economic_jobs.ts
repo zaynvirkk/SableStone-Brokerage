@@ -10,6 +10,7 @@ import { decimal } from "../money.js";
 import { priceMatch, type PricingPolicy } from "../pricing.js";
 import type { ImmutableEvidenceStore } from "./object_store.js";
 import { inTransaction, TransactionalOutboxRepository } from "./database.js";
+import { assertCurrentAuthorityReceipt } from "./authority_receipts.js";
 
 export async function buildEconomicQuoteConnectors(
   pool: Pool,
@@ -22,17 +23,11 @@ export async function buildEconomicQuoteConnectors(
     throw new Error("economic quote configuration invalid");
   const connectors = [];
   for (const config of configs) {
-    if (
-      !(
-        await pool.query(
-          "select 1 from authority_receipts where receipt_id=$1 and effective_at<=now() and expires_at>now()",
-          [config.approvalReceiptId],
-        )
-      ).rowCount
-    )
-      throw new Error(
-        `economic quote approval unavailable: ${config.provider}`,
-      );
+    await assertCurrentAuthorityReceipt(
+      pool,
+      config.approvalReceiptId,
+      "ECONOMIC_QUOTE_PROVIDER_APPROVAL",
+    );
     connectors.push(new ProductionEconomicQuoteConnector(config, store));
   }
   return Object.freeze(connectors);
@@ -237,7 +232,7 @@ export async function evaluateEconomics(
       ).rows[0],
       row = (
         await client.query(
-          "select p.* from pricing_policies p join authority_receipts a on a.receipt_id=p.approval_receipt_id where p.currency=$1 and p.valid_from<=now() and p.valid_until>now() and a.effective_at<=now() and a.expires_at>now() order by p.valid_from desc limit 1",
+          "select p.* from pricing_policies p join authority_receipts a on a.receipt_id=p.approval_receipt_id where p.currency=$1 and p.valid_from<=now() and p.valid_until>now() and a.authority_kind='PRICING_POLICY_APPROVAL' and a.retrieved_at<=now() and a.effective_at<=now() and a.expires_at>now() order by p.valid_from desc limit 1",
           [floor.currency],
         )
       ).rows[0];
@@ -288,7 +283,7 @@ export async function evaluateEconomics(
     if (decision.state !== "EXECUTABLE") return decision.state;
     const negotiationPolicy = (
       await client.query(
-        "select p.* from negotiation_policies p join authority_receipts a on a.receipt_id=p.authority_receipt_id where p.currency=$1 and p.valid_from<=now() and p.valid_until>now() and a.effective_at<=now() and a.expires_at>now() order by p.valid_from desc limit 1",
+        "select p.* from negotiation_policies p join authority_receipts a on a.receipt_id=p.authority_receipt_id where p.currency=$1 and p.valid_from<=now() and p.valid_until>now() and a.authority_kind='NEGOTIATION_POLICY_APPROVAL' and a.retrieved_at<=now() and a.effective_at<=now() and a.expires_at>now() order by p.valid_from desc limit 1",
         [decision.currency],
       )
     ).rows[0];

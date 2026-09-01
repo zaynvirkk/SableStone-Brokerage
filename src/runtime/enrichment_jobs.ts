@@ -7,6 +7,7 @@ import {
 import type { ImmutableEvidenceStore } from "./object_store.js";
 import type { SensitiveDataCipher } from "./sensitive_data.js";
 import { inTransaction } from "./database.js";
+import { assertCurrentAuthorityReceipt } from "./authority_receipts.js";
 interface EnrichmentRuntimeConfig extends EnrichmentApproval {
   readonly approvalReceiptId: string;
 }
@@ -16,14 +17,12 @@ export async function buildHunterConnector(
   serialized: string | undefined,
 ): Promise<HunterContactConnector | null> {
   if (!serialized) return null;
-  const config = JSON.parse(serialized) as EnrichmentRuntimeConfig,
-    row = (
-      await pool.query(
-        "select 1 from authority_receipts where receipt_id=$1 and effective_at<=now() and expires_at>now()",
-        [config.approvalReceiptId],
-      )
-    ).rows[0];
-  if (!row) throw new Error("enrichment approval receipt unavailable");
+  const config = JSON.parse(serialized) as EnrichmentRuntimeConfig;
+  await assertCurrentAuthorityReceipt(
+    pool,
+    config.approvalReceiptId,
+    "CONTACT_ENRICHMENT_APPROVAL",
+  );
   return new HunterContactConnector(config, store);
 }
 export class EnrichmentJobDispatcher {

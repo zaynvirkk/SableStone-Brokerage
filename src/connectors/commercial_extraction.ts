@@ -4,6 +4,7 @@ import { decimal } from "../money.js";
 import type { CommunicationDecision } from "./communication_brain.js";
 import type { ReceiptWriter } from "./discovery_http.js";
 import type { Pool } from "pg";
+import { assertCurrentAuthorityReceipt } from "../runtime/authority_receipts.js";
 
 type Field = {
   value: string | null;
@@ -28,15 +29,11 @@ export async function buildCommercialExtractor(
 ): Promise<EvidenceBoundCommercialExtractor | null> {
   if (!serialized) return null;
   const config = JSON.parse(serialized) as CommercialExtractionConfig;
-  if (
-    !(
-      await pool.query(
-        "select 1 from authority_receipts where receipt_id=$1 and effective_at<=now() and expires_at>now()",
-        [config.approvalReceiptId],
-      )
-    ).rowCount
-  )
-    throw new Error("commercial extraction approval unavailable");
+  await assertCurrentAuthorityReceipt(
+    pool,
+    config.approvalReceiptId,
+    "COMMERCIAL_EXTRACTION_APPROVAL",
+  );
   return new EvidenceBoundCommercialExtractor(config, store);
 }
 

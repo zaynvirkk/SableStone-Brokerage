@@ -203,7 +203,7 @@ export class AgreementAutomationDispatcher {
       return 0;
     const template = (
       await this.pool.query(
-        "select t.*,a.proposition,a.expires_at legal_expires_at from agreement_templates t join authority_receipts a on a.receipt_id=t.legal_gate_receipt_id where t.agreement_kind=$1 and t.resource_type=$2 and t.role=$3 and t.effective_at<=now() and t.expires_at>now() and a.authority_kind='LEGAL_AGREEMENT_TEMPLATE' and a.effective_at<=now() and a.expires_at>now() order by t.effective_at desc limit 1",
+        "select t.*,a.proposition,a.expires_at legal_expires_at from agreement_templates t join authority_receipts a on a.receipt_id=t.legal_gate_receipt_id where t.agreement_kind=$1 and t.resource_type=$2 and t.role=$3 and t.effective_at<=now() and t.expires_at>now() and a.authority_kind='LEGAL_AGREEMENT_TEMPLATE' and a.retrieved_at<=now() and a.effective_at<=now() and a.expires_at>now() order by t.effective_at desc limit 1",
         [kind, resourceType, role],
       )
     ).rows[0];

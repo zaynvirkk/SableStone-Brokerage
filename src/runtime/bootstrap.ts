@@ -89,22 +89,22 @@ async function assertActivationReceiptBindings(
   releaseDigest: string,
   now: string,
 ): Promise<void> {
-  const requiredBindings: Array<readonly [string | null, string]> = [
-    [activation.operatorAuthorizationReceiptId, "OPERATOR_AUTHORIZATION"],
-    [activation.entityReceiptId, "ENTITY"],
-    [activation.legalReceiptId, "LEGAL"],
-    [activation.taxReceiptId, "TAX"],
-    [activation.privacyReceiptId, "PRIVACY"],
-    [activation.deploymentReceiptId, "DEPLOYMENT"],
+  const requiredBindings: Array<readonly [string | null, string, string]> = [
+    [activation.operatorAuthorizationReceiptId, "OPERATOR_AUTHORIZATION", "OPERATOR_AUTHORIZATION"],
+    [activation.entityReceiptId, "ENTITY", "ENTITY_REGISTRATION"],
+    [activation.legalReceiptId, "LEGAL", "PROFESSIONAL_LEGAL_MEMO"],
+    [activation.taxReceiptId, "TAX", "PROFESSIONAL_TAX_MEMO"],
+    [activation.privacyReceiptId, "PRIVACY", "PROFESSIONAL_LEGAL_MEMO"],
+    [activation.deploymentReceiptId, "DEPLOYMENT", "DEPLOYMENT_VERIFICATION"],
   ];
-  for (const [receiptId, purpose] of requiredBindings) {
+  for (const [receiptId, purpose, authorityKind] of requiredBindings) {
     if (!receiptId)
       throw new Error(`activation ${purpose.toLowerCase()} receipt missing`);
     let result;
     try {
       result = await pool.query(
-        "select 1 from activation_receipt_bindings b join authority_receipts a on a.receipt_id=b.receipt_id where b.receipt_id=$1 and b.purpose=$2 and b.release_digest=$3 and b.bound_at<=$4 and b.valid_until>$4 and a.effective_at<=$4 and a.expires_at>$4",
-        [receiptId, purpose, releaseDigest, now],
+        "select 1 from activation_receipt_bindings b join authority_receipts a on a.receipt_id=b.receipt_id where b.receipt_id=$1 and b.purpose=$2 and b.release_digest=$3 and b.bound_at<=$4 and b.valid_until>$4 and a.authority_kind=$5 and a.retrieved_at<=$4 and a.effective_at<=$4 and a.expires_at>$4",
+        [receiptId, purpose, releaseDigest, now, authorityKind],
       );
     } catch {
       throw new Error("activation receipt registry unavailable");

@@ -12,20 +12,7 @@ import {
 import type { ImmutableEvidenceStore } from "./object_store.js";
 import { inTransaction, TransactionalOutboxRepository } from "./database.js";
 import { SensitiveDataCipher } from "./sensitive_data.js";
-
-async function currentAuthority(
-  pool: Pool,
-  receiptId: string,
-): Promise<boolean> {
-  return Boolean(
-    (
-      await pool.query(
-        "select 1 from authority_receipts where receipt_id=$1 and effective_at<=now() and expires_at>now()",
-        [receiptId],
-      )
-    ).rowCount,
-  );
-}
+import { assertCurrentAuthorityReceipt } from "./authority_receipts.js";
 export async function buildProductionDocumentPipeline(
   pool: Pool,
   store: ImmutableEvidenceStore,
@@ -35,8 +22,11 @@ export async function buildProductionDocumentPipeline(
 ): Promise<DocumentIngestionPipeline | null> {
   if (!serialized) return null;
   const config = JSON.parse(serialized) as DocumentExtractorHttpConfig;
-  if (!(await currentAuthority(pool, config.approvalReceiptId)))
-    throw new Error("document extractor approval receipt unavailable");
+  await assertCurrentAuthorityReceipt(
+    pool,
+    config.approvalReceiptId,
+    "DOCUMENT_EXTRACTION_APPROVAL",
+  );
   if (!clamHost || !clamPort || !Number.isInteger(Number(clamPort)))
     throw new Error("ClamAV production configuration incomplete");
   return new DocumentIngestionPipeline(
@@ -52,8 +42,11 @@ export async function buildProductionDocumentVerifier(
 ): Promise<ProductionDocumentVerifier | null> {
   if (!serialized) return null;
   const config = JSON.parse(serialized) as DocumentVerifierHttpConfig;
-  if (!(await currentAuthority(pool, config.approvalReceiptId)))
-    throw new Error("document verifier approval receipt unavailable");
+  await assertCurrentAuthorityReceipt(
+    pool,
+    config.approvalReceiptId,
+    "DOCUMENT_VERIFICATION_APPROVAL",
+  );
   return new ProductionDocumentVerifier(config, store);
 }
 
