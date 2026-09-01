@@ -120,6 +120,63 @@ export function assertProviderEntitlementEvidence(input: {
   }
 }
 
+export function assertEntitlementPromotionWindow(input: {
+  occurredAt: string;
+  processingAt: string;
+  instructionCreatedAt: string;
+  instructionExpiresAt: string;
+  approvalState: string;
+  approvalValidFrom: string;
+  approvalValidUntil: string;
+  authorityEffectiveAt: string;
+  authorityExpiresAt: string;
+}): void {
+  const occurred = Date.parse(input.occurredAt),
+    processing = Date.parse(input.processingAt),
+    created = Date.parse(input.instructionCreatedAt),
+    expires = Date.parse(input.instructionExpiresAt),
+    approvalFrom = Date.parse(input.approvalValidFrom),
+    approvalUntil = Date.parse(input.approvalValidUntil),
+    authorityFrom = Date.parse(input.authorityEffectiveAt),
+    authorityUntil = Date.parse(input.authorityExpiresAt);
+  if (
+    [
+      occurred,
+      processing,
+      created,
+      expires,
+      approvalFrom,
+      approvalUntil,
+      authorityFrom,
+      authorityUntil,
+    ].some((value) => !Number.isFinite(value))
+  )
+    throw new Error("entitlement promotion time evidence invalid");
+  if (occurred < created || occurred > processing + 5 * 60_000)
+    throw new Error("provider entitlement event time invalid");
+  if (occurred >= expires || processing >= expires)
+    throw new Error("settlement instruction expired before entitlement promotion");
+  if (
+    input.approvalState !== "APPROVED" ||
+    approvalFrom > processing ||
+    approvalUntil <= processing ||
+    authorityFrom > processing ||
+    authorityUntil <= processing
+  )
+    throw new Error("provider approval not current at entitlement promotion");
+}
+
+function sameProviderPartyMappings(
+  left: ProviderPartyReferences,
+  right: ProviderPartyReferences,
+): boolean {
+  return (
+    left.mappingIds.buyer === right.mappingIds.buyer &&
+    left.mappingIds.supplier === right.mappingIds.supplier &&
+    left.mappingIds.sablestone === right.mappingIds.sablestone
+  );
+}
+
 export function buildProductionInboxHandlers(input: {
   pool: Pool;
   store: ImmutableEvidenceStore;
@@ -530,14 +587,16 @@ async function processSettlementEvent(
     throw new Error("brokerage disbursement evidence mismatch");
   let internalType = mappedType,
     securityEvidenceSha256 = String(event.payload_digest),
-    platformAllocationVerified = false;
+    platformAllocationVerified = false,
+    verifiedParties: ProviderPartyReferences | null = null;
   if (adapter.provider === "CASHFREE_EASY_SPLIT" && mappedType === "FUNDED") {
     if (!providerParties)
       throw new Error("provider party resolver unavailable");
     const parties = await providerParties.resolveAndBind(
       instruction,
-      occurredAt,
+      new Date().toISOString(),
     );
+    verifiedParties = parties;
     const split = await adapter.applyCashfreeCapturedSplit(
       {
         instructionId: instruction.id,
@@ -575,8 +634,9 @@ async function processSettlementEvent(
       throw new Error("provider party resolver unavailable");
     const parties = await providerParties.resolveAndBind(
       instruction,
-      occurredAt,
+      new Date().toISOString(),
     );
+    verifiedParties = parties;
     if (!config.webhookPaymentReferencePath)
       throw new Error("Razorpay captured payment reference path missing");
     const paymentReference = text(
@@ -621,14 +681,19 @@ async function processSettlementEvent(
   if (internalType === "ENTITLEMENT_SECURED" && !platformAllocationVerified) {
     if (!providerParties)
       throw new Error("provider party resolver unavailable");
+    const parties = await providerParties.resolveAndBind(
+      instruction,
+      new Date().toISOString(),
+    );
     assertProviderEntitlementEvidence({
       provider: adapter.provider,
       decoded,
       config,
-      parties: await providerParties.resolveAndBind(instruction, occurredAt),
+      parties,
       supplierEntitlement: String(instruction.supplier_entitlement),
       sablestoneEntitlement: String(instruction.sablestone_entitlement),
     });
+    verifiedParties = parties;
     platformAllocationVerified = true;
   }
   await inTransaction(pool, async (client) => {
@@ -652,8 +717,57 @@ async function processSettlementEvent(
     if (!inserted.rows[0]) return;
     const outbox = new TransactionalOutboxRepository(pool);
     if (internalType === "ENTITLEMENT_SECURED") {
-      if (!platformAllocationVerified)
+      if (!platformAllocationVerified || !verifiedParties || !providerParties)
         throw new Error("settlement beneficiary evidence mismatch");
+      const currentInstruction = (
+          await client.query(
+            "select * from settlement_instructions where id=$1 for update",
+            [instruction.id],
+          )
+        ).rows[0],
+        approval = (
+          await client.query(
+            "select pa.state,pa.valid_from,pa.valid_until,ar.effective_at authority_effective_at,ar.expires_at authority_expires_at,now() transaction_now from provider_approvals pa join authority_receipts ar on ar.receipt_id=pa.written_approval_receipt_id where pa.id=$1 and pa.provider=$2 and pa.environment='PRODUCTION' and ar.authority_kind='PROVIDER_WRITTEN_APPROVAL'",
+            [instruction.provider_approval_id, adapter.provider],
+          )
+        ).rows[0];
+      if (!currentInstruction || !approval)
+        throw new Error("current settlement instruction or provider approval missing");
+      const currentParties = await providerParties.resolveBoundCurrent(
+        client,
+        currentInstruction,
+        new Date(approval.transaction_now).toISOString(),
+      );
+      if (!sameProviderPartyMappings(verifiedParties, currentParties))
+        throw new Error("provider party mapping changed before fee lock");
+      assertEntitlementPromotionWindow({
+        occurredAt,
+        processingAt: new Date(approval.transaction_now).toISOString(),
+        instructionCreatedAt: new Date(currentInstruction.created_at).toISOString(),
+        instructionExpiresAt: new Date(currentInstruction.expires_at).toISOString(),
+        approvalState: String(approval.state),
+        approvalValidFrom: new Date(approval.valid_from).toISOString(),
+        approvalValidUntil: new Date(approval.valid_until).toISOString(),
+        authorityEffectiveAt: new Date(
+          approval.authority_effective_at,
+        ).toISOString(),
+        authorityExpiresAt: new Date(
+          approval.authority_expires_at,
+        ).toISOString(),
+      });
+      if (
+        !["CASHFREE_EASY_SPLIT", "RAZORPAY_ROUTE"].includes(adapter.provider)
+      )
+        assertProviderEntitlementEvidence({
+          provider: adapter.provider,
+          decoded,
+          config,
+          parties: currentParties,
+          supplierEntitlement: String(currentInstruction.supplier_entitlement),
+          sablestoneEntitlement: String(
+            currentInstruction.sablestone_entitlement,
+          ),
+        });
       const acceptances = (
           await client.query(
             "select role,instruction_digest from settlement_instruction_acceptances where instruction_id=$1",

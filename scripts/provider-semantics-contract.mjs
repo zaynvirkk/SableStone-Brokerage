@@ -2,6 +2,7 @@ import { createHash, createHmac } from "node:crypto";
 import {
   ProductionSettlementHttpAdapter,
   assertCashfreeSplitVerification,
+  assertEntitlementPromotionWindow,
   assertProviderEntitlementEvidence,
   cashfreeOrderRequest,
   cashfreeSplitRequest,
@@ -382,6 +383,34 @@ for (const changed of [
 }
 if (beneficiaryEvidenceRejected !== 3)
   throw new Error("provider beneficiary/allocation mismatch survived");
+const promotionWindow = {
+  occurredAt: "2026-09-01T10:00:00.000Z",
+  processingAt: "2026-09-01T10:01:00.000Z",
+  instructionCreatedAt: "2026-09-01T09:00:00.000Z",
+  instructionExpiresAt: "2026-09-02T09:00:00.000Z",
+  approvalState: "APPROVED",
+  approvalValidFrom: "2026-08-01T00:00:00.000Z",
+  approvalValidUntil: "2026-12-01T00:00:00.000Z",
+  authorityEffectiveAt: "2026-08-01T00:00:00.000Z",
+  authorityExpiresAt: "2026-12-01T00:00:00.000Z",
+};
+assertEntitlementPromotionWindow(promotionWindow);
+let promotionWindowRejected = 0;
+for (const changed of [
+  { occurredAt: "2026-09-01T10:07:00.000Z" },
+  { processingAt: "2026-09-02T09:00:00.000Z" },
+  { approvalState: "REVOKED" },
+  { approvalValidUntil: "2026-09-01T10:01:00.000Z" },
+  { authorityExpiresAt: "2026-09-01T10:01:00.000Z" },
+]) {
+  try {
+    assertEntitlementPromotionWindow({ ...promotionWindow, ...changed });
+  } catch {
+    promotionWindowRejected++;
+  }
+}
+if (promotionWindowRejected !== 5)
+  throw new Error("stale/future entitlement promotion survived");
 console.log(
-  "PROVIDER_SEMANTICS_OK escrow=separate_broker_item escrow_webhook=fetch_confirmed provider_beneficiaries=verified_accounts provider_allocations=exact cashfree=order_capture_then_supplier_split cashfree_reconciliation=exact cashfree_commission=merchant_retained razorpay=order_capture_then_integer_paise_transfer webhooks=provider_specific instruction_created=not_fee_locked",
+  "PROVIDER_SEMANTICS_OK escrow=separate_broker_item escrow_webhook=fetch_confirmed provider_beneficiaries=verified_accounts provider_allocations=exact promotion=current_atomic cashfree=order_capture_then_supplier_split cashfree_reconciliation=exact cashfree_commission=merchant_retained razorpay=order_capture_then_integer_paise_transfer webhooks=provider_specific instruction_created=not_fee_locked",
 );

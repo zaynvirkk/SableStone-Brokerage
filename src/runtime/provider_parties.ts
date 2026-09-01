@@ -117,7 +117,7 @@ export class ProviderPartyAccountRegistry {
         throw new Error("provider party organization role mismatch");
       const approval = (
         await client.query(
-          "select pa.id from provider_approvals pa join authority_receipts ar on ar.receipt_id=pa.written_approval_receipt_id where pa.provider=$1 and pa.environment='PRODUCTION' and pa.state='APPROVED' and pa.valid_from<=$2 and pa.valid_until>$2 and ar.effective_at<=$2 and ar.expires_at>$2 order by pa.valid_from desc limit 1",
+          "select pa.id from provider_approvals pa join authority_receipts ar on ar.receipt_id=pa.written_approval_receipt_id where pa.provider=$1 and pa.environment='PRODUCTION' and pa.state='APPROVED' and pa.valid_from<=$2 and pa.valid_until>$2 and ar.authority_kind='PROVIDER_WRITTEN_APPROVAL' and ar.effective_at<=$2 and ar.expires_at>$2 order by pa.valid_from desc limit 1",
           [input.provider, input.registeredAt],
         )
       ).rows[0];
@@ -300,6 +300,23 @@ export class ProviderPartyReferenceResolver {
     } finally {
       client.release();
     }
+  }
+
+  /** Revalidates the exact accounts already bound to an instruction inside the
+   * caller's transaction. This closes the revocation/expiry race between an
+   * external provider call and entitlement promotion. */
+  async resolveBoundCurrent(
+    client: PoolClient,
+    instruction: QueryResultRow,
+    now: string,
+  ): Promise<ProviderPartyReferences> {
+    if (
+      !instruction.provider_buyer_party_account_id ||
+      !instruction.provider_supplier_party_account_id ||
+      !instruction.provider_sablestone_party_account_id
+    )
+      throw new Error("settlement provider parties are not fully bound");
+    return this.resolveWithClient(client, instruction, now);
   }
 
   private async resolveWithClient(
