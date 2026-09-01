@@ -4,6 +4,7 @@ import { createOutboundMime } from "../connectors/communication_brain.js";
 import type { ImmutableEvidenceStore } from "./object_store.js";
 import type { SensitiveDataCipher } from "./sensitive_data.js";
 import { inTransaction } from "./database.js";
+import { resolveCurrentAcquisitionOutreachPolicy } from "./outreach_policy.js";
 
 /** Creates the first message only after verified contact, current risk PASS and
  * a lawful acquisition basis. Buyer outreach additionally requires a current
@@ -31,12 +32,17 @@ export class AcquisitionOutreachDispatcher {
       try {
         const facts = (
           await this.pool.query(
-            "select o.organization_type,c.id contact_id,c.email_ciphertext,c.email_lookup_hash,c.lawful_basis_policy_version,p.target_product_family,p.application from organizations o join lateral(select * from contacts c where c.organization_id=o.id and c.verification='VERIFIED' and not exists(select 1 from global_suppressions s where s.email_lookup_hash=c.email_lookup_hash) order by c.verified_at desc limit 1)c on true join lateral(select state from risk_decisions r where r.organization_id=o.id order by r.decided_at desc limit 1)risk on risk.state='PASS' left join acquisition_profiles p on p.organization_id=o.id and p.classification_state in('SOURCE_STATED','VERIFIED') and p.valid_until>now() where o.id=$1",
+            "select o.organization_type,c.id contact_id,c.normalized_email_ciphertext email_ciphertext,c.email_lookup_hash,p.target_product_family,p.application from organizations o join lateral(select * from contacts c where c.organization_id=o.id and c.verification='VERIFIED' and not exists(select 1 from global_suppressions s where s.email_lookup_hash=c.email_lookup_hash) order by c.verified_at desc limit 1)c on true join lateral(select state from risk_decisions r where r.organization_id=o.id order by r.decided_at desc limit 1)risk on risk.state='PASS' left join acquisition_profiles p on p.organization_id=o.id and p.classification_state in('SOURCE_STATED','VERIFIED') and p.valid_until>now() where o.id=$1",
             [job.organization_id],
           )
         ).rows[0];
         if (!facts)
           throw new Error("verified contact or risk PASS unavailable");
+        const outreachPolicyVersion =
+          await resolveCurrentAcquisitionOutreachPolicy(
+            this.pool,
+            facts.contact_id,
+          );
         let subject: string, body: string;
         if (facts.organization_type === "SUPPLIER") {
           subject = "Current polymer availability request";
@@ -93,7 +99,7 @@ export class AcquisitionOutreachDispatcher {
             [communicationId, job.organization_id, facts.contact_id],
           );
           await client.query(
-            "insert into outbound_email_jobs(id,idempotency_key,source_communication_id,thread_id,recipient_ciphertext,recipient_lookup_hash,subject,message_id,mime_object_key,mime_sha256,state) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'PENDING')",
+            "insert into outbound_email_jobs(id,idempotency_key,source_communication_id,thread_id,recipient_ciphertext,recipient_lookup_hash,subject,message_id,mime_object_key,mime_sha256,state,message_class,source_contact_id,outreach_policy_version) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'PENDING','ACQUISITION',$11,$12)",
             [
               randomUUID(),
               `acquisition:${job.id}`,
@@ -105,6 +111,8 @@ export class AcquisitionOutreachDispatcher {
               messageId,
               receipt.objectKey,
               receipt.sha256,
+              facts.contact_id,
+              outreachPolicyVersion,
             ],
           );
           await client.query(

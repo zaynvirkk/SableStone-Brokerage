@@ -20,3 +20,10 @@ The operator must also preserve entity incorporation, PAN, GST, current-account,
 beneficial-owner/KYC, e-sign and domain/control receipts. Each artifact requires
 issuer, retrieval time, scope, expiry/review time, checksum and preserved body.
 
+Before `OUTREACH` activation, counsel's exact outreach conclusion must be
+preserved as an `OUTREACH_POLICY_APPROVAL` authority receipt and materialized
+as one immutable `outreach_policies` row. The structured row must name the
+exact policy version, allowed jurisdictions, allowed contact sources, allowed
+supplier/buyer roles and effective/expiry times. A general privacy memo,
+provider approval or policy-version string in connector configuration does not
+authorize a first-contact message.

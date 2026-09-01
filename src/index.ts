@@ -12,6 +12,7 @@ export * from "./runtime/redis.js";
 export * from "./runtime/activation.js";
 export * from "./runtime/authority_receipts.js";
 export * from "./runtime/production_credentials.js";
+export * from "./runtime/outreach_policy.js";
 export * from "./runtime/temporal.js";
 export * from "./runtime/bootstrap.js";
 export * from "./connectors/discovery_http.js";

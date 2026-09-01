@@ -10,6 +10,7 @@ existing release or provider binding where applicable.
 | Reviewed supplier/buyer source                | `DISCOVERY_SOURCE_REVIEW`            |
 | Brave Search provider                         | `SEARCH_PROVIDER_APPROVAL`           |
 | Hunter/contact enrichment                     | `CONTACT_ENRICHMENT_APPROVAL`        |
+| First-contact acquisition policy              | `OUTREACH_POLICY_APPROVAL`           |
 | Evidence-bound commercial language extraction | `COMMERCIAL_EXTRACTION_APPROVAL`     |
 | Document extraction                           | `DOCUMENT_EXTRACTION_APPROVAL`       |
 | Independent document verification             | `DOCUMENT_VERIFICATION_APPROVAL`     |

@@ -36,6 +36,7 @@ def test_every_load_bearing_production_gate_names_its_authority_kind():
         "src/runtime/discovery_service.ts": "DISCOVERY_SOURCE_REVIEW",
         "src/runtime/search.ts": "SEARCH_PROVIDER_APPROVAL",
         "src/runtime/enrichment_jobs.ts": "CONTACT_ENRICHMENT_APPROVAL",
+        "src/runtime/outreach_policy.ts": "OUTREACH_POLICY_APPROVAL",
         "src/connectors/commercial_extraction.ts": "COMMERCIAL_EXTRACTION_APPROVAL",
         "src/runtime/document_jobs.ts": (
             "DOCUMENT_EXTRACTION_APPROVAL",

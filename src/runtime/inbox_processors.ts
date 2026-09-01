@@ -25,6 +25,7 @@ import {
 import { decimal } from "../money.js";
 import { compareDecimalStrings } from "../domain.js";
 import { settlementInstructionAcceptanceDigest } from "./commands.js";
+import { assertCurrentAcquisitionOutreachPolicy } from "./outreach_policy.js";
 
 function path(value: unknown, dotted: string | undefined): unknown {
   return dotted
@@ -155,7 +156,9 @@ export function assertEntitlementPromotionWindow(input: {
   if (occurred < created || occurred > processing + 5 * 60_000)
     throw new Error("provider entitlement event time invalid");
   if (occurred >= expires || processing >= expires)
-    throw new Error("settlement instruction expired before entitlement promotion");
+    throw new Error(
+      "settlement instruction expired before entitlement promotion",
+    );
   if (
     input.approvalState !== "APPROVED" ||
     approvalFrom > processing ||
@@ -732,7 +735,9 @@ async function processSettlementEvent(
           )
         ).rows[0];
       if (!currentInstruction || !approval)
-        throw new Error("current settlement instruction or provider approval missing");
+        throw new Error(
+          "current settlement instruction or provider approval missing",
+        );
       const currentParties = await providerParties.resolveBoundCurrent(
         client,
         currentInstruction,
@@ -743,8 +748,12 @@ async function processSettlementEvent(
       assertEntitlementPromotionWindow({
         occurredAt,
         processingAt: new Date(approval.transaction_now).toISOString(),
-        instructionCreatedAt: new Date(currentInstruction.created_at).toISOString(),
-        instructionExpiresAt: new Date(currentInstruction.expires_at).toISOString(),
+        instructionCreatedAt: new Date(
+          currentInstruction.created_at,
+        ).toISOString(),
+        instructionExpiresAt: new Date(
+          currentInstruction.expires_at,
+        ).toISOString(),
         approvalState: String(approval.state),
         approvalValidFrom: new Date(approval.valid_from).toISOString(),
         approvalValidUntil: new Date(approval.valid_until).toISOString(),
@@ -755,9 +764,7 @@ async function processSettlementEvent(
           approval.authority_expires_at,
         ).toISOString(),
       });
-      if (
-        !["CASHFREE_EASY_SPLIT", "RAZORPAY_ROUTE"].includes(adapter.provider)
-      )
+      if (!["CASHFREE_EASY_SPLIT", "RAZORPAY_ROUTE"].includes(adapter.provider))
         assertProviderEntitlementEvidence({
           provider: adapter.provider,
           decoded,
@@ -899,6 +906,11 @@ export class OutboundGmailDispatcher {
     let sent = 0;
     for (const row of rows) {
       try {
+        if (row.message_class === "ACQUISITION")
+          await assertCurrentAcquisitionOutreachPolicy(this.pool, {
+            version: String(row.outreach_policy_version ?? ""),
+            contactId: String(row.source_contact_id ?? ""),
+          });
         if (
           (
             await this.pool.query(
@@ -976,7 +988,7 @@ export class CommercialNotificationDispatcher {
               : facts.buyer_id,
           contact = (
             await this.pool.query(
-              "select id,email_ciphertext,email_lookup_hash from contacts c where c.organization_id=$1 and c.verification='VERIFIED' and not exists(select 1 from global_suppressions s where s.email_lookup_hash=c.email_lookup_hash) order by c.verified_at desc limit 1",
+              "select id,normalized_email_ciphertext email_ciphertext,email_lookup_hash from contacts c where c.organization_id=$1 and c.verification='VERIFIED' and not exists(select 1 from global_suppressions s where s.email_lookup_hash=c.email_lookup_hash) order by c.verified_at desc limit 1",
               [organizationId],
             )
           ).rows[0];
