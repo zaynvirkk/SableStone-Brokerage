@@ -1,7 +1,11 @@
 import type { ReceiptWriter } from "./discovery_http.js";
 import type { CredentialUseGuard } from "../runtime/production_credentials.js";
 import type { AuthorityUseGuard } from "../runtime/authority_receipts.js";
-import { readBoundedResponseBody } from "../runtime/public_network.js";
+import {
+  createPinnedPublicFetch,
+  readBoundedResponseBody,
+  resolveExternalProviderEndpoint,
+} from "../runtime/public_network.js";
 export type KybOutcome = "VERIFIED" | "FAILED" | "UNKNOWN" | "CONFLICTING";
 export interface KybResult {
   readonly provider: string;
@@ -26,10 +30,12 @@ export class ProductionKybConnector {
   constructor(
     readonly config: KybProviderConfig,
     readonly store: ReceiptWriter,
-    readonly fetcher: typeof fetch = fetch,
+    readonly fetcher: typeof fetch = createPinnedPublicFetch(),
     readonly credentialGuard?: CredentialUseGuard,
     readonly authorityGuard?: AuthorityUseGuard,
-  ) {}
+  ) {
+    resolveExternalProviderEndpoint(config.baseUrl, config.verificationPath);
+  }
   async verify(
     input: {
       organizationName: string;
@@ -49,7 +55,10 @@ export class ProductionKybConnector {
       throw new Error("KYB capability unavailable");
     if (!input.organizationName.trim() || !/^[A-Z]{2}$/.test(input.countryCode))
       throw new Error("KYB input invalid");
-    const url = new URL(this.config.verificationPath, this.config.baseUrl),
+    const url = resolveExternalProviderEndpoint(
+        this.config.baseUrl,
+        this.config.verificationPath,
+      ),
       payload = JSON.stringify(input),
       requestReceipt = await this.store.preserve(
         `kyb/${this.config.provider}/request`,
@@ -118,14 +127,17 @@ export class ConsolidatedScreeningListConnector {
   constructor(
     readonly reviewedEndpoint: string,
     readonly store: ReceiptWriter,
-    readonly fetcher: typeof fetch = fetch,
+    readonly fetcher: typeof fetch = createPinnedPublicFetch(),
   ) {}
   async screen(
     name: string,
     now = new Date().toISOString(),
   ): Promise<CslScreeningResult> {
     const url = new URL(this.reviewedEndpoint);
-    if (url.protocol !== "https:" || !url.hostname.endsWith("trade.gov"))
+    if (
+      url.protocol !== "https:" ||
+      !(url.hostname === "trade.gov" || url.hostname.endsWith(".trade.gov"))
+    )
       throw new Error("CSL endpoint unreviewed");
     url.searchParams.set("name", name);
     const response = await this.fetcher(url, {

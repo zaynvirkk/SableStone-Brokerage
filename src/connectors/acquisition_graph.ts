@@ -10,7 +10,10 @@ import type { ContactRecord } from "../contacts.js";
 import type { ReceiptWriter } from "./discovery_http.js";
 import type { CredentialUseGuard } from "../runtime/production_credentials.js";
 import type { AuthorityUseGuard } from "../runtime/authority_receipts.js";
-import { readBoundedResponseBody } from "../runtime/public_network.js";
+import {
+  createPinnedPublicFetch,
+  readBoundedResponseBody,
+} from "../runtime/public_network.js";
 export type PolymerSignal =
   | "RPP"
   | "RHDPE"
@@ -153,7 +156,7 @@ export class BraveSearchConnector {
   constructor(
     readonly approval: SearchApproval,
     readonly store: ReceiptWriter,
-    readonly fetcher: typeof fetch = fetch,
+    readonly fetcher: typeof fetch = createPinnedPublicFetch(),
     readonly credentialGuard?: CredentialUseGuard,
     readonly authorityGuard?: AuthorityUseGuard,
   ) {}

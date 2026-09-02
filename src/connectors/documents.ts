@@ -5,7 +5,11 @@ import type { ReceiptWriter } from "./discovery_http.js";
 import type { CredentialUseGuard } from "../runtime/production_credentials.js";
 import type { AuthorityUseGuard } from "../runtime/authority_receipts.js";
 import { simpleParser } from "mailparser";
-import { readBoundedResponseBody } from "../runtime/public_network.js";
+import {
+  createPinnedPublicFetch,
+  readBoundedResponseBody,
+  resolveExternalProviderEndpoint,
+} from "../runtime/public_network.js";
 export type DocumentKind =
   | "COA"
   | "TDS"
@@ -170,7 +174,7 @@ export class ProductionDocumentHttpExtractor implements StructuredDocumentExtrac
   constructor(
     readonly config: DocumentExtractorHttpConfig,
     readonly store: ReceiptWriter,
-    readonly fetcher: typeof fetch = fetch,
+    readonly fetcher: typeof fetch = createPinnedPublicFetch(),
     readonly credentialGuard?: CredentialUseGuard,
     readonly authorityGuard?: AuthorityUseGuard,
   ) {
@@ -181,6 +185,7 @@ export class ProductionDocumentHttpExtractor implements StructuredDocumentExtrac
       Date.parse(config.validUntil) <= Date.now()
     )
       throw new Error("document extractor unavailable");
+    resolveExternalProviderEndpoint(config.baseUrl, config.extractionPath);
   }
   async extract(input: {
     bytes: Uint8Array;
@@ -189,7 +194,10 @@ export class ProductionDocumentHttpExtractor implements StructuredDocumentExtrac
   }): Promise<DocumentExtraction> {
     await this.authorityGuard?.assertCurrent();
     await this.credentialGuard?.assertCurrent();
-    const url = new URL(this.config.extractionPath, this.config.baseUrl),
+    const url = resolveExternalProviderEndpoint(
+        this.config.baseUrl,
+        this.config.extractionPath,
+      ),
       payload = JSON.stringify({
         contentBase64: Buffer.from(input.bytes).toString("base64"),
         mediaType: input.mediaType,
@@ -323,7 +331,7 @@ export class ProductionDocumentVerifier {
   constructor(
     readonly config: DocumentVerifierHttpConfig,
     readonly store: ReceiptWriter,
-    readonly fetcher: typeof fetch = fetch,
+    readonly fetcher: typeof fetch = createPinnedPublicFetch(),
     readonly credentialGuard?: CredentialUseGuard,
     readonly authorityGuard?: AuthorityUseGuard,
   ) {
@@ -335,6 +343,7 @@ export class ProductionDocumentVerifier {
       Date.parse(config.validUntil) <= Date.now()
     )
       throw new Error("document verifier unavailable");
+    resolveExternalProviderEndpoint(config.baseUrl, config.verificationPath);
   }
   async verify(input: {
     bytes: Uint8Array;
@@ -346,7 +355,10 @@ export class ProductionDocumentVerifier {
     await this.credentialGuard?.assertCurrent();
     if (Date.parse(this.config.validUntil) <= Date.now())
       throw new Error("document verifier approval expired");
-    const url = new URL(this.config.verificationPath, this.config.baseUrl),
+    const url = resolveExternalProviderEndpoint(
+        this.config.baseUrl,
+        this.config.verificationPath,
+      ),
       payload = JSON.stringify({
         documentId: input.documentId,
         sha256: input.sha256,

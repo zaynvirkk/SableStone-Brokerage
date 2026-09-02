@@ -14,7 +14,11 @@ import {
   DatabaseAuthorityUseGuard,
   type AuthorityUseGuard,
 } from "../runtime/authority_receipts.js";
-import { readBoundedResponseBody } from "../runtime/public_network.js";
+import {
+  assertPublicHttpsDomainUrl,
+  createPinnedPublicFetch,
+  readBoundedResponseBody,
+} from "../runtime/public_network.js";
 
 type Field = {
   value: string | null;
@@ -45,7 +49,7 @@ export async function buildCommercialExtractor(
     "COMMERCIAL_EXTRACTION_APPROVAL",
   );
   const credentialInput = {
-    provider: new URL(config.endpoint).hostname,
+    provider: assertPublicHttpsDomainUrl(config.endpoint).hostname,
     capability: "COMMERCIAL_EXTRACTION_API",
     environment: "PRODUCTION",
     credentialParts: [config.authorizationHeader],
@@ -54,7 +58,7 @@ export async function buildCommercialExtractor(
   return new EvidenceBoundCommercialExtractor(
     config,
     store,
-    fetch,
+    createPinnedPublicFetch(),
     new DatabaseCredentialUseGuard(pool, credentialInput),
     new DatabaseAuthorityUseGuard(
       pool,
@@ -71,7 +75,7 @@ export class EvidenceBoundCommercialExtractor {
   constructor(
     readonly config: CommercialExtractionConfig,
     readonly store: ReceiptWriter,
-    readonly fetcher: typeof fetch = fetch,
+    readonly fetcher: typeof fetch = createPinnedPublicFetch(),
     readonly credentialGuard?: CredentialUseGuard,
     readonly authorityGuard?: AuthorityUseGuard,
   ) {
@@ -81,6 +85,7 @@ export class EvidenceBoundCommercialExtractor {
       !config.authorizationHeader
     )
       throw new Error("commercial extraction configuration invalid");
+    assertPublicHttpsDomainUrl(config.endpoint);
   }
   async extract(
     raw: Uint8Array,

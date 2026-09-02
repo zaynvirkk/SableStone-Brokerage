@@ -13,6 +13,7 @@ import {
   assertCurrentCredentialBinding,
   DatabaseCredentialUseGuard,
 } from "./production_credentials.js";
+import { createPinnedPublicFetch } from "./public_network.js";
 interface EnrichmentRuntimeConfig extends EnrichmentApproval {
   readonly approvalReceiptId: string;
 }
@@ -38,7 +39,7 @@ export async function buildHunterConnector(
   return new HunterContactConnector(
     config,
     store,
-    fetch,
+    createPinnedPublicFetch(),
     new DatabaseCredentialUseGuard(pool, credentialInput),
     new DatabaseAuthorityUseGuard(
       pool,

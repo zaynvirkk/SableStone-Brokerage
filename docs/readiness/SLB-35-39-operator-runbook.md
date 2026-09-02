@@ -12,6 +12,10 @@ connection time; literal IP, private/link-local/multicast/documentation ranges,
 mixed public/private answers and DNS family mismatches are deployment failures.
 Production HTTP responses are streamed through connector-specific byte limits
 before preservation or parsing.
+Every configurable external provider uses the same connection-time public DNS
+pin, rejects automatic redirects and URL credentials, and accepts only
+root-relative paths that resolve to the approved base origin. A production
+factory must never replace that client with global `fetch`.
 
 ## Populate without contact
 

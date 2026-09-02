@@ -1,7 +1,10 @@
 import {
   assertPublicNetworkAddress,
+  assertPublicHttpsDomainUrl,
+  createPinnedPublicFetch,
   createPinnedPublicLookup,
   readBoundedResponseBody,
+  resolveExternalProviderEndpoint,
   ReviewedHttpDiscoveryConnector,
   StructuredRegistryParser,
 } from "../dist/index.js";
@@ -104,6 +107,66 @@ await connector.harvest("https://127.0.0.1/internal").then(
 );
 if (literalReachedNetwork) throw new Error("literal target reached network");
 
+let invalidUrlResolutions = 0;
+const pinnedFetch = createPinnedPublicFetch(async () => {
+  invalidUrlResolutions += 1;
+  return [{ address: "8.8.8.8", family: 4 }];
+});
+for (const target of [
+  "http://provider.example/api",
+  "https://127.0.0.1/api",
+  "https://[::1]/api",
+]) {
+  let rejected = false;
+  try {
+    await pinnedFetch(target);
+  } catch {
+    rejected = true;
+  }
+  if (!rejected) throw new Error(`unsafe provider URL accepted:${target}`);
+}
+if (invalidUrlResolutions !== 0)
+  throw new Error("unsafe provider URL reached DNS or network");
+
+if (
+  assertPublicHttpsDomainUrl("https://provider.example/api").hostname !==
+  "provider.example"
+)
+  throw new Error("public provider domain rejected");
+if (
+  resolveExternalProviderEndpoint(
+    "https://provider.example/base",
+    "/v1/check",
+  ).toString() !== "https://provider.example/v1/check"
+)
+  throw new Error("same-origin provider path resolution failed");
+for (const operation of [
+  () => assertPublicHttpsDomainUrl("https://secret@provider.example/api"),
+  () =>
+    resolveExternalProviderEndpoint(
+      "https://provider.example/base",
+      "https://attacker.example/steal",
+    ),
+  () =>
+    resolveExternalProviderEndpoint(
+      "https://provider.example/base",
+      "//attacker.example/steal",
+    ),
+  () =>
+    resolveExternalProviderEndpoint(
+      "https://provider.example/base",
+      "relative/path",
+    ),
+]) {
+  let rejected = false;
+  try {
+    operation();
+  } catch {
+    rejected = true;
+  }
+  if (!rejected) throw new Error("provider origin escape accepted");
+}
+
 const exact = await readBoundedResponseBody(
   new Response("12345", { headers: { "content-length": "5" } }),
   5,
@@ -125,5 +188,5 @@ for (const response of [
 }
 
 console.log(
-  `DISCOVERY_NETWORK_OK public=accepted private_blocked=${blocked.length} mixed_rebinding=blocked family_mismatch=blocked empty_dns=blocked literal_ip=blocked pinned=true response_stream=bounded`,
+  `DISCOVERY_NETWORK_OK public=accepted private_blocked=${blocked.length} mixed_rebinding=blocked family_mismatch=blocked empty_dns=blocked literal_ip=blocked http=blocked redirects=error_default origin_escape=blocked url_credentials=blocked pinned=true response_stream=bounded`,
 );

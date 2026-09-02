@@ -16,6 +16,7 @@ import {
   assertCurrentCredentialBinding,
   DatabaseCredentialUseGuard,
 } from "./production_credentials.js";
+import { createPinnedPublicFetch } from "./public_network.js";
 
 export async function buildEconomicQuoteConnectors(
   pool: Pool,
@@ -44,7 +45,7 @@ export async function buildEconomicQuoteConnectors(
       new ProductionEconomicQuoteConnector(
         config,
         store,
-        fetch,
+        createPinnedPublicFetch(),
         new DatabaseCredentialUseGuard(pool, credentialInput),
         new DatabaseAuthorityUseGuard(
           pool,

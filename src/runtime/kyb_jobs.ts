@@ -13,6 +13,7 @@ import {
   assertCurrentCredentialBinding,
   DatabaseCredentialUseGuard,
 } from "./production_credentials.js";
+import { createPinnedPublicFetch } from "./public_network.js";
 interface KybRuntimeConfig extends KybProviderConfig {
   readonly authorityReceiptId: string;
   readonly cslEndpoint: string;
@@ -45,7 +46,7 @@ export async function buildProductionKyb(
     kyb: new ProductionKybConnector(
       config,
       store,
-      fetch,
+      createPinnedPublicFetch(),
       new DatabaseCredentialUseGuard(pool, credentialInput),
       new DatabaseAuthorityUseGuard(
         pool,

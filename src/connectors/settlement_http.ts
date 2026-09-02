@@ -18,7 +18,11 @@ import {
 import type { ReceiptWriter } from "./discovery_http.js";
 import type { CredentialUseGuard } from "../runtime/production_credentials.js";
 import type { AuthorityUseGuard } from "../runtime/authority_receipts.js";
-import { readBoundedResponseBody } from "../runtime/public_network.js";
+import {
+  createPinnedPublicFetch,
+  readBoundedResponseBody,
+  resolveExternalProviderEndpoint,
+} from "../runtime/public_network.js";
 
 type InternalEvent =
   | "ENTITLEMENT_SECURED"
@@ -68,7 +72,7 @@ export class ProductionSettlementHttpAdapter implements SettlementAdapter {
     readonly config: ProviderHttpConfig,
     readonly buildRequest: SettlementRequestBuilder,
     readonly store: ReceiptWriter,
-    readonly fetcher: typeof fetch = fetch,
+    readonly fetcher: typeof fetch = createPinnedPublicFetch(),
     readonly apiCredentialGuard?: CredentialUseGuard,
     readonly webhookCredentialGuard?: CredentialUseGuard,
     readonly authorityGuard?: AuthorityUseGuard,
@@ -79,6 +83,7 @@ export class ProductionSettlementHttpAdapter implements SettlementAdapter {
       provider !== config.provider
     )
       throw new Error("settlement provider configuration mismatch");
+    resolveExternalProviderEndpoint(config.baseUrl, config.createPath);
   }
   capability(
     required: readonly SettlementCapability[],
@@ -102,7 +107,10 @@ export class ProductionSettlementHttpAdapter implements SettlementAdapter {
     assertSettlementInstruction(draft, this.approval, now);
     if (draft.environment !== "PRODUCTION")
       throw new Error("production adapter requires production draft");
-    const url = new URL(this.config.createPath, this.config.baseUrl),
+    const url = resolveExternalProviderEndpoint(
+        this.config.baseUrl,
+        this.config.createPath,
+      ),
       payload = JSON.stringify(this.buildRequest(draft)),
       requestReceipt = await this.store.preserve(
         `settlement/${this.provider}/request`,
@@ -178,9 +186,9 @@ export class ProductionSettlementHttpAdapter implements SettlementAdapter {
         !String(reference).trim()
       )
         throw new Error("Escrow webhook reference missing");
-      const url = new URL(
-          `/2017-09-01/transaction/${encodeURIComponent(String(reference))}`,
+      const url = resolveExternalProviderEndpoint(
           this.config.baseUrl,
+          `/2017-09-01/transaction/${encodeURIComponent(String(reference))}`,
         ),
         response = await this.fetcher(url, {
           headers: {
@@ -308,12 +316,12 @@ export class ProductionSettlementHttpAdapter implements SettlementAdapter {
       !this.config.cashfreeSplitVerificationPathTemplate?.includes("{order_id}")
     )
       throw new Error("Cashfree split verification path unavailable");
-    const url = new URL(
+    const url = resolveExternalProviderEndpoint(
+        this.config.baseUrl,
         this.config.cashfreeSplitPathTemplate.replace(
           "{order_id}",
           encodeURIComponent(draft.instructionId),
         ),
-        this.config.baseUrl,
       ),
       payload = JSON.stringify(cashfreeSplitRequest(draft)),
       requestReceipt = await this.store.preserve(
@@ -354,12 +362,12 @@ export class ProductionSettlementHttpAdapter implements SettlementAdapter {
       throw new Error(
         `Cashfree split acknowledgement incomplete; response=${receipt.objectKey}`,
       );
-    const verificationUrl = new URL(
+    const verificationUrl = resolveExternalProviderEndpoint(
+        this.config.baseUrl,
         this.config.cashfreeSplitVerificationPathTemplate.replace(
           "{order_id}",
           encodeURIComponent(draft.instructionId),
         ),
-        this.config.baseUrl,
       ),
       verificationResponse = await this.fetcher(verificationUrl, {
         headers: {
@@ -404,12 +412,12 @@ export class ProductionSettlementHttpAdapter implements SettlementAdapter {
       throw new Error("Razorpay transfer unavailable for provider");
     if (!this.config.razorpayTransferPathTemplate?.includes("{payment_id}"))
       throw new Error("Razorpay transfer path unavailable");
-    const url = new URL(
+    const url = resolveExternalProviderEndpoint(
+        this.config.baseUrl,
         this.config.razorpayTransferPathTemplate.replace(
           "{payment_id}",
           encodeURIComponent(paymentReference),
         ),
-        this.config.baseUrl,
       ),
       payload = JSON.stringify(razorpayRouteRequest(draft)),
       requestReceipt = await this.store.preserve(

@@ -3,7 +3,11 @@ import { decimal, type DecimalString } from "../money.js";
 import type { ReceiptWriter } from "./discovery_http.js";
 import type { CredentialUseGuard } from "../runtime/production_credentials.js";
 import type { AuthorityUseGuard } from "../runtime/authority_receipts.js";
-import { readBoundedResponseBody } from "../runtime/public_network.js";
+import {
+  createPinnedPublicFetch,
+  readBoundedResponseBody,
+  resolveExternalProviderEndpoint,
+} from "../runtime/public_network.js";
 
 export type QuotedCostKind = Exclude<CostKind, "SUPPLIER_NET">;
 export interface EconomicQuoteHttpConfig {
@@ -30,7 +34,7 @@ export class ProductionEconomicQuoteConnector {
   constructor(
     readonly config: EconomicQuoteHttpConfig,
     readonly store: ReceiptWriter,
-    readonly fetcher: typeof fetch = fetch,
+    readonly fetcher: typeof fetch = createPinnedPublicFetch(),
     readonly credentialGuard?: CredentialUseGuard,
     readonly authorityGuard?: AuthorityUseGuard,
   ) {
@@ -43,6 +47,7 @@ export class ProductionEconomicQuoteConnector {
       Date.parse(config.validUntil) <= Date.now()
     )
       throw new Error("economic quote provider unavailable");
+    resolveExternalProviderEndpoint(config.baseUrl, config.quotePath);
   }
   async quote(input: {
     matchId: string;
@@ -60,7 +65,10 @@ export class ProductionEconomicQuoteConnector {
       Date.parse(this.config.validUntil) <= Date.now()
     )
       throw new Error("economic quote capability unavailable");
-    const url = new URL(this.config.quotePath, this.config.baseUrl),
+    const url = resolveExternalProviderEndpoint(
+        this.config.baseUrl,
+        this.config.quotePath,
+      ),
       payload = JSON.stringify(input),
       request = await this.store.preserve(
         `economics/${this.config.provider}/request`,

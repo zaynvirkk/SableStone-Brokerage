@@ -18,6 +18,7 @@ import {
   assertCurrentCredentialBinding,
   DatabaseCredentialUseGuard,
 } from "./production_credentials.js";
+import { createPinnedPublicFetch } from "./public_network.js";
 export async function buildProductionDocumentPipeline(
   pool: Pool,
   store: ImmutableEvidenceStore,
@@ -47,7 +48,7 @@ export async function buildProductionDocumentPipeline(
     new ProductionDocumentHttpExtractor(
       config,
       store,
-      fetch,
+      createPinnedPublicFetch(),
       new DatabaseCredentialUseGuard(pool, credentialInput),
       new DatabaseAuthorityUseGuard(
         pool,
@@ -79,7 +80,7 @@ export async function buildProductionDocumentVerifier(
   return new ProductionDocumentVerifier(
     config,
     store,
-    fetch,
+    createPinnedPublicFetch(),
     new DatabaseCredentialUseGuard(pool, credentialInput),
     new DatabaseAuthorityUseGuard(
       pool,

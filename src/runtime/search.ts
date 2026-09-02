@@ -12,6 +12,7 @@ import {
   assertCurrentCredentialBinding,
   DatabaseCredentialUseGuard,
 } from "./production_credentials.js";
+import { createPinnedPublicFetch } from "./public_network.js";
 
 interface BraveRuntimeConfig extends SearchApproval {
   readonly approvalReceiptId: string;
@@ -41,7 +42,7 @@ export async function buildBraveSearchConnector(
   return new BraveSearchConnector(
     config,
     store,
-    fetch,
+    createPinnedPublicFetch(),
     new DatabaseCredentialUseGuard(pool, credentialInput),
     new DatabaseAuthorityUseGuard(
       pool,

@@ -17,6 +17,7 @@ import {
   DatabaseCredentialUseGuard,
 } from "./production_credentials.js";
 import { DatabaseProviderApprovalUseGuard } from "./authority_receipts.js";
+import { createPinnedPublicFetch } from "./public_network.js";
 
 interface ProviderEnvironmentConfig extends ProviderHttpConfig {
   readonly credentialSecretReference: string;
@@ -162,7 +163,7 @@ export async function buildProductionSettlementAdapters(
         definition,
         builder,
         store,
-        fetch,
+        createPinnedPublicFetch(),
         apiGuard,
         webhookGuard,
         new DatabaseProviderApprovalUseGuard(

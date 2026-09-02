@@ -80,6 +80,32 @@ export function assertPublicNetworkAddress(address: string): void {
   throw new Error("discovery DNS returned invalid address");
 }
 
+export function assertPublicHttpsDomainUrl(value: string): URL {
+  const url = new URL(value),
+    hostname = url.hostname.replace(/^\[|\]$/g, "");
+  if (
+    url.protocol !== "https:" ||
+    isIP(hostname) !== 0 ||
+    Boolean(url.username) ||
+    Boolean(url.password)
+  )
+    throw new Error("external provider URL must use a public HTTPS domain");
+  return url;
+}
+
+export function resolveExternalProviderEndpoint(
+  baseUrl: string,
+  path: string,
+): URL {
+  const base = assertPublicHttpsDomainUrl(baseUrl);
+  if (!path.startsWith("/") || path.startsWith("//"))
+    throw new Error("provider endpoint path must be root-relative");
+  const endpoint = assertPublicHttpsDomainUrl(new URL(path, base).toString());
+  if (endpoint.origin !== base.origin)
+    throw new Error("provider endpoint origin mismatch");
+  return endpoint;
+}
+
 export const systemPublicAddressResolver: PublicAddressResolver = async (
   hostname,
 ) =>
@@ -130,8 +156,10 @@ export function createPinnedPublicFetch(
   return (async (input: RequestInfo | URL, init?: RequestInit) => {
     if (typeof input !== "string" && !(input instanceof URL))
       throw new Error("pinned discovery fetch requires an explicit URL");
-    const response = await undiciFetch(String(input), {
+    const url = assertPublicHttpsDomainUrl(String(input));
+    const response = await undiciFetch(url, {
       ...(init as unknown as UndiciRequestInit),
+      redirect: init?.redirect ?? "error",
       dispatcher,
     });
     return response as unknown as Response;
