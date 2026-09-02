@@ -28,6 +28,7 @@ import {
   buildEconomicQuoteConnectors,
   EconomicQuoteJobDispatcher,
   EconomicEvaluationDispatcher,
+  OpportunityPriorityDispatcher,
   AcquisitionOutreachDispatcher,
   buildCommercialExtractor,
   AgreementAutomationDispatcher,
@@ -198,6 +199,9 @@ const economicConnectors = runtime.activation.capabilities.includes("TRADING")
     : null,
   economicEvaluation = runtime.activation.capabilities.includes("TRADING")
     ? new EconomicEvaluationDispatcher(runtime.pool)
+    : null,
+  opportunityPriority = runtime.activation.capabilities.includes("TRADING")
+    ? new OpportunityPriorityDispatcher(runtime.pool)
     : null;
 const commercialExtractor = runtime.activation.capabilities.includes("OUTREACH")
   ? await buildCommercialExtractor(
@@ -341,6 +345,10 @@ const periodic = async () => {
     if (economicEvaluation)
       await isolated("economic-evaluation", () =>
         economicEvaluation.dispatchBatch(),
+      );
+    if (opportunityPriority)
+      await isolated("opportunity-priority", () =>
+        opportunityPriority.dispatchBatch(),
       );
     if (agreementAutomation)
       await isolated("agreement-automation", () =>

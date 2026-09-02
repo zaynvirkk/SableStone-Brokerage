@@ -66,20 +66,42 @@ export function buildDatabaseStageHandlers(
     },
     MATCH: async (input) => {
       const now = new Date().toISOString(),
-        offers =
-          String(input.offerId) === "AUTO_SELECT"
-            ? await executable(pool, "supplier_offers", "offer", now)
-            : await pool.query(
-                "select * from supplier_offers where id=$1 order by version desc limit 1",
-                [input.offerId],
-              ),
-        demands =
-          String(input.demandId) === "AUTO_SELECT"
-            ? await executable(pool, "buyer_demands", "demand", now)
-            : await pool.query(
-                "select * from buyer_demands where id=$1 order by version desc limit 1",
-                [input.demandId],
-              );
+        offerAuto = String(input.offerId) === "AUTO_SELECT",
+        demandAuto = String(input.demandId) === "AUTO_SELECT";
+      if (offerAuto === demandAuto)
+        return unknown("matching requires exactly one anchored offer or demand");
+      const anchoredOffers = offerAuto
+          ? null
+          : await pool.query(
+              "select * from supplier_offers where id=$1 order by version desc limit 1",
+              [input.offerId],
+            ),
+        anchoredDemands = demandAuto
+          ? null
+          : await pool.query(
+              "select * from buyer_demands where id=$1 order by version desc limit 1",
+              [input.demandId],
+            );
+      if ((!offerAuto && !anchoredOffers?.rows[0]) || (!demandAuto && !anchoredDemands?.rows[0]))
+        return unknown("anchored offer or demand unavailable");
+      const
+        offers = offerAuto
+          ? await executableCounterparts(
+              pool,
+              "supplier_offers",
+              anchoredDemands!.rows[0]!,
+              now,
+            )
+          : anchoredOffers!,
+        demands = demandAuto
+          ? await executableCounterparts(
+              pool,
+              "buyer_demands",
+              anchoredOffers!.rows[0]!,
+              now,
+            )
+          : anchoredDemands!,
+        executableMatches: { id: string; offerId: string; demandId: string; priority: string }[] = [];
       for (const offer of offers.rows)
         for (const demand of demands.rows) {
           const gate = await matchGates(pool, offer, demand, now),
@@ -144,13 +166,26 @@ export function buildDatabaseStageHandlers(
           }
           if (reasons.length === 0) {
             await ensureEconomicJobs(pool, id, offer);
-            return accepted(`match:${id}`, {
-              matchId: id,
+            executableMatches.push({
+              id,
               offerId: offer.id,
               demandId: demand.id,
+              priority: String(demand.quantity_mt),
             });
           }
         }
+      if (executableMatches.length) {
+        executableMatches.sort((left, right) =>
+          compareDecimalStrings(decimal(right.priority), decimal(left.priority)),
+        );
+        return accepted(`match-set:${createHash("sha256").update(executableMatches.map((value) => value.id).join(":" )).digest("hex")}`, {
+          matchId: executableMatches[0]!.id,
+          matchIds: executableMatches.map((value) => value.id),
+          candidateCount: executableMatches.length,
+          offerId: executableMatches[0]!.offerId,
+          demandId: executableMatches[0]!.demandId,
+        });
+      }
       return unknown("no executable compatible pair");
     },
     NEGOTIATE: async (input) => {
@@ -379,18 +414,23 @@ async function createRecurringMatch(
     });
   });
 }
-async function executable(
+async function executableCounterparts(
   pool: Pool,
   table: "supplier_offers" | "buyer_demands",
-  kind: "offer" | "demand",
+  anchor: QueryResultRow,
   now: string,
 ) {
   const verification = "verification='VERIFIED'",
     freshness = "freshness='CURRENT'";
-  return pool.query(
-    `select * from ${table} x where ${verification} and ${freshness} and expires_at>$1 and version=(select max(version) from ${table} y where y.id=x.id) order by created_at limit 100`,
-    [now],
-  );
+  return table === "supplier_offers"
+    ? pool.query(
+        `select * from supplier_offers x where ${verification} and ${freshness} and expires_at>$1 and version=(select max(version) from supplier_offers y where y.id=x.id) and product_family=$2 and quantity_mt>=$3 and moq_mt<=$3 order by supplier_net asc,quantity_mt desc,created_at`,
+        [now, anchor.product_family, anchor.quantity_mt],
+      )
+    : pool.query(
+        `select * from buyer_demands x where ${verification} and ${freshness} and expires_at>$1 and version=(select max(version) from buyer_demands y where y.id=x.id) and product_family=$2 and quantity_mt<=$3 and quantity_mt>=$4 order by quantity_mt desc,buyer_ceiling desc nulls last,created_at`,
+        [now, anchor.product_family, anchor.quantity_mt, anchor.moq_mt],
+      );
 }
 async function matchGates(
   pool: Pool,
@@ -625,11 +665,17 @@ async function lockSettlement(
     });
   const facts = (
     await pool.query(
-      "select t.*,pr.id relationship_id,pr.commission_rate,pr.currency relationship_currency,m.offer_id,m.offer_version,m.demand_id,m.demand_version,o.product_family,d.quantity_mt,fe.economic_floor_per_kg,fe.accepted_buyer_price_per_kg,fe.realized_commission_per_kg,fe.cost_component_digest from trades t join protected_relationships pr on pr.id=t.relationship_id join final_economics_snapshots fe on fe.id=pr.final_economics_snapshot_id and fe.match_id=t.match_id join matches m on m.id=t.match_id join supplier_offers o on o.id=m.offer_id and o.version=m.offer_version join buyer_demands d on d.id=m.demand_id and d.version=m.demand_version where t.id=$1 and t.state in('PROTECTED','FEE_LOCKED') and pr.protected_until>now()",
+      "select t.*,pr.id relationship_id,pr.commission_rate,pr.currency relationship_currency,m.offer_id,m.offer_version,m.demand_id,m.demand_version,o.product_family,d.quantity_mt,fe.id final_economics_snapshot_id,fe.accepted_buyer_price_per_kg,fe.realized_commission_per_kg,fe.settlement_supplier_per_kg,fe.settlement_gross_per_kg,fe.third_party_allocations,fe.provider_deductions,fe.reserve_allocations,fe.buyer_direct_costs,fe.waterfall_digest from trades t join protected_relationships pr on pr.id=t.relationship_id join final_economics_snapshots fe on fe.id=pr.final_economics_snapshot_id and fe.match_id=t.match_id join matches m on m.id=t.match_id join supplier_offers o on o.id=m.offer_id and o.version=m.offer_version join buyer_demands d on d.id=m.demand_id and d.version=m.demand_version where t.id=$1 and t.state in('PROTECTED','FEE_LOCKED') and pr.protected_until>now()",
       [tradeId],
     )
   ).rows[0];
   if (!facts) return unknown("protected trade economics missing");
+  if (
+    (Array.isArray(facts.third_party_allocations) && facts.third_party_allocations.length) ||
+    (Array.isArray(facts.reserve_allocations) && facts.reserve_allocations.length) ||
+    (Array.isArray(facts.provider_deductions) && facts.provider_deductions.length)
+  )
+    return unknown("exact multi-beneficiary or provider-deduction rail unavailable");
   let instruction = (
     await pool.query(
       "select * from settlement_instructions where trade_id=$1 and expires_at>now() order by created_at desc limit 1",
@@ -661,7 +707,7 @@ async function lockSettlement(
         decimal("1000"),
       ),
       supplierEntitlement = multiplyDecimal(
-        decimal(String(facts.economic_floor_per_kg)),
+        decimal(String(facts.settlement_supplier_per_kg)),
         kg,
       ),
       sablestoneEntitlement = multiplyDecimal(
@@ -669,13 +715,21 @@ async function lockSettlement(
         kg,
       ),
       gross = multiplyDecimal(
+        decimal(String(facts.settlement_gross_per_kg)),
+        kg,
+      ),
+      buyerAllIn = multiplyDecimal(
         decimal(String(facts.accepted_buyer_price_per_kg)),
+        kg,
+      ),
+      buyerDirectCosts = scaleWaterfallAllocations(
+        facts.buyer_direct_costs,
         kg,
       ),
       id = randomUUID(),
       expiresAt = new Date(Date.now() + 7 * 86400_000).toISOString();
     await pool.query(
-      "insert into settlement_instructions(id,trade_id,provider,environment,commodity_family,buyer_id,supplier_id,sablestone_beneficiary_id,currency,gross_amount,supplier_entitlement,sablestone_entitlement,other_allocations,release_conditions,dispute_procedure,expires_at,idempotency_key) select $1,$2,$3,'PRODUCTION',$4,t.buyer_id,t.supplier_id,o.id,$5,$6,$7,$8,'[]'::jsonb,'[\"DELIVERY_ACCEPTED\"]'::jsonb,'PROVIDER_OR_BANK_FREEZE',$9,$10 from trades t cross join lateral(select id from organizations where organization_type='SABLESTONE' order by created_at limit 1)o where t.id=$2",
+      "insert into settlement_instructions(id,trade_id,provider,environment,commodity_family,buyer_id,supplier_id,sablestone_beneficiary_id,currency,gross_amount,supplier_entitlement,sablestone_entitlement,other_allocations,release_conditions,dispute_procedure,expires_at,idempotency_key,final_economics_snapshot_id,buyer_all_in_amount,buyer_direct_costs,provider_deductions,waterfall_digest) select $1,$2,$3,'PRODUCTION',$4,t.buyer_id,t.supplier_id,o.id,$5,$6,$7,$8,'[]'::jsonb,'[\"DELIVERY_ACCEPTED\"]'::jsonb,'PROVIDER_OR_BANK_FREEZE',$9,$10,$11,$12,$13,'[]'::jsonb,$14 from trades t cross join lateral(select id from organizations where organization_type='SABLESTONE' order by created_at limit 1)o where t.id=$2",
       [
         id,
         tradeId,
@@ -686,6 +740,10 @@ async function lockSettlement(
         sablestoneEntitlement,
         expiresAt,
         `settlement:${tradeId}`,
+        facts.final_economics_snapshot_id,
+        buyerAllIn,
+        JSON.stringify(buyerDirectCosts),
+        facts.waterfall_digest,
       ],
     );
     instruction = (
@@ -745,6 +803,9 @@ async function lockSettlement(
           })(),
       currency: instruction.currency,
       grossAmount: decimal(String(instruction.gross_amount)),
+      buyerAllInAmount: decimal(String(instruction.buyer_all_in_amount)),
+      buyerDirectCosts: instruction.buyer_direct_costs,
+      providerDeductions: instruction.provider_deductions,
       supplierEntitlement: decimal(String(instruction.supplier_entitlement)),
       sablestoneEntitlement: decimal(
         String(instruction.sablestone_entitlement),
@@ -770,6 +831,21 @@ async function lockSettlement(
   return unknown(
     `settlement instruction created; awaiting provider-confirmed secured funds and exact SableStone beneficiary:${instruction.id}`,
   );
+}
+
+function scaleWaterfallAllocations(input: unknown, kg: ReturnType<typeof decimal>) {
+  if (!Array.isArray(input)) throw new Error("waterfall allocation malformed");
+  return input.map((value) => {
+    if (!value || typeof value !== "object")
+      throw new Error("waterfall allocation malformed");
+    const row = value as Record<string, unknown>;
+    return Object.freeze({
+      costKind: String(row.costKind),
+      beneficiaryId: row.beneficiaryId ? String(row.beneficiaryId) : null,
+      amount: multiplyDecimal(decimal(String(row.amountPerKg)), kg),
+      purpose: String(row.purpose),
+    });
+  });
 }
 async function releaseIdentity(
   pool: Pool,

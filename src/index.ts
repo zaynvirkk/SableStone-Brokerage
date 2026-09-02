@@ -51,6 +51,8 @@ export * from "./runtime/kyb_jobs.js";
 export * from "./connectors/economic_quotes.js";
 export * from "./connectors/commercial_extraction.js";
 export * from "./runtime/economic_jobs.js";
+export * from "./runtime/opportunity_priority.js";
+export * from "./waterfall.js";
 export * from "./runtime/acquisition_outreach.js";
 export * from "./domain.js";
 export * from "./email.js";

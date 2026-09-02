@@ -16,6 +16,7 @@ import type {
   ProviderPartyReferenceResolver,
   ProviderPartyReferences,
 } from "./provider_parties.js";
+import { buildFinalWaterfall, type WaterfallCost } from "../waterfall.js";
 import {
   negotiate,
   type NegotiationIntent,
@@ -602,12 +603,25 @@ async function persistFinalEconomicsSnapshot(
   );
   if (compareDecimalStrings(realizedCommission, decimal("0")) <= 0)
     throw new Error("accepted negotiation commission nonpositive");
+  const waterfall = buildFinalWaterfall(
+    components.map((component) => ({
+      kind: String(component.cost_kind),
+      amountPerKg: decimal(String(component.amount_per_kg)),
+      payerRole: component.payer_role,
+      settlementTreatment: component.settlement_treatment,
+      beneficiaryRole: component.beneficiary_role,
+      beneficiaryId: component.beneficiary_id,
+      sourceReceiptId: String(component.source_receipt_id),
+    })) as WaterfallCost[],
+    decimal(acceptedPrice),
+    realizedCommission,
+  );
   const values = FINAL_COST_KINDS.map((kind) =>
       decimal(String(byKind.get(kind)?.amount_per_kg)),
     ),
     snapshotId = randomUUID();
   const inserted = await client.query(
-    "insert into final_economics_snapshots(id,match_id,negotiation_id,negotiation_decision_id,negotiation_revision,accepted_buyer_price_per_kg,supplier_net_per_kg,freight_per_kg,inspection_per_kg,payment_rail_per_kg,tax_charge_per_kg,risk_reserve_per_kg,economic_floor_per_kg,realized_commission_per_kg,cost_component_digest,currency,accepted_at) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) on conflict(match_id) do nothing",
+    "insert into final_economics_snapshots(id,match_id,negotiation_id,negotiation_decision_id,negotiation_revision,accepted_buyer_price_per_kg,supplier_net_per_kg,freight_per_kg,inspection_per_kg,payment_rail_per_kg,tax_charge_per_kg,risk_reserve_per_kg,economic_floor_per_kg,realized_commission_per_kg,cost_component_digest,currency,accepted_at,settlement_supplier_per_kg,settlement_gross_per_kg,buyer_direct_per_kg,third_party_allocations,provider_deductions,reserve_allocations,buyer_direct_costs,waterfall_digest) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25) on conflict(match_id) do nothing",
     [
       snapshotId,
       negotiation.match_id,
@@ -621,6 +635,14 @@ async function persistFinalEconomicsSnapshot(
       negotiation.component_digest,
       negotiation.currency,
       acceptedAt,
+      waterfall.supplierEntitlementPerKg,
+      waterfall.settlementGrossPerKg,
+      waterfall.buyerDirectPerKg,
+      JSON.stringify(waterfall.thirdPartyAllocations),
+      JSON.stringify(waterfall.providerDeductions),
+      JSON.stringify(waterfall.reserveAllocations),
+      JSON.stringify(waterfall.buyerDirectCosts),
+      waterfall.digest,
     ],
   );
   if (!(inserted.rowCount ?? 0)) {
@@ -765,11 +787,14 @@ async function processSettlementEvent(
         providerParties: parties,
         currency: instruction.currency,
         grossAmount: decimal(String(instruction.gross_amount)),
+        buyerAllInAmount: decimal(String(instruction.buyer_all_in_amount)),
+        buyerDirectCosts: instruction.buyer_direct_costs,
+        providerDeductions: instruction.provider_deductions,
         supplierEntitlement: decimal(String(instruction.supplier_entitlement)),
         sablestoneEntitlement: decimal(
           String(instruction.sablestone_entitlement),
         ),
-        otherAllocations: [],
+        otherAllocations: instruction.other_allocations,
         releaseConditions: instruction.release_conditions,
         disputeProcedure: instruction.dispute_procedure,
         expiresAt: new Date(instruction.expires_at).toISOString(),
@@ -811,13 +836,16 @@ async function processSettlementEvent(
           providerParties: parties,
           currency: instruction.currency,
           grossAmount: decimal(String(instruction.gross_amount)),
+          buyerAllInAmount: decimal(String(instruction.buyer_all_in_amount)),
+          buyerDirectCosts: instruction.buyer_direct_costs,
+          providerDeductions: instruction.provider_deductions,
           supplierEntitlement: decimal(
             String(instruction.supplier_entitlement),
           ),
           sablestoneEntitlement: decimal(
             String(instruction.sablestone_entitlement),
           ),
-          otherAllocations: [],
+          otherAllocations: instruction.other_allocations,
           releaseConditions: instruction.release_conditions,
           disputeProcedure: instruction.dispute_procedure,
           expiresAt: new Date(instruction.expires_at).toISOString(),
@@ -933,11 +961,11 @@ async function processSettlementEvent(
             [instruction.id],
           )
         ).rows,
-        digest = settlementInstructionAcceptanceDigest(instruction);
+        digest = settlementInstructionAcceptanceDigest(currentInstruction);
       if (
         acceptances.length !== 2 ||
         acceptances.some((row) => row.instruction_digest !== digest) ||
-        !instruction.provider_approval_id
+        !currentInstruction.provider_approval_id
       )
         throw new Error("secured entitlement lacks exact accepted instruction");
       const securityId = randomUUID(),
@@ -950,10 +978,10 @@ async function processSettlementEvent(
           inserted.rows[0].id,
           adapter.provider,
           providerReference,
-          instruction.gross_amount,
-          instruction.supplier_entitlement,
-          instruction.sablestone_entitlement,
-          instruction.currency,
+          currentInstruction.gross_amount,
+          currentInstruction.supplier_entitlement,
+          currentInstruction.sablestone_entitlement,
+          currentInstruction.currency,
           securityEvidenceSha256,
           occurredAt,
         ],
@@ -966,13 +994,13 @@ async function processSettlementEvent(
           instruction.relationship_id,
           instruction.id,
           adapter.provider,
-          instruction.provider_approval_id,
+          currentInstruction.provider_approval_id,
           providerReference,
           digest,
-          instruction.supplier_entitlement,
-          instruction.sablestone_entitlement,
-          instruction.gross_amount,
-          instruction.currency,
+          currentInstruction.supplier_entitlement,
+          currentInstruction.sablestone_entitlement,
+          currentInstruction.gross_amount,
+          currentInstruction.currency,
           occurredAt,
           securityId,
         ],

@@ -1,4 +1,5 @@
 import { addDecimal, decimal, type DecimalString } from "./money.js";
+import type { CostPayerRole, SettlementTreatment } from "./waterfall.js";
 
 export type CostKind = "SUPPLIER_NET" | "FREIGHT" | "INSPECTION" | "PAYMENT_RAIL" | "TAX_CHARGE" | "RISK_RESERVE";
 export type CostEvidence = "FIRM" | "ESTIMATE" | "UNKNOWN";
@@ -10,6 +11,10 @@ export interface CostComponent {
   readonly sourceReceiptId: string | null;
   readonly validUntil: string | null;
   readonly basis: string;
+  readonly payerRole: CostPayerRole | "UNKNOWN";
+  readonly settlementTreatment: SettlementTreatment | "UNCLASSIFIED";
+  readonly beneficiaryRole: string | null;
+  readonly beneficiaryId: string | null;
 }
 export type EconomicFloor =
   | Readonly<{ state: "KNOWN"; amountPerKg: DecimalString; currency: string; componentReceiptIds: readonly string[] }>
@@ -31,6 +36,8 @@ export function calculateEconomicFloor(components: readonly CostComponent[], now
     if (!component.validUntil || Date.parse(component.validUntil) <= Date.parse(now)) reasons.push(`${kind}:STALE`);
     if (component.currency !== currency) reasons.push(`${kind}:CURRENCY_MISMATCH`);
     if (!component.basis.trim()) reasons.push(`${kind}:BASIS_MISSING`);
+    if (component.payerRole === "UNKNOWN") reasons.push(`${kind}:PAYER_UNKNOWN`);
+    if (component.settlementTreatment === "UNCLASSIFIED") reasons.push(`${kind}:SETTLEMENT_TREATMENT_UNKNOWN`);
   }
   if (reasons.length || !currency) return Object.freeze({ state: "UNKNOWN", reasons: Object.freeze(reasons) });
   let total = decimal("0");

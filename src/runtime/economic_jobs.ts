@@ -17,6 +17,7 @@ import {
   DatabaseCredentialUseGuard,
 } from "./production_credentials.js";
 import { createPinnedPublicFetch } from "./public_network.js";
+import { refreshMatchPriority } from "./opportunity_priority.js";
 
 export async function buildEconomicQuoteConnectors(
   pool: Pool,
@@ -118,7 +119,7 @@ export class EconomicQuoteJobDispatcher {
             ],
           );
           await client.query(
-            "insert into cost_components(id,match_id,cost_kind,amount_per_kg,currency,evidence,source_receipt_id,valid_until,basis) values($1,$2,$3,$4,$5,'FIRM',$6,$7,$8) on conflict(match_id,cost_kind) do nothing",
+            "insert into cost_components(id,match_id,cost_kind,amount_per_kg,currency,evidence,source_receipt_id,valid_until,basis,payer_role,settlement_treatment,beneficiary_role,beneficiary_id) values($1,$2,$3,$4,$5,'FIRM',$6,$7,$8,$9,$10,$11,$12) on conflict(match_id,cost_kind) do nothing",
             [
               randomUUID(),
               job.match_id,
@@ -128,6 +129,18 @@ export class EconomicQuoteJobDispatcher {
               receiptId,
               quote.validUntil,
               `${quote.provider}:${quote.externalReference}`,
+              connector.config.allocationPolicies.find(
+                (policy) => policy.costKind === quote.costKind,
+              )?.payerRole,
+              connector.config.allocationPolicies.find(
+                (policy) => policy.costKind === quote.costKind,
+              )?.settlementTreatment,
+              connector.config.allocationPolicies.find(
+                (policy) => policy.costKind === quote.costKind,
+              )?.beneficiaryRole,
+              connector.config.allocationPolicies.find(
+                (policy) => policy.costKind === quote.costKind,
+              )?.beneficiaryId,
             ],
           );
           await client.query(
@@ -180,7 +193,7 @@ export async function ensureEconomicJobs(
 ): Promise<void> {
   await inTransaction(pool, async (client) => {
     await client.query(
-      "insert into cost_components(id,match_id,cost_kind,amount_per_kg,currency,evidence,source_receipt_id,valid_until,basis) values($1,$2,'SUPPLIER_NET',$3,$4,'FIRM',$5,$6,'supplier source-stated net verified through qualification') on conflict(match_id,cost_kind) do nothing",
+      "insert into cost_components(id,match_id,cost_kind,amount_per_kg,currency,evidence,source_receipt_id,valid_until,basis,payer_role,settlement_treatment,beneficiary_role) values($1,$2,'SUPPLIER_NET',$3,$4,'FIRM',$5,$6,'supplier source-stated net verified through qualification','BUYER','SUPPLIER_ENTITLEMENT','SUPPLIER') on conflict(match_id,cost_kind) do nothing",
       [
         randomUUID(),
         matchId,
@@ -230,6 +243,10 @@ export async function evaluateEconomics(
           ? new Date(row.valid_until).toISOString()
           : null,
         basis: row.basis,
+        payerRole: row.payer_role,
+        settlementTreatment: row.settlement_treatment,
+        beneficiaryRole: row.beneficiary_role,
+        beneficiaryId: row.beneficiary_id,
       })) as CostComponent[],
       now = new Date().toISOString(),
       floor = calculateEconomicFloor(components, now);
@@ -306,10 +323,6 @@ export async function evaluateEconomics(
       ],
     );
     if (decision.state !== "EXECUTABLE") return decision.state;
-    await client.query(
-      "update matches m set priority_score=d.quantity_mt*1000*$2 from buyer_demands d where m.id=$1 and d.id=m.demand_id and d.version=m.demand_version",
-      [matchId, decision.commissionPerKg],
-    );
     const negotiationPolicy = (
       await client.query(
         "select p.* from negotiation_policies p join authority_receipts a on a.receipt_id=p.authority_receipt_id where p.currency=$1 and p.valid_from<=now() and p.valid_until>now() and a.authority_kind='NEGOTIATION_POLICY_APPROVAL' and a.retrieved_at<=now() and a.effective_at<=now() and a.expires_at>now() order by p.valid_from desc limit 1",
@@ -384,6 +397,7 @@ export async function evaluateEconomics(
       },
       idempotencyKey: `match:${matchId}:executable`,
     });
+    await refreshMatchPriority(client, matchId);
     return "EXECUTABLE";
   });
 }

@@ -91,6 +91,17 @@ export interface SettlementInstructionDraft {
   }>;
   readonly currency: string;
   readonly grossAmount: DecimalString;
+  readonly buyerAllInAmount?: DecimalString;
+  readonly buyerDirectCosts?: readonly Readonly<{
+    costKind: string;
+    amount: DecimalString;
+    purpose: string;
+  }>[];
+  readonly providerDeductions?: readonly Readonly<{
+    costKind: string;
+    amount: DecimalString;
+    purpose: string;
+  }>[];
   readonly supplierEntitlement: DecimalString;
   readonly sablestoneEntitlement: DecimalString;
   readonly otherAllocations: readonly Readonly<{
@@ -151,6 +162,18 @@ export function assertSettlementInstruction(
   }
   if (compareDecimalStrings(allocated, draft.grossAmount) !== 0)
     throw new Error("gross allocation invariant failed");
+  let buyerAllIn = draft.grossAmount;
+  for (const cost of draft.buyerDirectCosts ?? [])
+    buyerAllIn = addDecimal(buyerAllIn, cost.amount);
+  if (
+    compareDecimalStrings(
+      buyerAllIn,
+      draft.buyerAllInAmount ?? draft.grossAmount,
+    ) !== 0
+  )
+    throw new Error("buyer all-in invariant failed");
+  if (draft.providerDeductions?.length)
+    throw new Error("provider deduction verification unsupported by this rail");
   if (
     [
       draft.grossAmount,

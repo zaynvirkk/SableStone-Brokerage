@@ -1,7 +1,7 @@
 import { calculateEconomicFloor, decimal } from "../dist/index.js";
 const now = "2026-08-31T00:00:00Z", future = "2026-09-02T00:00:00Z";
 const values = { SUPPLIER_NET: "78", FREIGHT: "1.5", INSPECTION: "0.2", PAYMENT_RAIL: "0.1", TAX_CHARGE: "0.3", RISK_RESERVE: "0.4" };
-const components = Object.entries(values).map(([kind, value]) => ({ kind, amountPerKg: decimal(value), currency: "INR", evidence: "FIRM", sourceReceiptId: `receipt-${kind}`, validUntil: future, basis: `${kind} fixture per kg` }));
+const components = Object.entries(values).map(([kind, value]) => ({ kind, amountPerKg: decimal(value), currency: "INR", evidence: "FIRM", sourceReceiptId: `receipt-${kind}`, validUntil: future, basis: `${kind} fixture per kg`, payerRole:"BUYER", settlementTreatment:kind==="SUPPLIER_NET"?"SUPPLIER_ENTITLEMENT":"BUYER_DIRECT", beneficiaryRole:kind==="SUPPLIER_NET"?"SUPPLIER":null, beneficiaryId:null }));
 const floor = calculateEconomicFloor(components, now);
 if (floor.state !== "KNOWN" || floor.amountPerKg !== "80.5") throw new Error(`floor arithmetic failed ${JSON.stringify(floor)}`);
 const estimate = calculateEconomicFloor(components.map((c) => c.kind === "FREIGHT" ? { ...c, evidence: "ESTIMATE" } : c), now);

@@ -1,4 +1,5 @@
 import type { CostKind } from "../costs.js";
+import type { CostPayerRole, SettlementTreatment } from "../waterfall.js";
 import { decimal, type DecimalString } from "../money.js";
 import type { ReceiptWriter } from "./discovery_http.js";
 import type { CredentialUseGuard } from "../runtime/production_credentials.js";
@@ -18,6 +19,13 @@ export interface EconomicQuoteHttpConfig {
   readonly authorizationHeader: string;
   readonly approvalReceiptId: string;
   readonly validUntil: string;
+  readonly allocationPolicies: readonly Readonly<{
+    costKind: QuotedCostKind;
+    payerRole: CostPayerRole;
+    settlementTreatment: SettlementTreatment;
+    beneficiaryRole: "SUPPLIER" | "THIRD_PARTY" | "PROVIDER" | "RESERVE" | null;
+    beneficiaryId: string | null;
+  }>[];
 }
 export interface EconomicQuote {
   readonly provider: string;
@@ -38,13 +46,16 @@ export class ProductionEconomicQuoteConnector {
     readonly credentialGuard?: CredentialUseGuard,
     readonly authorityGuard?: AuthorityUseGuard,
   ) {
+    const policyKinds = new Set(config.allocationPolicies?.map((value) => value.costKind));
     if (
       !config.provider ||
       !config.costKinds.length ||
       !config.baseUrl.startsWith("https://") ||
       !config.authorizationHeader ||
       !config.approvalReceiptId ||
-      Date.parse(config.validUntil) <= Date.now()
+      Date.parse(config.validUntil) <= Date.now() ||
+      policyKinds.size !== config.costKinds.length ||
+      config.costKinds.some((kind) => !policyKinds.has(kind))
     )
       throw new Error("economic quote provider unavailable");
     resolveExternalProviderEndpoint(config.baseUrl, config.quotePath);
