@@ -6,7 +6,7 @@ import type {
   SettlementInstructionDraft,
 } from "../settlement.js";
 import { routeSettlement } from "../router.js";
-import { addDecimal, decimal, multiplyDecimal } from "../money.js";
+import { decimal, multiplyDecimal } from "../money.js";
 import { settlementInstructionAcceptanceDigest } from "./commands.js";
 import { inTransaction, TransactionalOutboxRepository } from "./database.js";
 import type { ProductionDiscoveryService } from "./discovery_service.js";
@@ -127,7 +127,7 @@ export function buildDatabaseStageHandlers(
           let id = prior.rows[0]?.id;
           if (!id) {
             const inserted = await pool.query(
-              "insert into matches(id,offer_id,offer_version,demand_id,demand_version,compatible,rejection_reasons,matcher_version,context_digest,evaluated_at) values(gen_random_uuid(),$1,$2,$3,$4,$5,$6,'production-v1',$7,$8) returning id",
+              "insert into matches(id,offer_id,offer_version,demand_id,demand_version,compatible,rejection_reasons,matcher_version,context_digest,evaluated_at,priority_score) values(gen_random_uuid(),$1,$2,$3,$4,$5,$6,'production-v1',$7,$8,$9) returning id",
               [
                 offer.id,
                 offer.version,
@@ -137,6 +137,7 @@ export function buildDatabaseStageHandlers(
                 JSON.stringify([...new Set(reasons)]),
                 contextDigest,
                 now,
+                reasons.length === 0 ? String(demand.quantity_mt) : "0",
               ],
             );
             id = inserted.rows[0].id;
@@ -419,14 +420,20 @@ async function matchGates(
     ).rows[0];
     if (risk?.state !== "PASS") reasons.push("RISK_GATE_FAILED");
   }
-  const provider = (
+  const route = (
     await pool.query(
-      "select state,id from provider_capability_snapshots where environment='PRODUCTION' and evaluated_at<=$1 order by evaluated_at desc limit 1",
-      [now],
+      "with route_facts as(select case when sj.country_code='IN' and bj.country_code='IN' then 'DOMESTIC_INDIA' else 'INTERNATIONAL' end geography,exists(select 1 from trades t where t.supplier_id=$1 and t.buyer_id=$2 and t.state in('SETTLED','RECURRING')) established,exists(select 1 from protected_relationships pr join documentary_lc_route_evidence l on l.relationship_id=pr.id and l.valid_until>$3 join document_checks dc on dc.id=l.document_check_id and dc.check_type='DOCUMENTARY_LC_AUTHENTICITY' and dc.state='VERIFIED' and (dc.valid_until is null or dc.valid_until>$3) where pr.supplier_id=$1 and pr.buyer_id=$2 and pr.protected_until>$3) has_lc from organization_jurisdictions sj join organization_jurisdictions bj on bj.organization_id=$2 and bj.state='VERIFIED' and bj.valid_until>$3 where sj.organization_id=$1 and sj.state='VERIFIED' and sj.valid_until>$3), allowed as(select case when geography='DOMESTIC_INDIA' then array['CASHFREE_EASY_SPLIT','INDIAN_BANK_ESCROW','RAZORPAY_ROUTE']::text[] when established and has_lc then array['LC_PROCEEDS','ESCROW_COM']::text[] else array['ESCROW_COM']::text[] end providers from route_facts) select s.id,s.provider from allowed a join lateral(select pcs.id,pcs.provider from provider_capability_snapshots pcs join provider_approvals pa on pa.id=pcs.approval_id and pa.provider=pcs.provider and pa.environment='PRODUCTION' and pa.state='APPROVED' and pa.valid_from<=$3 and pa.valid_until>$3 and pa.currencies ? $4 and pa.commodity_families ? $5 join authority_receipts ar on ar.receipt_id=pa.written_approval_receipt_id and ar.authority_kind='PROVIDER_WRITTEN_APPROVAL' and ar.retrieved_at<=$3 and ar.effective_at<=$3 and ar.expires_at>$3 where pcs.environment='PRODUCTION' and pcs.state='AVAILABLE' and pcs.provider=any(a.providers) and pcs.capabilities ? 'BROKER_FEE_SPLIT' and pcs.evaluated_at<=$3 order by pcs.evaluated_at desc limit 1)s on true",
+      [
+        offer.supplier_id,
+        demand.buyer_id,
+        now,
+        String(demand.currency ?? offer.currency),
+        offer.product_family,
+      ],
     )
   ).rows[0];
-  if (provider?.state !== "AVAILABLE") reasons.push("SETTLEMENT_UNAVAILABLE");
-  return { reasons, providerSnapshotId: provider?.id ?? null };
+  if (!route) reasons.push("ROUTE_SPECIFIC_SETTLEMENT_UNAVAILABLE");
+  return { reasons, providerSnapshotId: route?.id ?? null };
 }
 export function deepCompatible(offer: unknown, demand: unknown) {
   if (
@@ -470,6 +477,20 @@ export function deepCompatible(offer: unknown, demand: unknown) {
       String(supplied[field] ?? "")
         .trim()
         .toLowerCase() !== String(expected).trim().toLowerCase()
+    )
+      return false;
+  }
+  for (const field of ["density", "ash", "moisture"]) {
+    const expected = safeSpecDecimal(required[field]);
+    if (required[field] !== undefined && required[field] !== null && !expected)
+      return false;
+    if (!expected) continue;
+    const actual = safeSpecDecimal(supplied[field]);
+    if (!actual) return false;
+    if (
+      field === "density"
+        ? compareDecimalStrings(actual, expected) !== 0
+        : compareDecimalStrings(actual, expected) > 0
     )
       return false;
   }
@@ -530,7 +551,7 @@ async function protectMatch(pool: Pool, matchId: string): Promise<StageResult> {
     if (!relationship)
       relationship = (
         await client.query(
-          "with facts as (select m.id match_id,o.supplier_id,d.buyer_id,o.product_family,pd.commission_per_kg,pd.currency,sa.agreement_acceptance_id supplier_acceptance_id,ba.agreement_acceptance_id buyer_acceptance_id,p.protection_months,p.affiliate_scope,p.qualifying_purchase_definition from matches m join supplier_offers o on o.id=m.offer_id and o.version=m.offer_version join buyer_demands d on d.id=m.demand_id and d.version=m.demand_version join pricing_decisions pd on pd.match_id=m.id and pd.state='EXECUTABLE' join protected_match_acceptances sa on sa.match_id=m.id and sa.role='SUPPLIER' join protected_match_acceptances ba on ba.match_id=m.id and ba.role='BUYER' join lateral(select * from protected_relationship_policies where effective_at<=now() and expires_at>now() order by effective_at desc limit 1)p on true where m.id=$1 and m.compatible) insert into protected_relationships(id,supplier_id,buyer_id,introduced_at,protected_until,commodity_scope,affiliate_scope,qualifying_purchase_definition,commission_type,commission_rate,currency,supplier_acceptance_id,buyer_acceptance_id,required_settlement_capabilities,status) select gen_random_uuid(),supplier_id,buyer_id,now(),now()+(protection_months||' months')::interval,jsonb_build_array(product_family),affiliate_scope,qualifying_purchase_definition,'PER_KG',commission_per_kg,currency,supplier_acceptance_id,buyer_acceptance_id,'[\"BROKER_FEE_SPLIT\"]'::jsonb,'PROTECTED' from facts returning *",
+          "with facts as (select m.id match_id,o.supplier_id,d.buyer_id,o.product_family,fe.id final_economics_snapshot_id,fe.realized_commission_per_kg,fe.currency,sa.agreement_acceptance_id supplier_acceptance_id,ba.agreement_acceptance_id buyer_acceptance_id,p.protection_months,p.affiliate_scope,p.qualifying_purchase_definition from matches m join supplier_offers o on o.id=m.offer_id and o.version=m.offer_version join buyer_demands d on d.id=m.demand_id and d.version=m.demand_version join final_economics_snapshots fe on fe.match_id=m.id join negotiations n on n.id=fe.negotiation_id and n.status='ACCEPTED' join protected_match_acceptances sa on sa.match_id=m.id and sa.role='SUPPLIER' join protected_match_acceptances ba on ba.match_id=m.id and ba.role='BUYER' join lateral(select * from protected_relationship_policies where effective_at<=now() and expires_at>now() order by effective_at desc limit 1)p on true where m.id=$1 and m.compatible) insert into protected_relationships(id,supplier_id,buyer_id,introduced_at,protected_until,commodity_scope,affiliate_scope,qualifying_purchase_definition,commission_type,commission_rate,currency,supplier_acceptance_id,buyer_acceptance_id,required_settlement_capabilities,status,final_economics_snapshot_id) select gen_random_uuid(),supplier_id,buyer_id,now(),now()+(protection_months||' months')::interval,jsonb_build_array(product_family),affiliate_scope,qualifying_purchase_definition,'PER_KG',realized_commission_per_kg,currency,supplier_acceptance_id,buyer_acceptance_id,'[\"BROKER_FEE_SPLIT\"]'::jsonb,'PROTECTED',final_economics_snapshot_id from facts returning *",
           [matchId],
         )
       ).rows[0];
@@ -604,7 +625,7 @@ async function lockSettlement(
     });
   const facts = (
     await pool.query(
-      "select t.*,pr.id relationship_id,pr.commission_rate,pr.currency relationship_currency,m.offer_id,m.offer_version,m.demand_id,m.demand_version,o.product_family,o.supplier_net,d.quantity_mt from trades t join protected_relationships pr on pr.id=t.relationship_id join matches m on m.id=t.match_id join supplier_offers o on o.id=m.offer_id and o.version=m.offer_version join buyer_demands d on d.id=m.demand_id and d.version=m.demand_version where t.id=$1 and t.state in('PROTECTED','FEE_LOCKED') and pr.protected_until>now()",
+      "select t.*,pr.id relationship_id,pr.commission_rate,pr.currency relationship_currency,m.offer_id,m.offer_version,m.demand_id,m.demand_version,o.product_family,d.quantity_mt,fe.economic_floor_per_kg,fe.accepted_buyer_price_per_kg,fe.realized_commission_per_kg,fe.cost_component_digest from trades t join protected_relationships pr on pr.id=t.relationship_id join final_economics_snapshots fe on fe.id=pr.final_economics_snapshot_id and fe.match_id=t.match_id join matches m on m.id=t.match_id join supplier_offers o on o.id=m.offer_id and o.version=m.offer_version join buyer_demands d on d.id=m.demand_id and d.version=m.demand_version where t.id=$1 and t.state in('PROTECTED','FEE_LOCKED') and pr.protected_until>now()",
       [tradeId],
     )
   ).rows[0];
@@ -640,14 +661,17 @@ async function lockSettlement(
         decimal("1000"),
       ),
       supplierEntitlement = multiplyDecimal(
-        decimal(String(facts.supplier_net)),
+        decimal(String(facts.economic_floor_per_kg)),
         kg,
       ),
       sablestoneEntitlement = multiplyDecimal(
-        decimal(String(facts.commission_rate)),
+        decimal(String(facts.realized_commission_per_kg)),
         kg,
       ),
-      gross = addDecimal(supplierEntitlement, sablestoneEntitlement),
+      gross = multiplyDecimal(
+        decimal(String(facts.accepted_buyer_price_per_kg)),
+        kg,
+      ),
       id = randomUUID(),
       expiresAt = new Date(Date.now() + 7 * 86400_000).toISOString();
     await pool.query(

@@ -22,7 +22,7 @@ import {
   type NegotiationPolicy,
   type NegotiationSession,
 } from "../negotiation.js";
-import { decimal } from "../money.js";
+import { addDecimal, decimal, subtractDecimal } from "../money.js";
 import { compareDecimalStrings } from "../domain.js";
 import { settlementInstructionAcceptanceDigest } from "./commands.js";
 import { assertCurrentAcquisitionOutreachPolicy } from "./outreach_policy.js";
@@ -330,6 +330,18 @@ async function processGmailEvent(
                 destination: decision.demand.destination,
                 mfiMin: decision.demand.mfiMin,
                 mfiMax: decision.demand.mfiMax,
+                grade: decision.demand.grade,
+                application: decision.demand.application,
+                colour: decision.demand.colour,
+                density: decision.demand.density,
+                ash: decision.demand.ash,
+                moisture: decision.demand.moisture,
+                recycledContentType: decision.demand.recycledContentType,
+                dispatchLocation: decision.demand.dispatchLocation,
+                incoterm: decision.demand.incoterm,
+                leadTime: decision.demand.leadTime,
+                paymentTerms: decision.demand.paymentTerms,
+                properties: decision.demand.properties,
               },
               decision.demand.quantityMt,
               decision.demand.ceilingPerKg,
@@ -351,7 +363,23 @@ async function processGmailEvent(
               contact.organization_id,
               communicationId,
               family,
-              { mfiMin: decision.offer.mfiMin, mfiMax: decision.offer.mfiMax },
+              {
+                mfiMin: decision.offer.mfiMin,
+                mfiMax: decision.offer.mfiMax,
+                grade: decision.offer.grade,
+                application: decision.offer.application,
+                colour: decision.offer.colour,
+                density: decision.offer.density,
+                ash: decision.offer.ash,
+                moisture: decision.offer.moisture,
+                recycledContentType: decision.offer.recycledContentType,
+                monthlyCapacityMt: decision.offer.monthlyCapacityMt,
+                dispatchLocation: decision.offer.dispatchLocation,
+                incoterm: decision.offer.incoterm,
+                leadTime: decision.offer.leadTime,
+                paymentTerms: decision.offer.paymentTerms,
+                properties: decision.offer.properties,
+              },
               decision.offer.quantityMt,
               decision.offer.moqMt,
               decision.offer.netPerKg,
@@ -419,7 +447,7 @@ async function applyNegotiationIntent(
   if (!parsed) throw new Error("commercial intent incomplete");
   const row = (
     await client.query(
-      "select n.*,m.offer_id,m.demand_id,ef.amount_per_kg,pp.commission_floor_per_kg,np.maximum_concession_per_kg,np.version negotiation_policy_version,np.valid_until policy_valid_until from negotiations n join matches m on m.id=n.match_id join buyer_demands d on d.id=m.demand_id and d.version=m.demand_version join economic_floors ef on ef.match_id=m.id and ef.state='KNOWN' join pricing_decisions pd on pd.match_id=m.id and pd.state='EXECUTABLE' join pricing_policies pp on pp.id=pd.policy_id and pp.version=pd.policy_version join negotiation_policies np on np.currency=n.currency and np.valid_from<=$2 and np.valid_until>$2 join authority_receipts ar on ar.receipt_id=np.authority_receipt_id and ar.authority_kind='NEGOTIATION_POLICY_APPROVAL' and ar.retrieved_at<=$2 and ar.effective_at<=$2 and ar.expires_at>$2 where d.buyer_id=$1 and n.status='OPEN' and n.expires_at>$2 order by n.expires_at limit 1 for update",
+      "select n.*,m.offer_id,m.demand_id,ef.amount_per_kg,ef.component_digest,pp.commission_floor_per_kg,np.maximum_concession_per_kg,np.version negotiation_policy_version,np.valid_until policy_valid_until from negotiations n join matches m on m.id=n.match_id join buyer_demands d on d.id=m.demand_id and d.version=m.demand_version join economic_floors ef on ef.match_id=m.id and ef.state='KNOWN' join pricing_decisions pd on pd.match_id=m.id and pd.state='EXECUTABLE' join pricing_policies pp on pp.id=pd.policy_id and pp.version=pd.policy_version join negotiation_policies np on np.currency=n.currency and np.valid_from<=$2 and np.valid_until>$2 join authority_receipts ar on ar.receipt_id=np.authority_receipt_id and ar.authority_kind='NEGOTIATION_POLICY_APPROVAL' and ar.retrieved_at<=$2 and ar.effective_at<=$2 and ar.expires_at>$2 where d.buyer_id=$1 and n.status='OPEN' and n.expires_at>$2 order by m.priority_score desc,n.expires_at limit 1 for update",
       [buyerId, occurredAt],
     )
   ).rows[0];
@@ -458,10 +486,12 @@ async function applyNegotiationIntent(
     digest = createHash("sha256")
       .update(JSON.stringify({ intent, buyerId, occurredAt }))
       .digest("hex");
-  await client.query(
+  const decisionId = randomUUID(),
+    storedDecision = (
+      await client.query(
     "insert into negotiation_decisions(id,negotiation_id,session_revision,intent_digest,action,executable_price_per_kg,reason,policy_version,decided_at) values($1,$2,$3,$4,$5,$6,$7,$8,$9) on conflict(negotiation_id,session_revision,intent_digest) do nothing",
     [
-      randomUUID(),
+      decisionId,
       row.id,
       row.revision,
       digest,
@@ -471,7 +501,8 @@ async function applyNegotiationIntent(
       row.negotiation_policy_version,
       occurredAt,
     ],
-  );
+      )
+    );
   await client.query(
     "update negotiations set revision=$2,current_quote_per_kg=coalesce($3,current_quote_per_kg),status=$4 where id=$1 and revision=$5",
     [
@@ -488,6 +519,127 @@ async function applyNegotiationIntent(
       row.revision,
     ],
   );
+  if (decision.action === "ACCEPT" && decision.executablePricePerKg) {
+    const acceptedDecision = storedDecision.rowCount
+        ? { id: decisionId }
+        : (
+            await client.query(
+              "select id from negotiation_decisions where negotiation_id=$1 and session_revision=$2 and intent_digest=$3 and action='ACCEPT'",
+              [row.id, row.revision, digest],
+            )
+          ).rows[0];
+    if (!acceptedDecision)
+      throw new Error("accepted negotiation decision unavailable");
+    await persistFinalEconomicsSnapshot(
+      client,
+      row,
+      acceptedDecision.id,
+      decision.executablePricePerKg,
+      occurredAt,
+    );
+  }
+}
+
+const FINAL_COST_KINDS = Object.freeze([
+  "SUPPLIER_NET",
+  "FREIGHT",
+  "INSPECTION",
+  "PAYMENT_RAIL",
+  "TAX_CHARGE",
+  "RISK_RESERVE",
+] as const);
+async function persistFinalEconomicsSnapshot(
+  client: PoolClient,
+  negotiation: QueryResultRow,
+  decisionId: string,
+  acceptedPrice: string,
+  acceptedAt: string,
+) {
+  const components = (
+      await client.query(
+        "select cost_kind,amount_per_kg,currency,evidence,source_receipt_id,valid_until from cost_components where match_id=$1 order by cost_kind for share",
+        [negotiation.match_id],
+      )
+    ).rows,
+    byKind = new Map(components.map((component) => [component.cost_kind, component]));
+  if (
+    components.length !== FINAL_COST_KINDS.length ||
+    FINAL_COST_KINDS.some((kind) => {
+      const component = byKind.get(kind);
+      return (
+        !component ||
+        component.evidence !== "FIRM" ||
+        !component.source_receipt_id ||
+        !component.valid_until ||
+        Date.parse(component.valid_until) <= Date.parse(acceptedAt) ||
+        component.currency !== negotiation.currency
+      );
+    })
+  )
+    throw new Error("accepted negotiation lacks current exact cost waterfall");
+  let recomputedFloor = decimal("0");
+  for (const kind of FINAL_COST_KINDS)
+    recomputedFloor = addDecimal(
+      recomputedFloor,
+      decimal(String(byKind.get(kind)?.amount_per_kg)),
+    );
+  if (
+    compareDecimalStrings(recomputedFloor, decimal(String(negotiation.amount_per_kg))) !== 0
+  )
+    throw new Error("accepted negotiation economic floor drift");
+  const recomputedDigest = createHash("sha256")
+    .update(
+      JSON.stringify(
+        components.map((component) => String(component.source_receipt_id)),
+      ),
+    )
+    .digest("hex");
+  if (recomputedDigest !== negotiation.component_digest)
+    throw new Error("accepted negotiation cost evidence drift");
+  const realizedCommission = subtractDecimal(
+    decimal(acceptedPrice),
+    recomputedFloor,
+  );
+  if (compareDecimalStrings(realizedCommission, decimal("0")) <= 0)
+    throw new Error("accepted negotiation commission nonpositive");
+  const values = FINAL_COST_KINDS.map((kind) =>
+      decimal(String(byKind.get(kind)?.amount_per_kg)),
+    ),
+    snapshotId = randomUUID();
+  const inserted = await client.query(
+    "insert into final_economics_snapshots(id,match_id,negotiation_id,negotiation_decision_id,negotiation_revision,accepted_buyer_price_per_kg,supplier_net_per_kg,freight_per_kg,inspection_per_kg,payment_rail_per_kg,tax_charge_per_kg,risk_reserve_per_kg,economic_floor_per_kg,realized_commission_per_kg,cost_component_digest,currency,accepted_at) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) on conflict(match_id) do nothing",
+    [
+      snapshotId,
+      negotiation.match_id,
+      negotiation.id,
+      decisionId,
+      negotiation.revision,
+      acceptedPrice,
+      ...values,
+      recomputedFloor,
+      realizedCommission,
+      negotiation.component_digest,
+      negotiation.currency,
+      acceptedAt,
+    ],
+  );
+  if (!(inserted.rowCount ?? 0)) {
+    const existing = (
+      await client.query(
+        "select * from final_economics_snapshots where match_id=$1",
+        [negotiation.match_id],
+      )
+    ).rows[0];
+    if (
+      !existing ||
+      existing.negotiation_decision_id !== decisionId ||
+      compareDecimalStrings(
+        decimal(String(existing.accepted_buyer_price_per_kg)),
+        decimal(acceptedPrice),
+      ) !== 0
+    )
+      throw new Error("conflicting final economics snapshot");
+  }
 }
 export function materialFamily(material: string): string | null {
   const value = material.toLowerCase();

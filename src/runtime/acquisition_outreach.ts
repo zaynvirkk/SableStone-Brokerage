@@ -5,6 +5,7 @@ import type { ImmutableEvidenceStore } from "./object_store.js";
 import type { SensitiveDataCipher } from "./sensitive_data.js";
 import { inTransaction } from "./database.js";
 import { resolveCurrentAcquisitionOutreachPolicy } from "./outreach_policy.js";
+import { deepCompatible } from "./stage_handlers.js";
 
 /** Creates the first message only after verified contact, current risk PASS and
  * a lawful acquisition basis. Buyer outreach additionally requires a current
@@ -22,7 +23,7 @@ export class AcquisitionOutreachDispatcher {
       async (client) =>
         (
           await client.query(
-            "with claimed as(select id from acquisition_outreach_jobs where state in('WAITING_CONTACT','WAITING_RISK','WAITING_PROFILE','WAITING_INVENTORY','READY') or(state='PROCESSING' and claimed_at<now()-interval '10 minutes') order by created_at for update skip locked limit $1) update acquisition_outreach_jobs j set state='PROCESSING',attempts=attempts+1,claimed_at=now() from claimed where j.id=claimed.id returning j.*",
+            "with claimed as(select id from acquisition_outreach_jobs where state in('WAITING_CONTACT','WAITING_RISK','WAITING_PROFILE','WAITING_INVENTORY','READY') or(state='PROCESSING' and claimed_at<now()-interval '10 minutes') order by priority_score desc,created_at for update skip locked limit $1) update acquisition_outreach_jobs j set state='PROCESSING',attempts=attempts+1,claimed_at=now() from claimed where j.id=claimed.id returning j.*",
             [limit],
           )
         ).rows,
@@ -69,14 +70,19 @@ export class AcquisitionOutreachDispatcher {
         if (facts.organization_type === "SUPPLIER") {
           subject = "Current polymer availability request";
           body =
-            "SableStone is qualifying current polymer supply for protected buyer matching. Please reply with material, grade/application, colour, MFI range, available MT, monthly capacity, MOQ, dispatch location, supplier NET INR/kg, payment terms, lead time, COA, TDS and current registration evidence. SableStone does not buy inventory or request credit.";
+            "SableStone is qualifying current polymer supply for protected buyer matching. Please reply with material, grade/application, colour, MFI range, density, ash, moisture, PCR/PIR status, available MT, monthly capacity, MOQ, dispatch location, supplier NET price/kg, currency, price basis, Incoterm, payment terms, lead time, COA, TDS and current registration evidence. SableStone does not buy inventory or request credit.";
         } else if (facts.organization_type === "BUYER") {
-          const lane = (
+          const candidates = (
             await this.pool.query(
-              "select p.target_product_family,p.application,o.product_family,o.product_spec,o.quantity_mt,o.moq_mt,o.currency,o.supplier_net+pp.commission_floor_per_kg indicative_ex_dispatch from acquisition_profiles p join lateral(select * from supplier_offers o where o.product_family=p.target_product_family and o.verification='VERIFIED' and o.freshness='CURRENT' and o.expires_at>now() order by o.quantity_mt desc,o.created_at desc limit 1)o on true join lateral(select policy.* from pricing_policies policy join authority_receipts ar on ar.receipt_id=policy.approval_receipt_id and ar.authority_kind='PRICING_POLICY_APPROVAL' and ar.retrieved_at<=now() and ar.effective_at<=now() and ar.expires_at>now() where policy.currency=o.currency and policy.valid_from<=now() and policy.valid_until>now() order by policy.valid_from desc limit 1)pp on true where p.organization_id=$1 and ($2::uuid is null or p.id=$2) and p.classification_state in('SOURCE_STATED','VERIFIED') and p.valid_until>now() order by o.quantity_mt desc,p.created_at limit 1",
+              "select p.target_product_family,p.application,o.product_family,o.product_spec,o.quantity_mt,o.moq_mt,o.currency,o.supplier_net,pp.commission_floor_per_kg,o.supplier_net+pp.commission_floor_per_kg indicative_ex_dispatch from acquisition_profiles p join supplier_offers o on o.product_family=p.target_product_family and o.verification='VERIFIED' and o.freshness='CURRENT' and o.expires_at>now() and o.version=(select max(version) from supplier_offers current where current.id=o.id) join lateral(select policy.* from pricing_policies policy join authority_receipts ar on ar.receipt_id=policy.approval_receipt_id and ar.authority_kind='PRICING_POLICY_APPROVAL' and ar.retrieved_at<=now() and ar.effective_at<=now() and ar.expires_at>now() where policy.currency=o.currency and policy.valid_from<=now() and policy.valid_until>now() order by policy.valid_from desc limit 1)pp on true where p.organization_id=$1 and ($2::uuid is null or p.id=$2) and p.classification_state in('SOURCE_STATED','VERIFIED') and p.valid_until>now() order by o.quantity_mt*pp.commission_floor_per_kg desc,o.quantity_mt desc,p.created_at limit 100",
               [job.organization_id, job.acquisition_profile_id],
             )
-          ).rows[0];
+          ).rows;
+          const lane = candidates.find((candidate) =>
+            deepCompatible(candidate.product_spec, {
+              application: candidate.application,
+            }),
+          );
           if (!lane) {
             const hasProfile = (
               await this.pool.query(
@@ -91,6 +97,10 @@ export class AcquisitionOutreachDispatcher {
                 : "buyer profile pending",
             );
           }
+          await this.pool.query(
+            "update acquisition_outreach_jobs set priority_score=$2*1000*$3 where id=$1 and priority_state='HEURISTIC'",
+            [job.id, lane.quantity_mt, lane.commission_floor_per_kg],
+          );
           const spec = sanitizedLotSpec(lane.product_spec);
           subject = `Current ${lane.product_family} allocation — ${lane.quantity_mt} MT`;
           body = [

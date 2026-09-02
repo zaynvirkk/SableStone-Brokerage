@@ -107,7 +107,7 @@ export class AgreementAutomationDispatcher {
       throw new Error("agreement dispatch limit invalid");
     const rows = (
       await this.pool.query(
-        "select m.id match_id,o.supplier_id,d.buyer_id,o.product_family,p.commission_per_kg,p.currency from matches m join supplier_offers o on o.id=m.offer_id and o.version=m.offer_version join buyer_demands d on d.id=m.demand_id and d.version=m.demand_version join lateral(select commission_per_kg,currency from pricing_decisions where match_id=m.id and state='EXECUTABLE' order by calculated_at desc limit 1)p on true where m.compatible order by m.id limit $1",
+        "select m.id match_id,o.supplier_id,d.buyer_id,o.product_family,fe.realized_commission_per_kg commission_per_kg,fe.currency,fe.accepted_at calculated_at from matches m join supplier_offers o on o.id=m.offer_id and o.version=m.offer_version join buyer_demands d on d.id=m.demand_id and d.version=m.demand_version join final_economics_snapshots fe on fe.match_id=m.id join negotiations n on n.id=fe.negotiation_id and n.status='ACCEPTED' where m.compatible order by calculated_at desc limit $1",
         [limit],
       )
     ).rows;

@@ -16,6 +16,18 @@ export interface BuyerDemandProposal {
   readonly mfiMax: DecimalString | null;
   readonly ceilingPerKg: DecimalString | null;
   readonly currency: string | null;
+  readonly grade: string | null;
+  readonly application: string | null;
+  readonly colour: string | null;
+  readonly density: DecimalString | null;
+  readonly ash: DecimalString | null;
+  readonly moisture: DecimalString | null;
+  readonly recycledContentType: string | null;
+  readonly dispatchLocation: string | null;
+  readonly incoterm: string | null;
+  readonly leadTime: string | null;
+  readonly paymentTerms: string | null;
+  readonly properties: readonly ProductProperty[];
   readonly sourceMessageDigest: string;
   readonly verified: false;
 }
@@ -27,8 +39,26 @@ export interface SupplierOfferProposal {
   readonly currency: string;
   readonly mfiMin: DecimalString | null;
   readonly mfiMax: DecimalString | null;
+  readonly grade: string | null;
+  readonly application: string | null;
+  readonly colour: string | null;
+  readonly density: DecimalString | null;
+  readonly ash: DecimalString | null;
+  readonly moisture: DecimalString | null;
+  readonly recycledContentType: string | null;
+  readonly monthlyCapacityMt: DecimalString | null;
+  readonly dispatchLocation: string | null;
+  readonly incoterm: string | null;
+  readonly leadTime: string | null;
+  readonly paymentTerms: string | null;
+  readonly properties: readonly ProductProperty[];
   readonly sourceMessageDigest: string;
   readonly verified: false;
+}
+export interface ProductProperty {
+  readonly name: string;
+  readonly value: string;
+  readonly unit: string | null;
 }
 export interface CommunicationDecision {
   readonly classification: MessageClass;
@@ -163,6 +193,13 @@ function parseOffer(
       /\bMFI\s*([0-9]+(?:\.[0-9]+)?)(?:\s*[-–]\s*([0-9]+(?:\.[0-9]+)?))?/i,
     );
   if (!head || !net || !moq) return null;
+  const currency = net[2]?.toUpperCase() ??
+    (/₹|\bINR\b/i.test(net[0])
+      ? "INR"
+      : /\bUSD\b/i.test(net[0])
+        ? "USD"
+        : null);
+  if (!currency) return null;
   const quantity = decimal(head[1]!),
     minimum = decimal(moq[1]!);
   if (compareDecimalStrings(minimum, quantity) > 0) return null;
@@ -171,9 +208,22 @@ function parseOffer(
     quantityMt: quantity,
     moqMt: minimum,
     netPerKg: decimal(net[1]!),
-    currency: net[2]?.toUpperCase() ?? (/₹/.test(net[0]) ? "INR" : "INR"),
+    currency,
     mfiMin: mfi ? decimal(mfi[1]!) : null,
     mfiMax: mfi ? decimal(mfi[2] ?? mfi[1]!) : null,
+    grade: null,
+    application: null,
+    colour: null,
+    density: null,
+    ash: null,
+    moisture: null,
+    recycledContentType: null,
+    monthlyCapacityMt: null,
+    dispatchLocation: null,
+    incoterm: null,
+    leadTime: null,
+    paymentTerms: null,
+    properties: Object.freeze([]),
     sourceMessageDigest: digest,
     verified: false,
   });
@@ -193,6 +243,18 @@ function parseDemand(text: string, digest: string): BuyerDemandProposal | null {
     mfiMax: max ? decimal(max) : null,
     ceilingPerKg: ceiling ? decimal(ceiling) : null,
     currency: ceiling ? (currency?.toUpperCase() ?? "INR") : null,
+    grade: null,
+    application: null,
+    colour: null,
+    density: null,
+    ash: null,
+    moisture: null,
+    recycledContentType: null,
+    dispatchLocation: destination.trim(),
+    incoterm: null,
+    leadTime: null,
+    paymentTerms: null,
+    properties: Object.freeze([]),
     sourceMessageDigest: digest,
     verified: false,
   });

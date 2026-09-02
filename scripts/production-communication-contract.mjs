@@ -14,6 +14,8 @@ const complete = await classifyInboundMime(mime("120 MT rHDPE natural, MFI 0.4, 
 if (complete.classification !== "SUPPLIER_OFFER" || complete.state !== "PROPOSED" || !complete.offer) throw new Error("complete supplier offer not structured");
 if (complete.offer.quantityMt !== "120" || complete.offer.moqMt !== "20" || complete.offer.netPerKg !== "88" || complete.offer.currency !== "INR") throw new Error("supplier economics parsed incorrectly");
 if (complete.offer.verified !== false) throw new Error("message parser improperly verified supplier facts");
+const international = await classifyInboundMime(mime("42 MT rPP natural, MFI 11-14, net USD 0.92/kg, MOQ 20 MT"));
+if (!international.offer || international.offer.currency !== "USD" || international.offer.netPerKg !== "0.92") throw new Error("international supplier currency not preserved");
 
 const incomplete = await classifyInboundMime(mime("120 MT HDPE available"));
 if (incomplete.classification !== "SUPPLIER_OFFER" || incomplete.state !== "REQUEST_MISSING_FIELDS" || incomplete.offer !== null) throw new Error("incomplete supplier offer did not fail closed");

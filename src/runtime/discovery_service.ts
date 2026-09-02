@@ -309,6 +309,7 @@ export class ProductionDiscoveryService {
             candidate,
             item,
             config,
+            source.country_code,
           );
       }
     });
@@ -403,6 +404,7 @@ export class ProductionDiscoveryService {
     candidate: OrganizationCandidate,
     evidence: AcquisitionEvidence,
     config: BraveSearchParserConfig,
+    countryCode: string,
   ): Promise<void> {
     if (!config.targetProductFamily || !config.application) return;
     const node = buildBuyerNode(candidate, [evidence], []),
@@ -415,17 +417,18 @@ export class ProductionDiscoveryService {
       return;
     const profile = (
       await client.query(
-        "insert into acquisition_profiles(id,organization_id,target_product_family,application,source_receipt_id,classification_state,valid_until) values(gen_random_uuid(),$1,$2,$3,$4,'SOURCE_STATED',now()+interval '30 days') on conflict(organization_id,target_product_family,application) do update set source_receipt_id=excluded.source_receipt_id,classification_state=excluded.classification_state,valid_until=excluded.valid_until returning id",
+        "insert into acquisition_profiles(id,organization_id,target_product_family,application,source_receipt_id,classification_state,valid_until,segment_id) values(gen_random_uuid(),$1,$2,$3,$4,'SOURCE_STATED',now()+interval '30 days',$5) on conflict(organization_id,target_product_family,application) do update set source_receipt_id=excluded.source_receipt_id,classification_state=excluded.classification_state,valid_until=excluded.valid_until,segment_id=excluded.segment_id returning id",
         [
           organizationId,
           config.targetProductFamily,
           config.application,
           receiptId,
+          `${countryCode}:${config.targetProductFamily}:${config.application}`.toLowerCase(),
         ],
       )
     ).rows[0];
     await client.query(
-      "with adopted as(update acquisition_outreach_jobs set acquisition_profile_id=$2,state='READY',claimed_at=null,last_error_code=null where id=(select id from acquisition_outreach_jobs where organization_id=$1 and acquisition_profile_id is null and state='WAITING_PROFILE' order by created_at limit 1) returning id) insert into acquisition_outreach_jobs(id,organization_id,acquisition_profile_id,state) select gen_random_uuid(),$1,$2,'READY' where not exists(select 1 from adopted) and not exists(select 1 from acquisition_outreach_jobs where organization_id=$1 and acquisition_profile_id=$2)",
+      "with score as(select value,source_digest from acquisition_value_snapshots where segment_id=(select segment_id from acquisition_profiles where id=$2) and state='CALIBRATED' and sample_size>=30 order by calculated_at desc limit 1),adopted as(update acquisition_outreach_jobs set acquisition_profile_id=$2,state='READY',claimed_at=null,last_error_code=null,priority_score=coalesce((select value from score),priority_score),priority_state=case when exists(select 1 from score) then 'CALIBRATED' else 'HEURISTIC' end,priority_source_digest=(select source_digest from score) where id=(select id from acquisition_outreach_jobs where organization_id=$1 and acquisition_profile_id is null and state='WAITING_PROFILE' order by created_at limit 1) returning id) insert into acquisition_outreach_jobs(id,organization_id,acquisition_profile_id,state,priority_score,priority_state,priority_source_digest) select gen_random_uuid(),$1,$2,'READY',coalesce((select value from score),0),case when exists(select 1 from score) then 'CALIBRATED' else 'HEURISTIC' end,(select source_digest from score) where not exists(select 1 from adopted) and not exists(select 1 from acquisition_outreach_jobs where organization_id=$1 and acquisition_profile_id=$2)",
       [organizationId, profile.id],
     );
   }

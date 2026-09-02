@@ -75,7 +75,7 @@ export class EconomicQuoteJobDispatcher {
       async (client) =>
         (
           await client.query(
-            "with claimed as(select id from economic_quote_jobs where (state='PENDING' or(state='PROCESSING' and claimed_at<now()-interval '10 minutes')) and cost_kind=any($2) order by created_at for update skip locked limit $1) update economic_quote_jobs j set state='PROCESSING',attempts=attempts+1,claimed_at=now() from claimed where j.id=claimed.id returning j.*",
+            "with claimed as(select j.id from economic_quote_jobs j join matches m on m.id=j.match_id where (j.state='PENDING' or(j.state='PROCESSING' and j.claimed_at<now()-interval '10 minutes')) and j.cost_kind=any($2) order by m.priority_score desc,j.created_at for update of j skip locked limit $1) update economic_quote_jobs j set state='PROCESSING',attempts=attempts+1,claimed_at=now() from claimed where j.id=claimed.id returning j.*",
             [limit, kinds],
           )
         ).rows,
@@ -156,7 +156,7 @@ export class EconomicEvaluationDispatcher {
   async dispatchBatch(limit = 20): Promise<number> {
     const rows = (
       await this.pool.query(
-        "select f.match_id from economic_floors f left join negotiations n on n.match_id=f.match_id where f.state='KNOWN' and n.id is null order by f.calculated_at limit $1",
+        "select f.match_id from economic_floors f join matches m on m.id=f.match_id left join negotiations n on n.match_id=f.match_id where f.state='KNOWN' and n.id is null order by m.priority_score desc,f.calculated_at limit $1",
         [limit],
       )
     ).rows;
@@ -306,6 +306,10 @@ export async function evaluateEconomics(
       ],
     );
     if (decision.state !== "EXECUTABLE") return decision.state;
+    await client.query(
+      "update matches m set priority_score=d.quantity_mt*1000*$2 from buyer_demands d where m.id=$1 and d.id=m.demand_id and d.version=m.demand_version",
+      [matchId, decision.commissionPerKg],
+    );
     const negotiationPolicy = (
       await client.query(
         "select p.* from negotiation_policies p join authority_receipts a on a.receipt_id=p.authority_receipt_id where p.currency=$1 and p.valid_from<=now() and p.valid_until>now() and a.authority_kind='NEGOTIATION_POLICY_APPROVAL' and a.retrieved_at<=now() and a.effective_at<=now() and a.expires_at>now() order by p.valid_from desc limit 1",

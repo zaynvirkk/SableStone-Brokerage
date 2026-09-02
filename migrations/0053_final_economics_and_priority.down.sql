@@ -1,0 +1,16 @@
+begin;
+drop index if exists matches_value_priority;
+drop index if exists workflow_schedules_value_priority;
+drop index if exists acquisition_outreach_jobs_value_priority;
+alter table matches drop column if exists priority_score;
+alter table workflow_schedules drop column if exists priority_score;
+alter table acquisition_outreach_jobs drop column if exists priority_score;
+alter table acquisition_outreach_jobs drop column if exists priority_state;
+alter table acquisition_outreach_jobs drop column if exists priority_source_digest;
+alter table acquisition_profiles drop column if exists segment_id;
+alter table protected_relationships drop constraint if exists protected_relationships_final_economics_unique;
+alter table protected_relationships drop column if exists final_economics_snapshot_id;
+drop trigger if exists final_economics_snapshots_no_update_delete on final_economics_snapshots;
+drop table if exists final_economics_snapshots;
+delete from schema_migrations where version='0053_final_economics_and_priority';
+commit;
