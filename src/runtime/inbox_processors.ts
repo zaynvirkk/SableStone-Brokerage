@@ -398,6 +398,7 @@ async function processGmailEvent(
       )
         await applyNegotiationIntent(
           client,
+          envelope.threadId,
           contact.organization_id,
           decision.supplierText,
           envelope.occurredAt,
@@ -421,7 +422,7 @@ async function processGmailEvent(
       )
     ).rowCount;
     await client.query(
-      "insert into outbound_email_jobs(id,idempotency_key,source_communication_id,thread_id,recipient_ciphertext,recipient_lookup_hash,subject,message_id,mime_object_key,mime_sha256,state) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)",
+      "insert into outbound_email_jobs(id,idempotency_key,source_communication_id,thread_id,recipient_ciphertext,recipient_lookup_hash,subject,message_id,mime_object_key,mime_sha256,state,provider_thread_id) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)",
       [
         jobId,
         idempotencyKey,
@@ -434,22 +435,33 @@ async function processGmailEvent(
         replyReceipt.objectKey,
         replyReceipt.sha256,
         suppressed ? "SUPPRESSED" : "PENDING",
+        envelope.threadId,
       ],
     );
   });
 }
 async function applyNegotiationIntent(
   client: PoolClient,
+  providerThreadId: string,
   buyerId: string,
   text: string,
   occurredAt: string,
 ): Promise<void> {
   const parsed = parseCommercialIntent(text);
   if (!parsed) throw new Error("commercial intent incomplete");
+  const threadBinding = (
+    await client.query(
+      "select n.id negotiation_id from outbound_email_jobs j join communications c on c.id=j.source_communication_id join negotiations n on c.thread_id='negotiation-'||n.id::text join matches m on m.id=n.match_id join buyer_demands d on d.id=m.demand_id and d.version=m.demand_version where j.provider_thread_id=$1 and d.buyer_id=$2 and j.state='SENT' order by j.sent_at desc limit 2 for share",
+      [providerThreadId, buyerId],
+    )
+  ).rows;
+  if (threadBinding.length !== 1)
+    throw new Error("negotiation thread binding unavailable or ambiguous");
+  const negotiationId = threadBinding[0].negotiation_id;
   const row = (
     await client.query(
-      "select n.*,m.offer_id,m.demand_id,ef.amount_per_kg,ef.component_digest,pp.commission_floor_per_kg,np.maximum_concession_per_kg,np.version negotiation_policy_version,np.valid_until policy_valid_until from negotiations n join matches m on m.id=n.match_id join buyer_demands d on d.id=m.demand_id and d.version=m.demand_version join economic_floors ef on ef.match_id=m.id and ef.state='KNOWN' join pricing_decisions pd on pd.match_id=m.id and pd.state='EXECUTABLE' join pricing_policies pp on pp.id=pd.policy_id and pp.version=pd.policy_version join negotiation_policies np on np.currency=n.currency and np.valid_from<=$2 and np.valid_until>$2 join authority_receipts ar on ar.receipt_id=np.authority_receipt_id and ar.authority_kind='NEGOTIATION_POLICY_APPROVAL' and ar.retrieved_at<=$2 and ar.effective_at<=$2 and ar.expires_at>$2 where d.buyer_id=$1 and n.status='OPEN' and n.expires_at>$2 order by m.priority_score desc,n.expires_at limit 1 for update",
-      [buyerId, occurredAt],
+      "select n.*,m.offer_id,m.demand_id,ef.amount_per_kg,ef.component_digest,pp.commission_floor_per_kg,np.maximum_concession_per_kg,np.version negotiation_policy_version,np.valid_until policy_valid_until from negotiations n join matches m on m.id=n.match_id join buyer_demands d on d.id=m.demand_id and d.version=m.demand_version join economic_floors ef on ef.match_id=m.id and ef.state='KNOWN' join pricing_decisions pd on pd.match_id=m.id and pd.state='EXECUTABLE' join pricing_policies pp on pp.id=pd.policy_id and pp.version=pd.policy_version join negotiation_policies np on np.currency=n.currency and np.valid_from<=$3 and np.valid_until>$3 join authority_receipts ar on ar.receipt_id=np.authority_receipt_id and ar.authority_kind='NEGOTIATION_POLICY_APPROVAL' and ar.retrieved_at<=$3 and ar.effective_at<=$3 and ar.expires_at>$3 where n.id=$1 and d.buyer_id=$2 and n.status='OPEN' and n.expires_at>$3 for update",
+      [negotiationId, buyerId, occurredAt],
     )
   ).rows[0];
   if (!row) throw new Error("open buyer negotiation unavailable");
@@ -549,6 +561,29 @@ const FINAL_COST_KINDS = Object.freeze([
   "TAX_CHARGE",
   "RISK_RESERVE",
 ] as const);
+interface CostComponentRow {
+  readonly cost_kind: string;
+  readonly amount_per_kg: string;
+  readonly currency: string;
+  readonly evidence: string;
+  readonly source_receipt_id: string | null;
+  readonly valid_until: Date | string | null;
+  readonly payer_role: WaterfallCost["payerRole"];
+  readonly settlement_treatment: WaterfallCost["settlementTreatment"];
+  readonly beneficiary_role: WaterfallCost["beneficiaryRole"];
+  readonly beneficiary_id: string | null;
+}
+function mapWaterfallCost(component: CostComponentRow): WaterfallCost {
+  return {
+    kind: component.cost_kind,
+    amountPerKg: decimal(String(component.amount_per_kg)),
+    payerRole: component.payer_role,
+    settlementTreatment: component.settlement_treatment,
+    beneficiaryRole: component.beneficiary_role,
+    beneficiaryId: component.beneficiary_id,
+    sourceReceiptId: String(component.source_receipt_id),
+  };
+}
 async function persistFinalEconomicsSnapshot(
   client: PoolClient,
   negotiation: QueryResultRow,
@@ -558,10 +593,10 @@ async function persistFinalEconomicsSnapshot(
 ) {
   const components = (
       await client.query(
-        "select cost_kind,amount_per_kg,currency,evidence,source_receipt_id,valid_until from cost_components where match_id=$1 order by cost_kind for share",
+        "select cost_kind,amount_per_kg,currency,evidence,source_receipt_id,valid_until,payer_role,settlement_treatment,beneficiary_role,beneficiary_id from cost_components where match_id=$1 order by cost_kind for share",
         [negotiation.match_id],
       )
-    ).rows,
+    ).rows as CostComponentRow[],
     byKind = new Map(components.map((component) => [component.cost_kind, component]));
   if (
     components.length !== FINAL_COST_KINDS.length ||
@@ -572,7 +607,7 @@ async function persistFinalEconomicsSnapshot(
         component.evidence !== "FIRM" ||
         !component.source_receipt_id ||
         !component.valid_until ||
-        Date.parse(component.valid_until) <= Date.parse(acceptedAt) ||
+        Date.parse(String(component.valid_until)) <= Date.parse(acceptedAt) ||
         component.currency !== negotiation.currency
       );
     })
@@ -604,15 +639,7 @@ async function persistFinalEconomicsSnapshot(
   if (compareDecimalStrings(realizedCommission, decimal("0")) <= 0)
     throw new Error("accepted negotiation commission nonpositive");
   const waterfall = buildFinalWaterfall(
-    components.map((component) => ({
-      kind: String(component.cost_kind),
-      amountPerKg: decimal(String(component.amount_per_kg)),
-      payerRole: component.payer_role,
-      settlementTreatment: component.settlement_treatment,
-      beneficiaryRole: component.beneficiary_role,
-      beneficiaryId: component.beneficiary_id,
-      sourceReceiptId: String(component.source_receipt_id),
-    })) as WaterfallCost[],
+    components.map(mapWaterfallCost),
     decimal(acceptedPrice),
     realizedCommission,
   );
@@ -1112,7 +1139,7 @@ export class OutboundGmailDispatcher {
           ),
           message: OutboundEmail = {
             idempotencyKey: row.idempotency_key,
-            threadId: row.thread_id,
+            threadId: row.provider_thread_id,
             recipient: this.cipher.decrypt(row.recipient_ciphertext),
             subject: row.subject,
             bodyObjectKey: row.mime_object_key,

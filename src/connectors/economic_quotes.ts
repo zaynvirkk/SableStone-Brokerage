@@ -19,6 +19,9 @@ export interface EconomicQuoteHttpConfig {
   readonly authorizationHeader: string;
   readonly approvalReceiptId: string;
   readonly validUntil: string;
+  readonly estimatedQuoteCost: DecimalString;
+  readonly maximumDailyQuoteSpend: DecimalString;
+  readonly billingCurrency: string;
   readonly allocationPolicies: readonly Readonly<{
     costKind: QuotedCostKind;
     payerRole: CostPayerRole;
@@ -53,6 +56,11 @@ export class ProductionEconomicQuoteConnector {
       !config.baseUrl.startsWith("https://") ||
       !config.authorizationHeader ||
       !config.approvalReceiptId ||
+      decimal(config.estimatedQuoteCost).startsWith("-") ||
+      decimal(config.estimatedQuoteCost) === decimal("0") ||
+      decimal(config.maximumDailyQuoteSpend).startsWith("-") ||
+      decimal(config.maximumDailyQuoteSpend) === decimal("0") ||
+      !/^[A-Z]{3}$/.test(config.billingCurrency) ||
       Date.parse(config.validUntil) <= Date.now() ||
       policyKinds.size !== config.costKinds.length ||
       config.costKinds.some((kind) => !policyKinds.has(kind))

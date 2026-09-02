@@ -9,7 +9,10 @@ export type SettlementCapability =
   | "REFUND_ALLOCATION"
   | "DISPUTE_FREEZE"
   | "REVERSAL_EVENTS"
-  | "BANK_ACKNOWLEDGEMENT";
+  | "BANK_ACKNOWLEDGEMENT"
+  | "MULTI_BENEFICIARY"
+  | "PROVIDER_DEDUCTION"
+  | "RESERVE_HOLD";
 export function requiredSettlementCapabilities(
   provider: string,
 ): readonly SettlementCapability[] {

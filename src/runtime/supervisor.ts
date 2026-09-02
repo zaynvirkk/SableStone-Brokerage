@@ -88,7 +88,10 @@ export class RuntimeSupervisor {
     if (!workflow) return;
     await startWorkflowIdempotently(this.temporal, workflow.name, {
       taskQueue: this.taskQueue,
-      workflowId: `${workflow.name}:${aggregateId}:${eventType}`,
+      workflowId:
+        eventType === "MATCH_SWEEP_CONTINUE"
+          ? `${workflow.name}:${String(event.event_id)}`
+          : `${workflow.name}:${aggregateId}:${eventType}`,
       args: [workflow.args(event)],
     });
   }
@@ -99,12 +102,18 @@ function routeWorkflow(eventType: string): {
 } | null {
   if (
     eventType === "OFFER_VERSION_ADDED" ||
-    eventType === "DEMAND_VERSION_ADDED"
+    eventType === "DEMAND_VERSION_ADDED" ||
+    eventType === "MATCH_SWEEP_CONTINUE"
   )
     return {
       name: "MatchWorkflow",
       args: (event) =>
-        eventType === "OFFER_VERSION_ADDED"
+        eventType === "MATCH_SWEEP_CONTINUE"
+          ? {
+              offerId: String((event.payload as Record<string, unknown>).offerId),
+              demandId: String((event.payload as Record<string, unknown>).demandId),
+            }
+          : eventType === "OFFER_VERSION_ADDED"
           ? { offerId: String(event.aggregate_id), demandId: "AUTO_SELECT" }
           : { offerId: "AUTO_SELECT", demandId: String(event.aggregate_id) },
     };

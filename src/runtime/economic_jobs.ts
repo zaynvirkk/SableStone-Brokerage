@@ -6,7 +6,8 @@ import {
   type EconomicQuoteHttpConfig,
   type QuotedCostKind,
 } from "../connectors/economic_quotes.js";
-import { decimal } from "../money.js";
+import { addDecimal, decimal } from "../money.js";
+import { compareDecimalStrings } from "../domain.js";
 import { priceMatch, type PricingPolicy } from "../pricing.js";
 import type { ImmutableEvidenceStore } from "./object_store.js";
 import { inTransaction, TransactionalOutboxRepository } from "./database.js";
@@ -18,6 +19,40 @@ import {
 } from "./production_credentials.js";
 import { createPinnedPublicFetch } from "./public_network.js";
 import { refreshMatchPriority } from "./opportunity_priority.js";
+import type { SettlementCapability } from "../settlement.js";
+
+function requiredWaterfallCapabilities(
+  components: readonly CostComponent[],
+): readonly SettlementCapability[] {
+  const required = new Set<SettlementCapability>(["BROKER_FEE_SPLIT"]);
+  for (const component of components) {
+    if (component.settlementTreatment === "THIRD_PARTY_ALLOCATION")
+      required.add("MULTI_BENEFICIARY");
+    if (component.settlementTreatment === "PROVIDER_DEDUCTED")
+      required.add("PROVIDER_DEDUCTION");
+    if (component.settlementTreatment === "WITHHELD_RESERVE")
+      required.add("RESERVE_HOLD");
+  }
+  return Object.freeze([...required].sort());
+}
+
+async function exactWaterfallRouteAvailable(
+  client: import("pg").PoolClient,
+  matchId: string,
+  currency: string,
+  capabilities: readonly SettlementCapability[],
+  now: string,
+): Promise<boolean> {
+  // Current production request builders bind only buyer, supplier and
+  // SableStone. Provider approval alone cannot make an unimplemented
+  // allocation executable, so reject it before pricing/negotiation.
+  if (capabilities.some((value) => value !== "BROKER_FEE_SPLIT")) return false;
+  const result = await client.query(
+    "with facts as(select o.supplier_id,d.buyer_id,o.product_family,case when sj.country_code='IN' and bj.country_code='IN' then 'DOMESTIC_INDIA' else 'INTERNATIONAL' end geography,exists(select 1 from trades t where t.supplier_id=o.supplier_id and t.buyer_id=d.buyer_id and t.state in('SETTLED','RECURRING')) established,exists(select 1 from protected_relationships pr join documentary_lc_route_evidence l on l.relationship_id=pr.id and l.valid_until>$4 join document_checks dc on dc.id=l.document_check_id and dc.check_type='DOCUMENTARY_LC_AUTHENTICITY' and dc.state='VERIFIED' and (dc.valid_until is null or dc.valid_until>$4) where pr.supplier_id=o.supplier_id and pr.buyer_id=d.buyer_id and pr.protected_until>$4) has_lc from matches m join supplier_offers o on o.id=m.offer_id and o.version=m.offer_version join buyer_demands d on d.id=m.demand_id and d.version=m.demand_version join organization_jurisdictions sj on sj.organization_id=o.supplier_id and sj.state='VERIFIED' and sj.valid_until>$4 join organization_jurisdictions bj on bj.organization_id=d.buyer_id and bj.state='VERIFIED' and bj.valid_until>$4 where m.id=$1),allowed as(select product_family,case when geography='DOMESTIC_INDIA' then array['CASHFREE_EASY_SPLIT','INDIAN_BANK_ESCROW','RAZORPAY_ROUTE']::text[] when established and has_lc then array['LC_PROCEEDS','ESCROW_COM']::text[] else array['ESCROW_COM']::text[] end providers from facts) select pcs.id from allowed a join provider_capability_snapshots pcs on pcs.provider=any(a.providers) and pcs.environment='PRODUCTION' and pcs.state='AVAILABLE' and pcs.evaluated_at<=$4 and pcs.capabilities ?& $3 join provider_approvals pa on pa.id=pcs.approval_id and pa.provider=pcs.provider and pa.environment='PRODUCTION' and pa.state='APPROVED' and pa.valid_from<=$4 and pa.valid_until>$4 and pa.currencies ? $2 and pa.commodity_families ? a.product_family join authority_receipts ar on ar.receipt_id=pa.written_approval_receipt_id and ar.authority_kind='PROVIDER_WRITTEN_APPROVAL' and ar.retrieved_at<=$4 and ar.effective_at<=$4 and ar.expires_at>$4 limit 1",
+    [matchId, currency, capabilities, now],
+  );
+  return Boolean(result.rowCount);
+}
 
 export async function buildEconomicQuoteConnectors(
   pool: Pool,
@@ -95,6 +130,45 @@ export class EconomicQuoteJobDispatcher {
           )
         ).rows[0];
         if (!facts) throw new Error("compatible match unavailable");
+        const budgetReserved = await inTransaction(this.pool, async (client) => {
+          await client.query("select pg_advisory_xact_lock(hashtext($1))", [
+            `economic-quote-budget:${connector.config.provider}:${connector.config.billingCurrency}`,
+          ]);
+          if (
+            (
+              await client.query(
+                "select 1 from economic_quote_spend_reservations where job_id=$1",
+                [job.id],
+              )
+            ).rowCount
+          )
+            return true;
+          const used = (
+            await client.query(
+              "select coalesce(sum(amount),0)::text amount from economic_quote_spend_reservations where provider=$1 and billing_date=current_date and currency=$2",
+              [connector.config.provider, connector.config.billingCurrency],
+            )
+          ).rows[0].amount;
+          if (
+            compareDecimalStrings(
+              addDecimal(decimal(String(used)), connector.config.estimatedQuoteCost),
+              connector.config.maximumDailyQuoteSpend,
+            ) > 0
+          )
+            return false;
+          await client.query(
+            "insert into economic_quote_spend_reservations(id,job_id,provider,billing_date,amount,currency) values($1,$2,$3,current_date,$4,$5) on conflict(job_id) do nothing",
+            [randomUUID(), job.id, connector.config.provider, connector.config.estimatedQuoteCost, connector.config.billingCurrency],
+          );
+          return true;
+        });
+        if (!budgetReserved) {
+          await this.pool.query(
+            "update economic_quote_jobs set state='PENDING',claimed_at=null,attempts=greatest(attempts-1,0),last_error_code='DAILY_QUOTE_BUDGET_EXHAUSTED' where id=$1 and state='PROCESSING'",
+            [job.id],
+          );
+          continue;
+        }
         const quote = await connector.quote({
           matchId: job.match_id,
           costKind: job.cost_kind,
@@ -266,6 +340,22 @@ export async function evaluateEconomics(
       ],
     );
     if (floor.state === "UNKNOWN") return "UNKNOWN";
+    const waterfallCapabilities = requiredWaterfallCapabilities(components);
+    if (
+      !(await exactWaterfallRouteAvailable(
+        client,
+        matchId,
+        floor.currency,
+        waterfallCapabilities,
+        now,
+      ))
+    ) {
+      await client.query(
+        "update matches set compatible=false,rejection_reasons=(select jsonb_agg(distinct value) from jsonb_array_elements(rejection_reasons||$2::jsonb)value) where id=$1",
+        [matchId, JSON.stringify(["EXACT_WATERFALL_ROUTE_UNAVAILABLE"])],
+      );
+      return "UNKNOWN";
+    }
     const facts = (
         await client.query(
           "select m.offer_version,m.demand_version,d.buyer_ceiling,d.ceiling_state,d.currency,d.source_event_id from matches m join buyer_demands d on d.id=m.demand_id and d.version=m.demand_version where m.id=$1",

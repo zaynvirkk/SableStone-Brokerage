@@ -12,7 +12,6 @@ import { inTransaction, TransactionalOutboxRepository } from "./database.js";
 import type { ProductionDiscoveryService } from "./discovery_service.js";
 import { reconcileTradeAccounting } from "./accounting.js";
 import { compareDecimalStrings } from "../domain.js";
-import { ensureEconomicJobs } from "./economic_jobs.js";
 import type { ProviderPartyReferenceResolver } from "./provider_parties.js";
 
 const accepted = (
@@ -84,6 +83,30 @@ export function buildDatabaseStageHandlers(
             );
       if ((!offerAuto && !anchoredOffers?.rows[0]) || (!demandAuto && !anchoredDemands?.rows[0]))
         return unknown("anchored offer or demand unavailable");
+      const anchor = (offerAuto ? anchoredDemands : anchoredOffers)!.rows[0]!,
+        anchorType = offerAuto ? "DEMAND" : "OFFER";
+      await pool.query(
+        "insert into match_candidate_sweeps(id,anchor_type,anchor_id,anchor_version,state) values(gen_random_uuid(),$1,$2,$3,'PENDING') on conflict(anchor_type,anchor_id,anchor_version) do nothing",
+        [anchorType, anchor.id, anchor.version],
+      );
+      const sweep = (
+          await pool.query(
+            "update match_candidate_sweeps set state='PROCESSING',claimed_at=now() where anchor_type=$1 and anchor_id=$2 and anchor_version=$3 and (state='PENDING' or(state='PROCESSING' and claimed_at<now()-interval '10 minutes')) returning *",
+            [anchorType, anchor.id, anchor.version],
+          )
+        ).rows[0];
+      if (!sweep) {
+        const complete = (
+          await pool.query(
+            "select id,processed_count from match_candidate_sweeps where anchor_type=$1 and anchor_id=$2 and anchor_version=$3 and state='COMPLETED'",
+            [anchorType, anchor.id, anchor.version],
+          )
+        ).rows[0];
+        return complete
+          ? accepted(`match-sweep:${complete.id}`, { candidateCount: Number(complete.processed_count), complete: true })
+          : unknown("match candidate sweep already processing");
+      }
+      const batchSize = 250;
       const
         offers = offerAuto
           ? await executableCounterparts(
@@ -91,6 +114,9 @@ export function buildDatabaseStageHandlers(
               "supplier_offers",
               anchoredDemands!.rows[0]!,
               now,
+              sweep.cursor_created_at,
+              sweep.cursor_id,
+              batchSize,
             )
           : anchoredOffers!,
         demands = demandAuto
@@ -99,6 +125,9 @@ export function buildDatabaseStageHandlers(
               "buyer_demands",
               anchoredOffers!.rows[0]!,
               now,
+              sweep.cursor_created_at,
+              sweep.cursor_id,
+              batchSize,
             )
           : anchoredDemands!,
         executableMatches: { id: string; offerId: string; demandId: string; priority: string }[] = [];
@@ -165,7 +194,6 @@ export function buildDatabaseStageHandlers(
             id = inserted.rows[0].id;
           }
           if (reasons.length === 0) {
-            await ensureEconomicJobs(pool, id, offer);
             executableMatches.push({
               id,
               offerId: offer.id,
@@ -174,6 +202,33 @@ export function buildDatabaseStageHandlers(
             });
           }
         }
+      const counterpartRows = offerAuto ? offers.rows : demands.rows,
+        hasContinuation = counterpartRows.length === batchSize,
+        lastCounterpart = counterpartRows.at(-1);
+      await inTransaction(pool, async (client) => {
+        await client.query(
+          "update match_candidate_sweeps set state=$2,cursor_created_at=coalesce($3,cursor_created_at),cursor_id=coalesce($4,cursor_id),processed_count=processed_count+$5,claimed_at=null,completed_at=case when $2='COMPLETED' then now() else null end where id=$1 and state='PROCESSING'",
+          [sweep.id, hasContinuation ? "PENDING" : "COMPLETED", lastCounterpart?.created_at ?? null, lastCounterpart?.id ?? null, counterpartRows.length],
+        );
+        if (hasContinuation)
+          await new TransactionalOutboxRepository(pool).append(client, {
+            id: randomUUID(),
+            aggregateType: "MATCH_SWEEP",
+            aggregateId: String(sweep.id),
+            eventType: "MATCH_SWEEP_CONTINUE",
+            payload: offerAuto
+              ? { offerId: "AUTO_SELECT", demandId: anchor.id }
+              : { offerId: anchor.id, demandId: "AUTO_SELECT" },
+            idempotencyKey: `match-sweep:${sweep.id}:${lastCounterpart!.id}`,
+          });
+      });
+      if (!hasContinuation)
+        await activateEconomicJobsForSweep(
+          pool,
+          anchorType,
+          String(anchor.id),
+          Number(anchor.version),
+        );
       if (executableMatches.length) {
         executableMatches.sort((left, right) =>
           compareDecimalStrings(decimal(right.priority), decimal(left.priority)),
@@ -182,6 +237,7 @@ export function buildDatabaseStageHandlers(
           matchId: executableMatches[0]!.id,
           matchIds: executableMatches.map((value) => value.id),
           candidateCount: executableMatches.length,
+          sweepComplete: !hasContinuation,
           offerId: executableMatches[0]!.offerId,
           demandId: executableMatches[0]!.demandId,
         });
@@ -414,22 +470,46 @@ async function createRecurringMatch(
     });
   });
 }
+async function activateEconomicJobsForSweep(
+  pool: Pool,
+  anchorType: "OFFER" | "DEMAND",
+  anchorId: string,
+  anchorVersion: number,
+) {
+  await inTransaction(pool, async (client) => {
+    const anchorPredicate =
+      anchorType === "OFFER"
+        ? "m.offer_id=$1 and m.offer_version=$2"
+        : "m.demand_id=$1 and m.demand_version=$2";
+    await client.query(
+      `insert into cost_components(id,match_id,cost_kind,amount_per_kg,currency,evidence,source_receipt_id,valid_until,basis,payer_role,settlement_treatment,beneficiary_role) select gen_random_uuid(),m.id,'SUPPLIER_NET',o.supplier_net,o.currency,'FIRM',o.source_event_id,o.expires_at,'supplier source-stated net verified through qualification','BUYER','SUPPLIER_ENTITLEMENT','SUPPLIER' from matches m join supplier_offers o on o.id=m.offer_id and o.version=m.offer_version where ${anchorPredicate} and m.compatible on conflict(match_id,cost_kind) do nothing`,
+      [anchorId, anchorVersion],
+    );
+    await client.query(
+      `insert into economic_quote_jobs(id,match_id,cost_kind,state) select gen_random_uuid(),m.id,k.kind,'PENDING' from matches m cross join(values('FREIGHT'),('INSPECTION'),('PAYMENT_RAIL'),('TAX_CHARGE'),('RISK_RESERVE'))k(kind) where ${anchorPredicate} and m.compatible on conflict(match_id,cost_kind) do nothing`,
+      [anchorId, anchorVersion],
+    );
+  });
+}
 async function executableCounterparts(
   pool: Pool,
   table: "supplier_offers" | "buyer_demands",
   anchor: QueryResultRow,
   now: string,
+  cursorCreatedAt: Date | string | null,
+  cursorId: string | null,
+  limit: number,
 ) {
   const verification = "verification='VERIFIED'",
     freshness = "freshness='CURRENT'";
   return table === "supplier_offers"
     ? pool.query(
-        `select * from supplier_offers x where ${verification} and ${freshness} and expires_at>$1 and version=(select max(version) from supplier_offers y where y.id=x.id) and product_family=$2 and quantity_mt>=$3 and moq_mt<=$3 order by supplier_net asc,quantity_mt desc,created_at`,
-        [now, anchor.product_family, anchor.quantity_mt],
+        `select * from supplier_offers x where ${verification} and ${freshness} and expires_at>$1 and version=(select max(version) from supplier_offers y where y.id=x.id) and product_family=$2 and quantity_mt>=$3 and moq_mt<=$3 and ($4::timestamptz is null or (created_at,id)>($4::timestamptz,$5::uuid)) order by created_at,id limit $6`,
+        [now, anchor.product_family, anchor.quantity_mt, cursorCreatedAt, cursorId, limit],
       )
     : pool.query(
-        `select * from buyer_demands x where ${verification} and ${freshness} and expires_at>$1 and version=(select max(version) from buyer_demands y where y.id=x.id) and product_family=$2 and quantity_mt<=$3 and quantity_mt>=$4 order by quantity_mt desc,buyer_ceiling desc nulls last,created_at`,
-        [now, anchor.product_family, anchor.quantity_mt, anchor.moq_mt],
+        `select * from buyer_demands x where ${verification} and ${freshness} and expires_at>$1 and version=(select max(version) from buyer_demands y where y.id=x.id) and product_family=$2 and quantity_mt<=$3 and quantity_mt>=$4 and ($5::timestamptz is null or (created_at,id)>($5::timestamptz,$6::uuid)) order by created_at,id limit $7`,
+        [now, anchor.product_family, anchor.quantity_mt, anchor.moq_mt, cursorCreatedAt, cursorId, limit],
       );
 }
 async function matchGates(
@@ -591,7 +671,7 @@ async function protectMatch(pool: Pool, matchId: string): Promise<StageResult> {
     if (!relationship)
       relationship = (
         await client.query(
-          "with facts as (select m.id match_id,o.supplier_id,d.buyer_id,o.product_family,fe.id final_economics_snapshot_id,fe.realized_commission_per_kg,fe.currency,sa.agreement_acceptance_id supplier_acceptance_id,ba.agreement_acceptance_id buyer_acceptance_id,p.protection_months,p.affiliate_scope,p.qualifying_purchase_definition from matches m join supplier_offers o on o.id=m.offer_id and o.version=m.offer_version join buyer_demands d on d.id=m.demand_id and d.version=m.demand_version join final_economics_snapshots fe on fe.match_id=m.id join negotiations n on n.id=fe.negotiation_id and n.status='ACCEPTED' join protected_match_acceptances sa on sa.match_id=m.id and sa.role='SUPPLIER' join protected_match_acceptances ba on ba.match_id=m.id and ba.role='BUYER' join lateral(select * from protected_relationship_policies where effective_at<=now() and expires_at>now() order by effective_at desc limit 1)p on true where m.id=$1 and m.compatible) insert into protected_relationships(id,supplier_id,buyer_id,introduced_at,protected_until,commodity_scope,affiliate_scope,qualifying_purchase_definition,commission_type,commission_rate,currency,supplier_acceptance_id,buyer_acceptance_id,required_settlement_capabilities,status,final_economics_snapshot_id) select gen_random_uuid(),supplier_id,buyer_id,now(),now()+(protection_months||' months')::interval,jsonb_build_array(product_family),affiliate_scope,qualifying_purchase_definition,'PER_KG',realized_commission_per_kg,currency,supplier_acceptance_id,buyer_acceptance_id,'[\"BROKER_FEE_SPLIT\"]'::jsonb,'PROTECTED',final_economics_snapshot_id from facts returning *",
+          "with facts as (select m.id match_id,o.supplier_id,d.buyer_id,o.product_family,fe.id final_economics_snapshot_id,fe.realized_commission_per_kg,fe.currency,fe.third_party_allocations,fe.provider_deductions,fe.reserve_allocations,sa.agreement_acceptance_id supplier_acceptance_id,ba.agreement_acceptance_id buyer_acceptance_id,p.protection_months,p.affiliate_scope,p.qualifying_purchase_definition from matches m join supplier_offers o on o.id=m.offer_id and o.version=m.offer_version join buyer_demands d on d.id=m.demand_id and d.version=m.demand_version join final_economics_snapshots fe on fe.match_id=m.id join negotiations n on n.id=fe.negotiation_id and n.status='ACCEPTED' join protected_match_acceptances sa on sa.match_id=m.id and sa.role='SUPPLIER' join protected_match_acceptances ba on ba.match_id=m.id and ba.role='BUYER' join lateral(select * from protected_relationship_policies where effective_at<=now() and expires_at>now() order by effective_at desc limit 1)p on true where m.id=$1 and m.compatible),capabilities as(select *,jsonb_build_array('BROKER_FEE_SPLIT')||case when jsonb_array_length(third_party_allocations)>0 then jsonb_build_array('MULTI_BENEFICIARY') else '[]'::jsonb end||case when jsonb_array_length(provider_deductions)>0 then jsonb_build_array('PROVIDER_DEDUCTION') else '[]'::jsonb end||case when jsonb_array_length(reserve_allocations)>0 then jsonb_build_array('RESERVE_HOLD') else '[]'::jsonb end required from facts) insert into protected_relationships(id,supplier_id,buyer_id,introduced_at,protected_until,commodity_scope,affiliate_scope,qualifying_purchase_definition,commission_type,commission_rate,currency,supplier_acceptance_id,buyer_acceptance_id,required_settlement_capabilities,status,final_economics_snapshot_id) select gen_random_uuid(),supplier_id,buyer_id,now(),now()+(protection_months||' months')::interval,jsonb_build_array(product_family),affiliate_scope,qualifying_purchase_definition,'PER_KG',realized_commission_per_kg,currency,supplier_acceptance_id,buyer_acceptance_id,required,'PROTECTED',final_economics_snapshot_id from capabilities returning *",
           [matchId],
         )
       ).rows[0];
