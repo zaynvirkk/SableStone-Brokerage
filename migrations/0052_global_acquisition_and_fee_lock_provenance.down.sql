@@ -1,0 +1,24 @@
+begin;
+alter table fee_locks drop constraint if exists fee_locks_entitlement_security_event_unique;
+alter table fee_locks drop constraint if exists fee_locks_entitlement_security_event_fk;
+alter table fee_locks drop column if exists entitlement_security_event_id;
+drop table if exists documentary_lc_route_evidence;
+alter table documents drop column if exists source_communication_id;
+alter table discovery_source_configs drop column if exists country_code;
+drop table if exists organization_jurisdictions;
+drop index if exists acquisition_outreach_jobs_unprofiled_unique;
+drop index if exists acquisition_outreach_jobs_profile_unique;
+drop index if exists acquisition_outreach_jobs_ready;
+alter table acquisition_outreach_jobs drop constraint if exists acquisition_outreach_jobs_state_check;
+update acquisition_outreach_jobs set state='PENDING' where state not in('COMPLETED','SUPPRESSED','FAILED');
+alter table acquisition_outreach_jobs add constraint acquisition_outreach_jobs_state_check
+ check(state in('PENDING','PROCESSING','COMPLETED','SUPPRESSED','FAILED'));
+create index acquisition_outreach_jobs_pending on acquisition_outreach_jobs(created_at) where state in('PENDING','PROCESSING');
+alter table acquisition_outreach_jobs drop column if exists acquisition_profile_id;
+alter table acquisition_outreach_jobs add constraint acquisition_outreach_jobs_organization_id_key unique(organization_id);
+alter table acquisition_profiles drop constraint if exists acquisition_profiles_lane_unique;
+alter table acquisition_profiles drop constraint if exists acquisition_profiles_pkey;
+alter table acquisition_profiles drop column if exists id;
+alter table acquisition_profiles add constraint acquisition_profiles_pkey primary key(organization_id);
+delete from schema_migrations where version='0052_global_acquisition_and_fee_lock_provenance';
+commit;

@@ -162,6 +162,8 @@ export class ProductionDiscoveryService {
       )
     ).rows[0];
     if (!source) throw new Error("reviewed discovery source unavailable");
+    if (!/^[A-Z]{2}$/.test(String(source.country_code ?? "")))
+      throw new Error("reviewed discovery source country unavailable");
     if (source.source_kind === "SEARCH")
       return this.runBraveSearch(
         source,
@@ -220,14 +222,12 @@ export class ProductionDiscoveryService {
             receipt.id,
             candidate,
             expectedRole,
+            source.country_code,
           );
         }
       }
     });
-    await this.pool.query(
-      "insert into kyb_jobs(id,organization_id,candidate_id,country_code,state) select gen_random_uuid(),co.organization_id,co.candidate_id,'IN','PENDING' from candidate_organizations co where co.role=$1 and not exists(select 1 from kyb_jobs k where k.organization_id=co.organization_id)",
-      [expectedRole],
-    );
+    await this.enqueueKyb(expectedRole);
     return {
       receiptIds: Object.freeze(receiptIds),
       candidateCount: result.candidates.length,
@@ -298,6 +298,7 @@ export class ProductionDiscoveryService {
             receipt.id,
             candidate,
             expectedRole,
+            source.country_code,
           );
         candidateCount++;
         if (expectedRole === "BUYER")
@@ -324,6 +325,7 @@ export class ProductionDiscoveryService {
     receiptId: string,
     candidate: OrganizationCandidate,
     expectedRole: "SUPPLIER" | "BUYER",
+    countryCode: string,
   ): Promise<string> {
     let stored = (
       await client.query(
@@ -382,6 +384,10 @@ export class ProductionDiscoveryService {
       "insert into candidate_organizations(candidate_id,organization_id,role) values($1,$2,$3) on conflict(candidate_id) do nothing",
       [stored.id, organizationId, expectedRole],
     );
+    await client.query(
+      "insert into organization_jurisdictions(organization_id,country_code,source_receipt_id,state,valid_until) values($1,$2,$3,'SOURCE_STATED',now()+interval '90 days') on conflict(organization_id) do update set country_code=excluded.country_code,source_receipt_id=excluded.source_receipt_id,state=excluded.state,valid_until=excluded.valid_until where organization_jurisdictions.country_code=excluded.country_code or organization_jurisdictions.valid_until<=now()",
+      [organizationId, countryCode, receiptId],
+    );
     if (domain)
       await client.query(
         "insert into enrichment_jobs(id,candidate_id,organization_id,domain,state) values($1,$2,$3,$4,'PENDING') on conflict(candidate_id) do nothing",
@@ -407,20 +413,26 @@ export class ProductionDiscoveryService {
       !node.polymerSignals.includes(expectedSignal)
     )
       return;
+    const profile = (
+      await client.query(
+        "insert into acquisition_profiles(id,organization_id,target_product_family,application,source_receipt_id,classification_state,valid_until) values(gen_random_uuid(),$1,$2,$3,$4,'SOURCE_STATED',now()+interval '30 days') on conflict(organization_id,target_product_family,application) do update set source_receipt_id=excluded.source_receipt_id,classification_state=excluded.classification_state,valid_until=excluded.valid_until returning id",
+        [
+          organizationId,
+          config.targetProductFamily,
+          config.application,
+          receiptId,
+        ],
+      )
+    ).rows[0];
     await client.query(
-      "insert into acquisition_profiles(organization_id,target_product_family,application,source_receipt_id,classification_state,valid_until) values($1,$2,$3,$4,'SOURCE_STATED',now()+interval '30 days') on conflict(organization_id) do nothing",
-      [
-        organizationId,
-        config.targetProductFamily,
-        config.application,
-        receiptId,
-      ],
+      "with adopted as(update acquisition_outreach_jobs set acquisition_profile_id=$2,state='READY',claimed_at=null,last_error_code=null where id=(select id from acquisition_outreach_jobs where organization_id=$1 and acquisition_profile_id is null and state='WAITING_PROFILE' order by created_at limit 1) returning id) insert into acquisition_outreach_jobs(id,organization_id,acquisition_profile_id,state) select gen_random_uuid(),$1,$2,'READY' where not exists(select 1 from adopted) and not exists(select 1 from acquisition_outreach_jobs where organization_id=$1 and acquisition_profile_id=$2)",
+      [organizationId, profile.id],
     );
   }
 
   private enqueueKyb(expectedRole: "SUPPLIER" | "BUYER") {
     return this.pool.query(
-      "insert into kyb_jobs(id,organization_id,candidate_id,country_code,state) select gen_random_uuid(),co.organization_id,co.candidate_id,'IN','PENDING' from candidate_organizations co where co.role=$1 and not exists(select 1 from kyb_jobs k where k.organization_id=co.organization_id)",
+      "insert into kyb_jobs(id,organization_id,candidate_id,country_code,state) select gen_random_uuid(),co.organization_id,co.candidate_id,j.country_code,'PENDING' from candidate_organizations co join organization_jurisdictions j on j.organization_id=co.organization_id and j.valid_until>now() where co.role=$1 and not exists(select 1 from kyb_jobs k where k.organization_id=co.organization_id)",
       [expectedRole],
     );
   }

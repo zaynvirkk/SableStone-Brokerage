@@ -17,6 +17,7 @@ export type DocumentKind =
   | "GST_COMPANY"
   | "BANK_DETAILS"
   | "SAMPLE_INSPECTION"
+  | "DOCUMENTARY_LC"
   | "UNKNOWN";
 export type DocumentFactState =
   | "SOURCE_STATED"

@@ -14,7 +14,9 @@ def test_reviewed_templates_and_dispatcher_are_production_wired():
         assert requirement in source
     assert "order by calculated_at desc" in source
     assert "order by m.created_at" not in source
-    assert 'if (agreementAutomation) await agreementAutomation.dispatchBatch()' in worker
+    assert 'if (agreementAutomation)' in worker
+    assert 'await isolated("agreement-automation", () =>' in worker
+    assert 'agreementAutomation.dispatchBatch()' in worker
     assert 'capabilities.includes("TRADING")' in worker
     segment=api[api.index('"/v1/system/agreement-templates"'):api.index('"/v1/system/agreements"')]
     assert 'allowedRoles: ["SYSTEM"]' in segment

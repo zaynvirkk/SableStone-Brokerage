@@ -22,7 +22,7 @@ export class AcquisitionOutreachDispatcher {
       async (client) =>
         (
           await client.query(
-            "with claimed as(select id from acquisition_outreach_jobs where state='PENDING' or(state='PROCESSING' and claimed_at<now()-interval '10 minutes') order by created_at for update skip locked limit $1) update acquisition_outreach_jobs j set state='PROCESSING',attempts=attempts+1,claimed_at=now() from claimed where j.id=claimed.id returning j.*",
+            "with claimed as(select id from acquisition_outreach_jobs where state in('WAITING_CONTACT','WAITING_RISK','WAITING_PROFILE','WAITING_INVENTORY','READY') or(state='PROCESSING' and claimed_at<now()-interval '10 minutes') order by created_at for update skip locked limit $1) update acquisition_outreach_jobs j set state='PROCESSING',attempts=attempts+1,claimed_at=now() from claimed where j.id=claimed.id returning j.*",
             [limit],
           )
         ).rows,
@@ -30,14 +30,36 @@ export class AcquisitionOutreachDispatcher {
     let completed = 0;
     for (const job of jobs)
       try {
-        const facts = (
+        const organization = (
           await this.pool.query(
-            "select o.organization_type,c.id contact_id,c.normalized_email_ciphertext email_ciphertext,c.email_lookup_hash,p.target_product_family,p.application from organizations o join lateral(select * from contacts c where c.organization_id=o.id and c.verification='VERIFIED' and not exists(select 1 from global_suppressions s where s.email_lookup_hash=c.email_lookup_hash) order by c.verified_at desc limit 1)c on true join lateral(select state from risk_decisions r where r.organization_id=o.id order by r.decided_at desc limit 1)risk on risk.state='PASS' left join acquisition_profiles p on p.organization_id=o.id and p.classification_state in('SOURCE_STATED','VERIFIED') and p.valid_until>now() where o.id=$1",
+            "select organization_type from organizations where id=$1",
             [job.organization_id],
           )
         ).rows[0];
-        if (!facts)
-          throw new Error("verified contact or risk PASS unavailable");
+        if (!organization)
+          throw new TerminalSuppression("acquisition organization missing");
+        const contact = (
+          await this.pool.query(
+            "select id contact_id,normalized_email_ciphertext email_ciphertext,email_lookup_hash from contacts c where c.organization_id=$1 and c.verification='VERIFIED' and not exists(select 1 from global_suppressions s where s.email_lookup_hash=c.email_lookup_hash) order by c.verified_at desc limit 1",
+            [job.organization_id],
+          )
+        ).rows[0];
+        if (!contact)
+          throw new WaitingState("WAITING_CONTACT", "verified contact pending");
+        const risk = (
+          await this.pool.query(
+            "select state from risk_decisions where organization_id=$1 order by decided_at desc limit 1",
+            [job.organization_id],
+          )
+        ).rows[0];
+        if (!risk || !["PASS", "REJECT"].includes(String(risk.state)))
+          throw new WaitingState(
+            "WAITING_RISK",
+            "current risk decision pending",
+          );
+        if (risk.state === "REJECT")
+          throw new TerminalSuppression("counterparty risk rejected");
+        const facts = { ...organization, ...contact };
         const outreachPolicyVersion =
           await resolveCurrentAcquisitionOutreachPolicy(
             this.pool,
@@ -49,20 +71,41 @@ export class AcquisitionOutreachDispatcher {
           body =
             "SableStone is qualifying current polymer supply for protected buyer matching. Please reply with material, grade/application, colour, MFI range, available MT, monthly capacity, MOQ, dispatch location, supplier NET INR/kg, payment terms, lead time, COA, TDS and current registration evidence. SableStone does not buy inventory or request credit.";
         } else if (facts.organization_type === "BUYER") {
-          if (!facts.target_product_family)
-            throw new Error(
-              "buyer source-backed application profile unavailable",
-            );
-          const offer = (
+          const lane = (
             await this.pool.query(
-              "select product_family,product_spec,quantity_mt from supplier_offers where product_family=$1 and verification='VERIFIED' and freshness='CURRENT' and expires_at>now() order by created_at desc limit 1",
-              [facts.target_product_family],
+              "select p.target_product_family,p.application,o.product_family,o.product_spec,o.quantity_mt,o.moq_mt,o.currency,o.supplier_net+pp.commission_floor_per_kg indicative_ex_dispatch from acquisition_profiles p join lateral(select * from supplier_offers o where o.product_family=p.target_product_family and o.verification='VERIFIED' and o.freshness='CURRENT' and o.expires_at>now() order by o.quantity_mt desc,o.created_at desc limit 1)o on true join lateral(select policy.* from pricing_policies policy join authority_receipts ar on ar.receipt_id=policy.approval_receipt_id and ar.authority_kind='PRICING_POLICY_APPROVAL' and ar.retrieved_at<=now() and ar.effective_at<=now() and ar.expires_at>now() where policy.currency=o.currency and policy.valid_from<=now() and policy.valid_until>now() order by policy.valid_from desc limit 1)pp on true where p.organization_id=$1 and ($2::uuid is null or p.id=$2) and p.classification_state in('SOURCE_STATED','VERIFIED') and p.valid_until>now() order by o.quantity_mt desc,p.created_at limit 1",
+              [job.organization_id, job.acquisition_profile_id],
             )
           ).rows[0];
-          if (!offer) throw new Error("real compatible inventory unavailable");
-          subject = `Current ${offer.product_family} allocation`;
-          body = `SableStone has current verified ${offer.product_family} inventory available for ${facts.application}. Reply with required MT, destination, MFI/specification limits, maximum executable INR/kg and required date. Counterparty identity remains sealed until protected terms and settlement entitlement are secured.`;
-        } else throw new Error("acquisition organization role unsupported");
+          if (!lane) {
+            const hasProfile = (
+              await this.pool.query(
+                "select 1 from acquisition_profiles where organization_id=$1 and ($2::uuid is null or id=$2) and classification_state in('SOURCE_STATED','VERIFIED') and valid_until>now() limit 1",
+                [job.organization_id, job.acquisition_profile_id],
+              )
+            ).rowCount;
+            throw new WaitingState(
+              hasProfile ? "WAITING_INVENTORY" : "WAITING_PROFILE",
+              hasProfile
+                ? "compatible inventory pending"
+                : "buyer profile pending",
+            );
+          }
+          const spec = sanitizedLotSpec(lane.product_spec);
+          subject = `Current ${lane.product_family} allocation — ${lane.quantity_mt} MT`;
+          body = [
+            `SableStone has a current verified ${lane.product_family} allocation for ${lane.application}.`,
+            `Available: ${lane.quantity_mt} MT`,
+            `MOQ: ${lane.moq_mt} MT`,
+            ...spec,
+            `Indicative ex-dispatch level: ${lane.currency} ${lane.indicative_ex_dispatch}/kg (freight and other destination-specific transaction costs will be calculated before any executable quote).`,
+            "Reply with required MT, destination, specification limits, maximum executable price and required date.",
+            "Supplier identity remains sealed until protected terms and the exact settlement entitlement are secured.",
+          ].join("\n");
+        } else
+          throw new TerminalSuppression(
+            "acquisition organization role unsupported",
+          );
         const recipient = this.cipher.decrypt(facts.email_ciphertext),
           communicationId = randomUUID(),
           threadId = `acquisition-${job.organization_id}`,
@@ -122,14 +165,52 @@ export class AcquisitionOutreachDispatcher {
         });
         completed++;
       } catch (error) {
-        const suppress = /unavailable|unsupported/i.test(
-          (error as Error).message,
-        );
+        const waiting = error instanceof WaitingState,
+          suppress = error instanceof TerminalSuppression;
         await this.pool.query(
-          "update acquisition_outreach_jobs set state=case when $2 then 'SUPPRESSED' when attempts>=5 then 'FAILED' else 'PENDING' end,completed_at=case when $2 or attempts>=5 then now() else null end,claimed_at=null,last_error_code=$3 where id=$1 and state='PROCESSING'",
-          [job.id, suppress, (error as Error).message.slice(0, 100)],
+          "update acquisition_outreach_jobs set state=case when $2 then $3 when $4 then 'SUPPRESSED' when attempts>=5 then 'FAILED' else 'READY' end,completed_at=case when $4 or(not $2 and attempts>=5) then now() else null end,claimed_at=null,last_error_code=$5 where id=$1 and state='PROCESSING'",
+          [
+            job.id,
+            waiting,
+            waiting ? (error as WaitingState).state : "READY",
+            suppress,
+            (error as Error).message.slice(0, 100),
+          ],
         );
       }
     return completed;
   }
+}
+
+type WaitingAcquisitionState =
+  | "WAITING_CONTACT"
+  | "WAITING_RISK"
+  | "WAITING_PROFILE"
+  | "WAITING_INVENTORY";
+class WaitingState extends Error {
+  constructor(
+    readonly state: WaitingAcquisitionState,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+class TerminalSuppression extends Error {}
+
+function sanitizedLotSpec(value: unknown): string[] {
+  if (!value || typeof value !== "object") return [];
+  const spec = value as Record<string, unknown>,
+    rows: string[] = [];
+  for (const [label, keys] of [
+    ["Application", ["application", "grade"]],
+    ["MFI", ["mfi", "mfiRange", "mfi_min", "mfi_max"]],
+    ["Colour", ["colour", "color"]],
+    ["Dispatch region", ["dispatchRegion", "dispatch_location", "region"]],
+  ] as const) {
+    const parts = keys.flatMap((key) =>
+      spec[key] === undefined || spec[key] === null ? [] : [String(spec[key])],
+    );
+    if (parts.length) rows.push(`${label}: ${parts.join("–")}`);
+  }
+  return rows;
 }

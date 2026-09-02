@@ -22,6 +22,12 @@ factory must never replace that client with global `fetch`.
 Use only counsel-approved sources and access methods. Preserve provenance,
 retrieval time and source bodies. Measure accessible-universe coverage; label
 gaps `UNKNOWN`. Do not send a message or imply registry completeness.
+Every approved discovery-source version must name its ISO alpha-2 country.
+KYB must independently verify that exact jurisdiction before a protected match
+can create a trade; missing or conflicting jurisdiction evidence fails closed
+and must never default to India. Buyer classification is lane-specific, so
+register every independently supported product-family/application pair rather
+than collapsing a multi-polymer converter into one profile.
 
 Before bounded outreach, register the exact current structured outreach policy
 backed by its `OUTREACH_POLICY_APPROVAL` receipt. Confirm every selected
@@ -30,12 +36,21 @@ that row. The worker rechecks the binding both when creating the first message
 and immediately before Gmail sends it; expiry, mismatch or suppression must
 remain fail-closed.
 
+Temporary acquisition prerequisites are waiting states, not suppressions.
+Confirm that new profiles, current risk decisions and newly verified matching
+offers wake the relevant lane automatically. `SUPPRESSED` is reserved for a
+terminal policy, consent, role or risk prohibition.
+
 ## Bound one live journey
 
 Require a separate explicit operator authorization naming counterparties,
 commodity, maximum amount, rail and expiry. Re-evaluate every legal, risk,
 agreement, fee-lock and identity gate against current receipts. A failed or
 ambiguous gate stops the journey.
+For international routing, preserve both verified counterparty jurisdictions,
+settled protected history and any relationship-bound independently verified LC
+artifact. A fee lock must reference the exact entitlement-security event whose
+secured-funds and beneficiary assertions authorize identity release.
 
 ## Reconcile and decide
 

@@ -120,7 +120,7 @@ export class EnrichmentJobDispatcher {
           );
           if (contacts.some((contact) => contact.verification === "VERIFIED"))
             await client.query(
-              "insert into acquisition_outreach_jobs(id,organization_id,state) values($1,$2,'PENDING') on conflict(organization_id) do nothing",
+              "insert into acquisition_outreach_jobs(id,organization_id,state) select $1,$2,'READY' where not exists(select 1 from acquisition_outreach_jobs where organization_id=$2 and acquisition_profile_id is null)",
               [randomUUID(), job.organization_id],
             );
         });

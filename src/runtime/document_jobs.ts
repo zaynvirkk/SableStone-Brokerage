@@ -131,13 +131,14 @@ export class DocumentJobDispatcher {
           for (const document of documents) {
             const documentId = randomUUID();
             await client.query(
-              "insert into documents(id,organization_id,kind,object_key_ciphertext,sha256) values($1,$2,$3,$4,$5)",
+              "insert into documents(id,organization_id,kind,object_key_ciphertext,sha256,source_communication_id) values($1,$2,$3,$4,$5,$6)",
               [
                 documentId,
                 owner.organization_id,
                 document.extraction.kind,
                 this.cipher.encrypt(document.objectKey),
                 document.sha256,
+                job.communication_id,
               ],
             );
             await client.query(
@@ -235,7 +236,7 @@ export class DocumentVerificationJobDispatcher {
               now,
             ],
           );
-          for (const check of result.checks)
+          for (const check of result.checks) {
             await client.query(
               "insert into document_checks(id,document_id,check_type,state,source_receipt_id,valid_until,checked_at,checker_version) values($1,$2,$3,$4,$5,$6,$7,$8) on conflict(document_id,check_type,checker_version) do nothing",
               [
@@ -248,6 +249,18 @@ export class DocumentVerificationJobDispatcher {
                 now,
                 `${result.provider}:${this.verifier.config.policyVersion}`,
               ],
+            );
+          }
+          if (
+            result.checks.length > 0 &&
+            result.checks.every((check) => check.state === "VERIFIED") &&
+            result.checks.some(
+              (check) => check.checkType === "DOCUMENTARY_LC_AUTHENTICITY",
+            )
+          )
+            await client.query(
+              "insert into documentary_lc_route_evidence(relationship_id,document_id,document_check_id,valid_until) select t.relationship_id,d.id,dc.id,least(coalesce(dc.valid_until,now()+interval '30 days'),now()+interval '30 days') from documents d join communications c on c.id=d.source_communication_id join trades t on c.thread_id='trade-'||t.id::text and t.buyer_id=d.organization_id join lateral(select * from document_checks where document_id=d.id and check_type='DOCUMENTARY_LC_AUTHENTICITY' and state='VERIFIED' order by checked_at desc limit 1)dc on true where d.id=$1 and d.kind='DOCUMENTARY_LC' and t.relationship_id is not null and t.state in('SETTLED','RECURRING') on conflict(relationship_id) do update set document_id=excluded.document_id,document_check_id=excluded.document_check_id,valid_until=excluded.valid_until",
+              [job.document_id],
             );
           await client.query(
             "update document_verification_jobs set state=$2,completed_at=now(),claimed_at=null where id=$1 and state='PROCESSING'",
@@ -403,6 +416,11 @@ export class QualificationJobDispatcher {
             current.standing,
             current.expires_at,
           ],
+        );
+      if (table === "supplier_offers")
+        await client.query(
+          "update acquisition_outreach_jobs j set state='READY',claimed_at=null,last_error_code=null where j.state='WAITING_INVENTORY' and exists(select 1 from acquisition_profiles p where p.organization_id=j.organization_id and p.target_product_family=$1 and p.classification_state in('SOURCE_STATED','VERIFIED') and p.valid_until>now())",
+          [current.product_family],
         );
       await client.query(
         "insert into qualification_decisions(id,organization_id,subject_type,subject_id,subject_version,verdict,reasons,policy_version,decided_at) values($1,$2,$3,$4,$5,'PASS','[]'::jsonb,$6,now())",

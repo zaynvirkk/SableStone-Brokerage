@@ -168,6 +168,19 @@ export class KybJobDispatcher {
             : receipts.some((value) => value.state === "HIT")
               ? "REJECT"
               : "FREEZE";
+          const identityCheck = receipts.find(
+            (value) => value.type === "KYB_IDENTITY" && value.state === "PASS",
+          );
+          if (state === "PASS" && identityCheck)
+            await client.query(
+              "update organization_jurisdictions set state='VERIFIED',verified_risk_check_id=$2,valid_until=$3 where organization_id=$1 and country_code=$4",
+              [
+                job.organization_id,
+                identityCheck.id,
+                new Date(Date.parse(now) + 30 * 86400_000).toISOString(),
+                job.country_code,
+              ],
+            );
           await client.query(
             "insert into risk_decisions(id,organization_id,state,reasons,check_ids,policy_version,decided_at) values($1,$2,$3,$4,$5,$6,$7)",
             [
@@ -185,6 +198,10 @@ export class KybJobDispatcher {
           await client.query(
             "update kyb_jobs set state=$2,completed_at=now(),claimed_at=null where id=$1 and state='PROCESSING'",
             [job.id, state === "PASS" ? "COMPLETED" : "REJECTED"],
+          );
+          await client.query(
+            "update acquisition_outreach_jobs set state=case when $2='PASS' then 'READY' when $2='REJECT' then 'SUPPRESSED' else 'WAITING_RISK' end,completed_at=case when $2='REJECT' then now() else null end,claimed_at=null,last_error_code=case when $2='PASS' then null when $2='REJECT' then 'COUNTERPARTY_RISK_REJECTED' else 'RISK_EVIDENCE_PENDING' end where organization_id=$1 and state='WAITING_RISK'",
+            [job.organization_id, state],
           );
         });
         completed++;

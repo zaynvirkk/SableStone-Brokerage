@@ -546,20 +546,24 @@ async function protectMatch(pool: Pool, matchId: string): Promise<StageResult> {
       const tradeId = randomUUID(),
         facts = (
           await client.query(
-            "select o.supplier_id,d.buyer_id from matches m join supplier_offers o on o.id=m.offer_id and o.version=m.offer_version join buyer_demands d on d.id=m.demand_id and d.version=m.demand_version where m.id=$1",
-            [matchId],
+            "select o.supplier_id,d.buyer_id,case when sj.country_code='IN' and bj.country_code='IN' then 'DOMESTIC_INDIA' else 'INTERNATIONAL' end geography,case when exists(select 1 from trades prior where prior.supplier_id=o.supplier_id and prior.buyer_id=d.buyer_id and prior.state in('SETTLED','RECURRING')) then 'ESTABLISHED' else 'NEW' end relationship_maturity,exists(select 1 from documentary_lc_route_evidence l join documents doc on doc.id=l.document_id and doc.kind='DOCUMENTARY_LC' join document_checks dc on dc.id=l.document_check_id and dc.document_id=doc.id and dc.check_type='DOCUMENTARY_LC_AUTHENTICITY' and dc.state='VERIFIED' and (dc.valid_until is null or dc.valid_until>now()) where l.relationship_id=$2 and l.valid_until>now()) has_documentary_lc from matches m join supplier_offers o on o.id=m.offer_id and o.version=m.offer_version join buyer_demands d on d.id=m.demand_id and d.version=m.demand_version join organization_jurisdictions sj on sj.organization_id=o.supplier_id and sj.state='VERIFIED' and sj.valid_until>now() join organization_jurisdictions bj on bj.organization_id=d.buyer_id and bj.state='VERIFIED' and bj.valid_until>now() where m.id=$1",
+            [matchId, relationship.id],
           )
         ).rows[0];
-      if (!facts) throw new Error("protected match disappeared");
+      if (!facts)
+        return unknown("verified counterparty jurisdictions unavailable");
       trade = (
         await client.query(
-          "insert into trades(id,match_id,supplier_id,buyer_id,relationship_id,state,geography,relationship_maturity,has_documentary_lc) values($1,$2,$3,$4,$5,'PROTECTED','DOMESTIC_INDIA','NEW',false) returning *",
+          "insert into trades(id,match_id,supplier_id,buyer_id,relationship_id,state,geography,relationship_maturity,has_documentary_lc) values($1,$2,$3,$4,$5,'PROTECTED',$6,$7,$8) returning *",
           [
             tradeId,
             matchId,
             facts.supplier_id,
             facts.buyer_id,
             relationship.id,
+            facts.geography,
+            facts.relationship_maturity,
+            facts.has_documentary_lc,
           ],
         )
       ).rows[0];
@@ -769,7 +773,7 @@ async function releaseIdentity(
     });
   const facts = (
     await pool.query(
-      "select f.*,pr.supplier_id,pr.buyer_id,pr.protected_until,sa.acceptance_sha256 supplier_hash,ba.acceptance_sha256 buyer_hash from fee_locks f join protected_relationships pr on pr.id=f.relationship_id join agreement_acceptances sa on sa.id=pr.supplier_acceptance_id join agreement_acceptances ba on ba.id=pr.buyer_acceptance_id where f.id=$1 and f.trade_id=$2 and f.state='LOCKED' and pr.protected_until>now()",
+      "select f.*,pr.supplier_id,pr.buyer_id,pr.protected_until,sa.acceptance_sha256 supplier_hash,ba.acceptance_sha256 buyer_hash from fee_locks f join entitlement_security_events e on e.id=f.entitlement_security_event_id and e.instruction_id=f.instruction_id and e.beneficiary_verified and e.funds_secured join protected_relationships pr on pr.id=f.relationship_id join agreement_acceptances sa on sa.id=pr.supplier_acceptance_id join agreement_acceptances ba on ba.id=pr.buyer_acceptance_id where f.id=$1 and f.trade_id=$2 and f.state='LOCKED' and pr.protected_until>now()",
       [feeLockId, tradeId],
     )
   ).rows[0];

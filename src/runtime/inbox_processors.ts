@@ -807,7 +807,7 @@ async function processSettlementEvent(
         ],
       );
       await client.query(
-        "insert into fee_locks(id,trade_id,relationship_id,instruction_id,provider,provider_approval_id,provider_reference,instruction_digest,supplier_accepted_instruction_digest,buyer_accepted_instruction_digest,supplier_entitlement,sablestone_entitlement,gross_amount,currency,state,created_at) values($1,$2,$3,$4,$5,$6,$7,$8,$8,$8,$9,$10,$11,$12,'LOCKED',$13)",
+        "insert into fee_locks(id,trade_id,relationship_id,instruction_id,provider,provider_approval_id,provider_reference,instruction_digest,supplier_accepted_instruction_digest,buyer_accepted_instruction_digest,supplier_entitlement,sablestone_entitlement,gross_amount,currency,state,created_at,entitlement_security_event_id) values($1,$2,$3,$4,$5,$6,$7,$8,$8,$8,$9,$10,$11,$12,'LOCKED',$13,$14)",
         [
           feeLockId,
           instruction.trade_id,
@@ -822,6 +822,7 @@ async function processSettlementEvent(
           instruction.gross_amount,
           instruction.currency,
           occurredAt,
+          securityId,
         ],
       );
       await client.query(

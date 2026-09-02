@@ -298,32 +298,55 @@ if (runtime.activation.capabilities.includes("SETTLEMENT")) {
   }
 }
 
+const isolated = async (subsystem, action) => {
+  try {
+    await runtime.activationGuard.assertCurrent();
+    await action();
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        event: "PERIODIC_SUBSYSTEM_FAILURE",
+        subsystem,
+        errorCode: error?.name ?? "Error",
+      }),
+    );
+  }
+};
 const periodic = async () => {
   while (!controller.signal.aborted) {
-    try {
-      await runtime.activationGuard.assertCurrent();
-      if (watch) await watch.renewIfDue();
-      if (outbound) await outbound.dispatchBatch();
-      if (commercialNotifications)
-        await commercialNotifications.dispatchBatch();
-      if (acquisitionOutreach) await acquisitionOutreach.dispatchBatch();
-      if (documents) await documents.dispatchBatch();
-      if (documentVerification) await documentVerification.dispatchBatch();
-      if (qualification) await qualification.dispatchBatch();
-      if (enrichment) await enrichment.dispatchBatch();
-      if (kybJobs) await kybJobs.dispatchBatch();
-      if (economicJobs) await economicJobs.dispatchBatch();
-      if (economicEvaluation) await economicEvaluation.dispatchBatch();
-      if (agreementAutomation) await agreementAutomation.dispatchBatch();
-      if (scheduler) await scheduler.tick();
-    } catch (error) {
-      console.error(
-        JSON.stringify({
-          event: "PERIODIC_CONNECTOR_FAILURE",
-          errorCode: error?.name ?? "Error",
-        }),
+    if (watch) await isolated("gmail-watch", () => watch.renewIfDue());
+    if (outbound)
+      await isolated("outbound-email", () => outbound.dispatchBatch());
+    if (commercialNotifications)
+      await isolated("commercial-notifications", () =>
+        commercialNotifications.dispatchBatch(),
       );
-    }
+    if (acquisitionOutreach)
+      await isolated("acquisition-outreach", () =>
+        acquisitionOutreach.dispatchBatch(),
+      );
+    if (documents)
+      await isolated("document-extraction", () => documents.dispatchBatch());
+    if (documentVerification)
+      await isolated("document-verification", () =>
+        documentVerification.dispatchBatch(),
+      );
+    if (qualification)
+      await isolated("qualification", () => qualification.dispatchBatch());
+    if (enrichment)
+      await isolated("enrichment", () => enrichment.dispatchBatch());
+    if (kybJobs) await isolated("kyb", () => kybJobs.dispatchBatch());
+    if (economicJobs)
+      await isolated("economic-quotes", () => economicJobs.dispatchBatch());
+    if (economicEvaluation)
+      await isolated("economic-evaluation", () =>
+        economicEvaluation.dispatchBatch(),
+      );
+    if (agreementAutomation)
+      await isolated("agreement-automation", () =>
+        agreementAutomation.dispatchBatch(),
+      );
+    if (scheduler) await isolated("scheduler", () => scheduler.tick());
     await new Promise((resolve) => {
       const timer = setTimeout(resolve, 60_000);
       controller.signal.addEventListener(
