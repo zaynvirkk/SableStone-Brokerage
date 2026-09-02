@@ -26,6 +26,6 @@ def test_matcher_materializes_full_filtered_opportunity_set_and_ltv_orders_work(
     assert "executableMatches.push" in stage
     assert "matchIds: executableMatches.map" in stage
     assert "return accepted(`match:${id}`" not in stage
-    for factor in ("expectedRelationshipValue","closeProbability","paymentProbability","days_to_cash","outcomes >= 30"):
+    for factor in ("expectedProfitPriority","closeProbability","settlementGivenFundedProbability","expectedDaysToCash","hierarchical-ev-v2"):
         assert factor in priority
     assert 'isolated("opportunity-priority"' in worker

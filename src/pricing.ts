@@ -58,3 +58,38 @@ export function expectedRelationshipValue(factors: RelationshipValueFactors, evi
   numerator = multiplyDecimal(numerator, known.paymentProbability);
   return Object.freeze({ state: "KNOWN", value: divideDecimal(numerator, known.operationalComplexity, 6), evidenceState });
 }
+
+export interface ExpectedProfitPriorityFactors {
+  readonly monthlyVolumeKg: EvidenceValue<DecimalString>;
+  readonly expectedCommissionPerKg: EvidenceValue<DecimalString>;
+  readonly expectedMonths: EvidenceValue<DecimalString>;
+  readonly physicalFillRatio: EvidenceValue<DecimalString>;
+  readonly closeProbability: EvidenceValue<DecimalString>;
+  readonly settlementGivenFundedProbability: EvidenceValue<DecimalString>;
+  readonly operationalComplexity: EvidenceValue<DecimalString>;
+  readonly expectedDaysToCash: EvidenceValue<DecimalString>;
+}
+export function expectedProfitPriority(
+  factors: ExpectedProfitPriorityFactors,
+  evidenceState: "HEURISTIC" | "CALIBRATED",
+): RelationshipValue {
+  const entries = Object.entries(factors) as [keyof ExpectedProfitPriorityFactors, EvidenceValue<DecimalString>][],
+    missing = entries.filter(([, value]) => value.state === "UNKNOWN").map(([key]) => `${String(key)}:UNKNOWN`);
+  if (missing.length) return Object.freeze({ state: "UNKNOWN", reasons: Object.freeze(missing) });
+  const values = Object.fromEntries(entries.map(([key, value]) => [key, value.state === "KNOWN" ? value.value : decimal("0")])) as unknown as Record<keyof ExpectedProfitPriorityFactors, DecimalString>;
+  for (const probability of [values.physicalFillRatio, values.closeProbability, values.settlementGivenFundedProbability])
+    if (compareDecimalStrings(probability, decimal("0")) < 0 || compareDecimalStrings(probability, decimal("1")) > 0)
+      return Object.freeze({ state: "UNKNOWN", reasons: Object.freeze(["probability:OUT_OF_RANGE"]) });
+  if (compareDecimalStrings(values.operationalComplexity, decimal("0")) <= 0 || compareDecimalStrings(values.expectedDaysToCash, decimal("0")) <= 0)
+    return Object.freeze({ state: "UNKNOWN", reasons: Object.freeze(["denominator:NONPOSITIVE"]) });
+  let gross = multiplyDecimal(values.monthlyVolumeKg, values.expectedCommissionPerKg);
+  gross = multiplyDecimal(gross, values.expectedMonths);
+  gross = multiplyDecimal(gross, values.physicalFillRatio);
+  gross = multiplyDecimal(gross, values.closeProbability);
+  gross = multiplyDecimal(gross, values.settlementGivenFundedProbability);
+  return Object.freeze({
+    state: "KNOWN",
+    value: divideDecimal(divideDecimal(gross, values.operationalComplexity, 8), values.expectedDaysToCash, 6),
+    evidenceState,
+  });
+}

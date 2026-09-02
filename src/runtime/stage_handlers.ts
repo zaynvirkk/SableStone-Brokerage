@@ -6,12 +6,13 @@ import type {
   SettlementInstructionDraft,
 } from "../settlement.js";
 import { routeSettlement } from "../router.js";
-import { decimal, multiplyDecimal } from "../money.js";
+import { decimal, multiplyDecimal, maxDecimal, minDecimal, subtractDecimal, divideDecimal } from "../money.js";
 import { settlementInstructionAcceptanceDigest } from "./commands.js";
 import { inTransaction, TransactionalOutboxRepository } from "./database.js";
 import type { ProductionDiscoveryService } from "./discovery_service.js";
 import { reconcileTradeAccounting } from "./accounting.js";
-import { compareDecimalStrings } from "../domain.js";
+import { compareDecimalStrings, known } from "../domain.js";
+import { expectedProfitPriority } from "../pricing.js";
 import type { ProviderPartyReferenceResolver } from "./provider_parties.js";
 
 const accepted = (
@@ -154,7 +155,10 @@ export function buildDatabaseStageHandlers(
           if (!deepCompatible(offer.product_spec, demand.product_spec))
             reasons.push("SPECIFICATION_MISMATCH");
           reasons.push(...gate.reasons);
-          const contextDigest = createHash("sha256")
+          const preliminaryPriority = reasons.length === 0
+              ? await preQuotePriority(pool, offer, demand, gate.geography, now)
+              : "0",
+            contextDigest = createHash("sha256")
               .update(
                 JSON.stringify({
                   offer: offer.id,
@@ -188,17 +192,25 @@ export function buildDatabaseStageHandlers(
                 JSON.stringify([...new Set(reasons)]),
                 contextDigest,
                 now,
-                reasons.length === 0 ? String(demand.quantity_mt) : "0",
+                preliminaryPriority,
               ],
             );
             id = inserted.rows[0].id;
           }
           if (reasons.length === 0) {
+            await pool.query(
+              "update matches set priority_score=$2,priority_state='HEURISTIC',priority_source_digest=$3 where id=$1 and not exists(select 1 from pricing_decisions where match_id=$1 and state='EXECUTABLE')",
+              [
+                id,
+                preliminaryPriority,
+                createHash("sha256").update(JSON.stringify({ model: "prequote-ev-v2", preliminaryPriority, geography: gate.geography })).digest("hex"),
+              ],
+            );
             executableMatches.push({
               id,
               offerId: offer.id,
               demandId: demand.id,
-              priority: String(demand.quantity_mt),
+              priority: preliminaryPriority,
             });
           }
         }
@@ -542,7 +554,7 @@ async function matchGates(
   }
   const route = (
     await pool.query(
-      "with route_facts as(select case when sj.country_code='IN' and bj.country_code='IN' then 'DOMESTIC_INDIA' else 'INTERNATIONAL' end geography,exists(select 1 from trades t where t.supplier_id=$1 and t.buyer_id=$2 and t.state in('SETTLED','RECURRING')) established,exists(select 1 from protected_relationships pr join documentary_lc_route_evidence l on l.relationship_id=pr.id and l.valid_until>$3 join document_checks dc on dc.id=l.document_check_id and dc.check_type='DOCUMENTARY_LC_AUTHENTICITY' and dc.state='VERIFIED' and (dc.valid_until is null or dc.valid_until>$3) where pr.supplier_id=$1 and pr.buyer_id=$2 and pr.protected_until>$3) has_lc from organization_jurisdictions sj join organization_jurisdictions bj on bj.organization_id=$2 and bj.state='VERIFIED' and bj.valid_until>$3 where sj.organization_id=$1 and sj.state='VERIFIED' and sj.valid_until>$3), allowed as(select case when geography='DOMESTIC_INDIA' then array['CASHFREE_EASY_SPLIT','INDIAN_BANK_ESCROW','RAZORPAY_ROUTE']::text[] when established and has_lc then array['LC_PROCEEDS','ESCROW_COM']::text[] else array['ESCROW_COM']::text[] end providers from route_facts) select s.id,s.provider from allowed a join lateral(select pcs.id,pcs.provider from provider_capability_snapshots pcs join provider_approvals pa on pa.id=pcs.approval_id and pa.provider=pcs.provider and pa.environment='PRODUCTION' and pa.state='APPROVED' and pa.valid_from<=$3 and pa.valid_until>$3 and pa.currencies ? $4 and pa.commodity_families ? $5 join authority_receipts ar on ar.receipt_id=pa.written_approval_receipt_id and ar.authority_kind='PROVIDER_WRITTEN_APPROVAL' and ar.retrieved_at<=$3 and ar.effective_at<=$3 and ar.expires_at>$3 where pcs.environment='PRODUCTION' and pcs.state='AVAILABLE' and pcs.provider=any(a.providers) and pcs.capabilities ? 'BROKER_FEE_SPLIT' and pcs.evaluated_at<=$3 order by pcs.evaluated_at desc limit 1)s on true",
+      "with route_facts as(select case when sj.country_code='IN' and bj.country_code='IN' then 'DOMESTIC_INDIA' else 'INTERNATIONAL' end geography,exists(select 1 from trades t where t.supplier_id=$1 and t.buyer_id=$2 and t.state in('SETTLED','RECURRING')) established,exists(select 1 from protected_relationships pr join documentary_lc_route_evidence l on l.relationship_id=pr.id and l.valid_until>$3 join document_checks dc on dc.id=l.document_check_id and dc.check_type='DOCUMENTARY_LC_AUTHENTICITY' and dc.state='VERIFIED' and (dc.valid_until is null or dc.valid_until>$3) where pr.supplier_id=$1 and pr.buyer_id=$2 and pr.protected_until>$3) has_lc from organization_jurisdictions sj join organization_jurisdictions bj on bj.organization_id=$2 and bj.state='VERIFIED' and bj.valid_until>$3 where sj.organization_id=$1 and sj.state='VERIFIED' and sj.valid_until>$3), allowed as(select geography,case when geography='DOMESTIC_INDIA' then array['CASHFREE_EASY_SPLIT','INDIAN_BANK_ESCROW','RAZORPAY_ROUTE']::text[] when established and has_lc then array['LC_PROCEEDS','ESCROW_COM']::text[] else array['ESCROW_COM']::text[] end providers from route_facts) select s.id,s.provider,a.geography from allowed a join lateral(select pcs.id,pcs.provider from provider_capability_snapshots pcs join provider_approvals pa on pa.id=pcs.approval_id and pa.provider=pcs.provider and pa.environment='PRODUCTION' and pa.state='APPROVED' and pa.valid_from<=$3 and pa.valid_until>$3 and pa.currencies ? $4 and pa.commodity_families ? $5 join authority_receipts ar on ar.receipt_id=pa.written_approval_receipt_id and ar.authority_kind='PROVIDER_WRITTEN_APPROVAL' and ar.retrieved_at<=$3 and ar.effective_at<=$3 and ar.expires_at>$3 where pcs.environment='PRODUCTION' and pcs.state='AVAILABLE' and pcs.provider=any(a.providers) and pcs.capabilities ? 'BROKER_FEE_SPLIT' and pcs.evaluated_at<=$3 order by pcs.evaluated_at desc limit 1)s on true",
       [
         offer.supplier_id,
         demand.buyer_id,
@@ -553,7 +565,41 @@ async function matchGates(
     )
   ).rows[0];
   if (!route) reasons.push("ROUTE_SPECIFIC_SETTLEMENT_UNAVAILABLE");
-  return { reasons, providerSnapshotId: route?.id ?? null };
+  return { reasons, providerSnapshotId: route?.id ?? null, geography: route?.geography ?? null };
+}
+
+async function preQuotePriority(pool: Pool, offer: QueryResultRow, demand: QueryResultRow, geography: string | null, now: string): Promise<string> {
+  if (!geography) return "0";
+  const policy = (await pool.query(
+    "select p.commission_floor_per_kg,p.surplus_capture_rate,p.hard_commission_cap_per_kg from pricing_policies p join authority_receipts a on a.receipt_id=p.approval_receipt_id and a.authority_kind='PRICING_POLICY_APPROVAL' and a.retrieved_at<=$2 and a.effective_at<=$2 and a.expires_at>$2 where p.currency=$1 and p.valid_from<=$2 and p.valid_until>$2 order by p.valid_from desc limit 1",
+    [String(demand.currency ?? offer.currency), now],
+  )).rows[0];
+  if (!policy) return "0";
+  let commission = decimal(String(policy.commission_floor_per_kg));
+  if (demand.ceiling_state === "KNOWN" && demand.buyer_ceiling !== null) {
+    const spread = subtractDecimal(decimal(String(demand.buyer_ceiling)), decimal(String(offer.supplier_net)));
+    if (compareDecimalStrings(spread, decimal("0")) <= 0) return "0";
+    commission = minDecimal(decimal(String(policy.hard_commission_cap_per_kg)), maxDecimal(commission, multiplyDecimal(decimal(String(policy.surplus_capture_rate)), spread)));
+    commission = minDecimal(commission, spread);
+  }
+  const segment = (await pool.query(
+    "with p as(select segment_id from acquisition_profiles where organization_id=$1 and target_product_family=$2 and classification_state in('SOURCE_STATED','VERIFIED') and valid_until>$3 order by created_at desc limit 1),counts as(select count(distinct subject_id) filter(where event_type='QUALIFIED') qualified,count(distinct subject_id) filter(where event_type='FUNDED') funded,count(distinct subject_id) filter(where event_type='SETTLED') settled from acquisition_funnel_observations where segment_id=(select segment_id from p)) select qualified,funded,settled from counts",
+    [demand.buyer_id, offer.product_family, now],
+  )).rows[0] ?? { qualified: 0, funded: 0, settled: 0 };
+  const qualified = Number(segment.qualified), funded = Number(segment.funded), settled = Number(segment.settled),
+    close = divideDecimal(decimal(String(funded + 5)), decimal(String(qualified + 20)), 8),
+    settleGivenFunded = divideDecimal(decimal(String(settled + 7)), decimal(String(funded + 10)), 8),
+    result = expectedProfitPriority({
+      monthlyVolumeKg: known(multiplyDecimal(decimal(String(demand.quantity_mt)), decimal("1000")), "prequote:volume"),
+      expectedCommissionPerKg: known(commission, "prequote:spread-policy"),
+      expectedMonths: known(decimal(demand.standing ? "24" : "1"), "prequote:recurrence"),
+      physicalFillRatio: known(decimal("0.8"), "prequote:physical-prior"),
+      closeProbability: known(close, "prequote:segment-close"),
+      settlementGivenFundedProbability: known(settleGivenFunded, "prequote:segment-settlement"),
+      operationalComplexity: known(decimal(geography === "INTERNATIONAL" ? "1.5" : "1"), "prequote:verified-jurisdictions"),
+      expectedDaysToCash: known(decimal(geography === "INTERNATIONAL" ? "45" : "30"), "prequote:route-days"),
+    }, qualified > 0 ? "CALIBRATED" : "HEURISTIC");
+  return result.state === "KNOWN" ? result.value : "0";
 }
 export function deepCompatible(offer: unknown, demand: unknown) {
   if (

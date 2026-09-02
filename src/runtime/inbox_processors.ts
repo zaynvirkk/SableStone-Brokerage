@@ -27,6 +27,7 @@ import { addDecimal, decimal, subtractDecimal } from "../money.js";
 import { compareDecimalStrings } from "../domain.js";
 import { settlementInstructionAcceptanceDigest } from "./commands.js";
 import { assertCurrentAcquisitionOutreachPolicy } from "./outreach_policy.js";
+import { refreshMatchPriority } from "./opportunity_priority.js";
 
 function path(value: unknown, dotted: string | undefined): unknown {
   return dotted
@@ -689,6 +690,7 @@ async function persistFinalEconomicsSnapshot(
     )
       throw new Error("conflicting final economics snapshot");
   }
+  await refreshMatchPriority(client, String(negotiation.match_id));
 }
 export function materialFamily(material: string): string | null {
   const value = material.toLowerCase();
