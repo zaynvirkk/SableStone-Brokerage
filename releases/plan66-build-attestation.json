@@ -401,6 +401,6 @@
   },
   "sbomSha256": "ec67ff0689ac394d9495ade573c1373a216984bcb2ea48d490b5052c7a41f49b",
   "signatureAlgorithm": "Ed25519",
-  "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEA94WLl8QcR6MtK/lTXqGN1qeakEbtZRUostLdTi2DApQ=\n-----END PUBLIC KEY-----\n",
-  "signatureBase64": "6v0syU6BdW8b4pvONwoMRA8xzFIiAJ157UmKmNvehkqoLiwXAbiLnln5mnYVhfOnSTwi1uib7h8JiWwKnOWoCw=="
+  "publicKeyPem": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAn5ZG50zLfw2CJZfGs+4p7Z9A2Wsy3vIU/OWNFAFEy4g=\n-----END PUBLIC KEY-----\n",
+  "signatureBase64": "ytvAew4MiJQ281XqgQkZDI8DCk4W2QXx1MZfSmlDJHz6pfwGwJWPV0kFoqnZRsVS4wf/yEbTp6Up+6DZhRWXBA=="
 }
