@@ -313,6 +313,12 @@ export function buildDatabaseStageHandlers(
           })
         : unknown("shipment event missing");
     },
+    OPEN_DISPUTE: async(input)=>{
+      const row=(await pool.query("select d.*,i.provider,i.provider_reference from counterparty_dispute_requests d join settlement_instructions i on i.trade_id=d.trade_id and i.acknowledged where d.id=$1 and d.trade_id=$2 and d.state in('OPENED','FROZEN') order by i.created_at desc limit 1",[input.disputeRequestId,input.tradeId])).rows[0];
+      if(!row)return unknown("open dispute or acknowledged provider instruction unavailable");const adapter=adapters.find(value=>value.provider===row.provider);if(!adapter?.openDispute)return unknown("approved provider dispute process unavailable");
+      const result=await adapter.openDispute({providerReference:String(row.provider_reference),disputeId:String(row.id),reason:String(row.reason),evidenceReceiptId:row.evidence_receipt_id?String(row.evidence_receipt_id):null},new Date().toISOString());
+      await pool.query("update counterparty_dispute_requests set state='PROVIDER_SUBMITTED',provider_dispute_reference=$2,provider_evidence_sha256=$3 where id=$1 and state in('OPENED','FROZEN')",[row.id,result.providerDisputeReference,result.receiptSha256]);return accepted(`provider-dispute:${result.receiptSha256}`,{providerDisputeReference:result.providerDisputeReference});
+    },
     RECONCILE: async (input) => {
       const state = await reconcileTradeAccounting(pool, String(input.tradeId));
       return state === "RECONCILED"
@@ -951,8 +957,8 @@ async function lockSettlement(
   if (created)
     await inTransaction(pool, async (client: PoolClient) => {
       const acknowledged = await client.query(
-        "update settlement_instructions set provider_reference=$2,provider_approval_id=$3,acknowledged=true where id=$1 and acknowledged=false",
-        [instruction.id, created.providerReference, routed.snapshot.approvalId],
+        "update settlement_instructions set provider_reference=$2,provider_approval_id=$3,acknowledged=true,funding_token_ciphertext=case when $4::text is null then null else pgp_sym_encrypt($4,$5) end where id=$1 and acknowledged=false",
+        [instruction.id, created.providerReference, routed.snapshot.approvalId, created.fundingToken??null, process.env.SABLESTONE_DATA_KEY_BASE64??""],
       );
       if ((acknowledged.rowCount ?? 0) !== 1)
         throw new Error("settlement instruction acknowledgement conflict");

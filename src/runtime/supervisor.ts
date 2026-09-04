@@ -155,6 +155,7 @@ function routeWorkflow(eventType: string): {
       name: "ShipmentWorkflow",
       args: (event) => ({ tradeId: String(event.aggregate_id) }),
     };
+  if(eventType==="DISPUTE_INITIATED")return{name:"DisputeWorkflow",args:(event)=>({tradeId:String(event.aggregate_id),disputeRequestId:String((event.payload as Record<string,unknown>).disputeRequestId)})};
   if (eventType === "TRADE_ACCEPTED")
     return {
       name: "RecurringDemandWorkflow",

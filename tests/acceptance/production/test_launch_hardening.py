@@ -10,7 +10,9 @@ def test_supplier_money_is_held_until_delivery_and_disputes_freeze_release():
     capability=read("src/settlement.ts")
     assert 'on_hold: true' in settlement
     assert 'payload = { on_hold: false }' in settlement
-    assert 'status: "ELIGIBLE", reason: "DELIVERY_ACCEPTED"' in settlement
+    assert 'method = "PUT"' in settlement
+    assert 'settlementEligibilityDateUpdate: now' in settlement
+    assert '"{order_id}"' in settlement and '"{vendor_id}"' in settlement
     assert "join delivery_acceptances" in dispatcher
     assert "counterparty_dispute_requests" in dispatcher
     assert "DELIVERY_CONDITIONAL_SUPPLIER_RELEASE" in capability
@@ -48,6 +50,8 @@ def test_counterparty_actions_identity_and_security_are_production_wired():
 def test_many_to_many_money_reconciliation_is_exact():
     accounting=read("src/runtime/accounting.ts")
     assert "providerRows.reduce" in accounting
-    assert "bankRows.reduce" in accounting
+    assert "allocatedBankRows.reduce" in accounting
+    assert "sourceRemaining" in accounting
+    assert "settlement_allocation_links where source_kind='BANK_ENTRY' and source_reference=$1" in accounting
     assert "settlement_allocation_links" in accounting
     assert 'state === "RECONCILED"' in accounting

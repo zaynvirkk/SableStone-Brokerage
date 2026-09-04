@@ -26,6 +26,7 @@ data/
 !.env.example
 !*.env.example
 *.pem
+!release-trust/sablestone-build.pub.pem
 *.key
 *.p12
 *.pfx

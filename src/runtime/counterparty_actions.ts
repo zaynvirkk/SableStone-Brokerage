@@ -22,7 +22,7 @@ export class CounterpartyActionDispatcher {
     await this.project();
     const jobs = await inTransaction(this.pool, async (client) => (
       await client.query(
-        "with claimed as(select n.action_id from counterparty_action_notifications n join counterparty_actions a on a.id=n.action_id where ((n.state in('PENDING','SENT') and n.next_notification_at<=now()) or(n.state='PROCESSING' and n.claimed_at<now()-interval '10 minutes')) and a.state in('REQUIRED','NOTIFIED') and a.deadline>now() order by a.deadline for update of n skip locked limit $1) update counterparty_action_notifications n set state='PROCESSING',attempts=attempts+1,claimed_at=now() from claimed where n.action_id=claimed.action_id returning n.*",
+        "with redriven as(update counterparty_action_notifications set state='PENDING',redrive_count=redrive_count+1,next_retry_at=null where state='DEAD_LETTER_PENDING_REDRIVE' and next_retry_at<=now()),claimed as(select n.action_id from counterparty_action_notifications n join counterparty_actions a on a.id=n.action_id where ((n.state in('PENDING','SENT') and n.next_notification_at<=now()) or(n.state='PROCESSING' and n.claimed_at<now()-interval '10 minutes')) and a.state in('REQUIRED','NOTIFIED') and a.deadline>now() order by a.deadline for update of n skip locked limit $1) update counterparty_action_notifications n set state='PROCESSING',attempts=attempts+1,claimed_at=now() from claimed where n.action_id=claimed.action_id returning n.*",
         [limit],
       )
     ).rows);
@@ -39,7 +39,7 @@ export class CounterpartyActionDispatcher {
           await client.query("update counterparty_actions set state='NOTIFIED' where id=$1 and state='REQUIRED'",[facts.id]);
           await client.query("update counterparty_action_notifications set state='SENT',sent_at=now(),claimed_at=null,reminder_count=reminder_count+1,next_notification_at=least($2,now()+interval '24 hours') where action_id=$1",[facts.id,facts.deadline]);
         });sent++;
-      }catch(error){await this.pool.query("update counterparty_action_notifications set state=case when attempts>=5 then 'FAILED' else 'PENDING' end,claimed_at=null,last_error_code=$2 where action_id=$1",[job.action_id,(error as Error).name.slice(0,100)]);}
+      }catch(error){await this.pool.query("update counterparty_action_notifications set state=case when attempts>=5 then 'DEAD_LETTER_PENDING_REDRIVE' else 'PENDING' end,claimed_at=null,last_error_code=$2,next_retry_at=case when attempts>=5 then now()+least(interval '24 hours',interval '15 minutes'*power(2,least(redrive_count,6))) else null end where action_id=$1",[job.action_id,(error as Error).name.slice(0,100)]);}
     }
     return sent;
   }
@@ -47,6 +47,7 @@ export class CounterpartyActionDispatcher {
   private async project():Promise<void>{
     await this.pool.query("update counterparty_actions a set state='COMPLETED',completed_at=now() from settlement_instruction_acceptances s where a.resource_type='SETTLEMENT_INSTRUCTION' and a.resource_id=s.instruction_id and a.organization_id=s.organization_id and a.action_type in('SUPPLIER_ACCEPT_SETTLEMENT','BUYER_ACCEPT_SETTLEMENT') and a.state in('REQUIRED','NOTIFIED')");
     await this.pool.query("update counterparty_actions a set state='COMPLETED',completed_at=now() from trade_contract_acceptances c where a.resource_type='TRADE' and a.resource_id=c.trade_id and a.organization_id=c.organization_id and a.action_type in('SUPPLIER_ACCEPT_CONTRACT','BUYER_ACCEPT_CONTRACT') and a.state in('REQUIRED','NOTIFIED')");
+    await this.pool.query("update counterparty_actions a set state='COMPLETED',completed_at=now() from trades t join matches m on m.id=t.match_id join standing_demand_authorizations s on s.demand_id=m.demand_id and s.demand_version=m.demand_version where a.resource_type='TRADE' and a.resource_id=t.id and a.organization_id=s.buyer_id and a.action_type='BUYER_AUTHORIZE_STANDING_ORDER' and a.state in('REQUIRED','NOTIFIED')");
     await this.pool.query("update counterparty_actions a set state='COMPLETED',completed_at=now() from settlement_instructions i join trades t on t.id=i.trade_id where a.resource_type='SETTLEMENT_INSTRUCTION' and a.resource_id=i.id and a.action_type='BUYER_FUND_TRANSACTION' and a.state in('REQUIRED','NOTIFIED') and t.state not in('PROTECTED')");
     await this.pool.query("update counterparty_actions set state='EXPIRED' where state in('REQUIRED','NOTIFIED') and deadline<=now()");
     await this.pool.query("update supplier_payout_controls p set state='FROZEN',updated_at=now(),last_error_code='DELIVERY_ACCEPTANCE_OVERDUE' from counterparty_actions a where a.resource_type='TRADE' and a.resource_id=p.trade_id and a.action_type='BUYER_ACCEPT_DELIVERY' and a.state='EXPIRED' and p.state in('HELD','RELEASE_PENDING')");

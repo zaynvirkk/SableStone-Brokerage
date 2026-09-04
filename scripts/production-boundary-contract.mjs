@@ -94,7 +94,7 @@ const approval = {
     currencies: ["INR"],
     minimumGross: decimal("1"),
     maximumGross: decimal("10000000"),
-    capabilities: ["BROKER_FEE_SPLIT", "CONDITIONAL_RELEASE", "DELIVERY_CONDITIONAL_SUPPLIER_RELEASE"],
+    capabilities: ["BROKER_FEE_SPLIT", "CONDITIONAL_RELEASE", "DELIVERY_CONDITIONAL_SUPPLIER_RELEASE", "PROVIDER_DISPUTE_PROCESS"],
     validFrom: "2026-08-01T00:00:00Z",
     validUntil: "2026-12-01T00:00:00Z",
     state: "APPROVED",

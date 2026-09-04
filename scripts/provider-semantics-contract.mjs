@@ -273,6 +273,7 @@ const escrowApproval = {
       "CONDITIONAL_RELEASE",
       "REFUND_ALLOCATION",
       "DISPUTE_FREEZE",
+      "PROVIDER_DISPUTE_PROCESS",
     ],
   },
   escrowCredentials = { ...credentials, provider: "ESCROW_COM" },

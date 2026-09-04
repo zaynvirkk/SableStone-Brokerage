@@ -61,6 +61,7 @@ export async function buildProductionSettlementAdapters(
       throw new Error(
         `provider secrets/config incomplete: ${definition.provider}`,
       );
+    if(!definition.disputeCreatePathTemplate?.includes("{provider_reference}")||!definition.disputeResponseReferenceField)throw new Error(`provider dispute process incomplete: ${definition.provider}`);
     if (
       definition.provider === "CASHFREE_EASY_SPLIT" &&
       (!definition.cashfreeSplitPathTemplate?.includes("{order_id}") ||
@@ -69,7 +70,7 @@ export async function buildProductionSettlementAdapters(
         ) ||
         !definition.cashfreeSettlementEligibilityPathTemplate?.includes(
           "{vendor_id}",
-        ))
+        ) || !definition.cashfreeSettlementEligibilityPathTemplate?.includes("{order_id}") || !definition.responseFundingTokenField)
     )
       throw new Error(
         "Cashfree split creation and exact verification paths required",

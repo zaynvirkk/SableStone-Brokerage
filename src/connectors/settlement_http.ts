@@ -30,7 +30,10 @@ type InternalEvent =
   | "DISBURSEMENT_REPORTED"
   | "FAILED"
   | "REVERSED"
-  | "DISPUTE_OPENED";
+  | "DISPUTE_OPENED"
+  | "DISPUTE_RESOLVED_BUYER"
+  | "DISPUTE_RESOLVED_SUPPLIER"
+  | "REFUNDED";
 export interface ProviderHttpConfig {
   readonly provider: string;
   readonly baseUrl: string;
@@ -60,6 +63,9 @@ export interface ProviderHttpConfig {
   readonly webhookEventTypeMap?: Readonly<Record<string, InternalEvent>>;
   readonly responseReferenceField: string;
   readonly responseAcknowledgedField: string;
+  readonly responseFundingTokenField?: string;
+  readonly disputeCreatePathTemplate?: string;
+  readonly disputeResponseReferenceField?: string;
 }
 export type SettlementRequestBuilder = (
   draft: SettlementInstructionDraft,
@@ -149,7 +155,10 @@ export class ProductionSettlementHttpAdapter implements SettlementAdapter {
         unknown
       >,
       reference = field(decoded, this.config.responseReferenceField),
-      acknowledged = field(decoded, this.config.responseAcknowledgedField);
+      acknowledged = field(decoded, this.config.responseAcknowledgedField),
+      fundingToken = this.config.responseFundingTokenField
+        ? field(decoded, this.config.responseFundingTokenField)
+        : undefined;
     if (
       (typeof reference !== "string" && typeof reference !== "number") ||
       !String(reference).trim() ||
@@ -163,6 +172,9 @@ export class ProductionSettlementHttpAdapter implements SettlementAdapter {
       state: "CREATED" as const,
       providerReference: String(reference),
       acknowledged: true,
+      ...(typeof fundingToken === "string" && fundingToken.trim()
+        ? { fundingToken }
+        : {}),
     });
   }
   async verifyWebhook(
@@ -303,6 +315,14 @@ export class ProductionSettlementHttpAdapter implements SettlementAdapter {
     )
       throw new Error("settlement webhook signature invalid");
     return raw;
+  }
+  async openDispute(input:Readonly<{providerReference:string;disputeId:string;reason:string;evidenceReceiptId:string|null}>,now:string):Promise<Readonly<{receiptSha256:string;providerDisputeReference:string}>>{
+    await this.authorityGuard?.assertCurrent();await this.apiCredentialGuard?.assertCurrent();
+    if(!this.config.disputeCreatePathTemplate?.includes("{provider_reference}")||!this.config.disputeResponseReferenceField)throw new Error("provider dispute API unavailable");
+    const path=this.config.disputeCreatePathTemplate.replace("{provider_reference}",encodeURIComponent(input.providerReference)),url=resolveExternalProviderEndpoint(this.config.baseUrl,path),body=JSON.stringify({dispute_id:input.disputeId,reason:input.reason,evidence_receipt_id:input.evidenceReceiptId}),response=await this.fetcher(url,{method:"POST",headers:{authorization:this.config.authorizationHeader,"content-type":"application/json","idempotency-key":`dispute:${input.disputeId}`,...this.config.additionalHeaders},body,signal:AbortSignal.timeout(30_000)}),bytes=await readBoundedResponseBody(response,2_000_000),receipt=await this.store.preserve(`settlement/${this.provider}/disputes`,bytes,response.headers.get("content-type")??"application/json",url.toString(),now);
+    if(!response.ok)throw new Error(`${this.provider} dispute HTTP ${response.status}; response=${receipt.objectKey}`);
+    const decoded=JSON.parse(new TextDecoder().decode(bytes)) as Record<string,unknown>,reference=field(decoded,this.config.disputeResponseReferenceField);if((typeof reference!=="string"&&typeof reference!=="number")||!String(reference).trim())throw new Error("provider dispute acknowledgement incomplete");
+    return Object.freeze({receiptSha256:receipt.sha256,providerDisputeReference:String(reference)});
   }
   async applyCashfreeCapturedSplit(
     draft: SettlementInstructionDraft,
@@ -476,26 +496,25 @@ export class ProductionSettlementHttpAdapter implements SettlementAdapter {
   }
   async releaseSupplierPayout(
     providerPayoutReference: string,
+    providerInstructionReference: string,
     now: string,
   ): Promise<{ receiptSha256: string }> {
     await this.authorityGuard?.assertCurrent();
     await this.apiCredentialGuard?.assertCurrent();
     let path: string,
-      method: "POST" | "PATCH",
+      method: "PUT" | "PATCH",
       payload: Readonly<Record<string, unknown>>;
     if (this.provider === "CASHFREE_EASY_SPLIT") {
       if (
-        !this.config.cashfreeSettlementEligibilityPathTemplate?.includes(
-          "{vendor_id}",
-        )
+        !this.config.cashfreeSettlementEligibilityPathTemplate?.includes("{vendor_id}") ||
+        !this.config.cashfreeSettlementEligibilityPathTemplate?.includes("{order_id}")
       )
         throw new Error("Cashfree delayed-settlement release path unavailable");
-      path = this.config.cashfreeSettlementEligibilityPathTemplate.replace(
-        "{vendor_id}",
-        encodeURIComponent(providerPayoutReference),
-      );
-      method = "POST";
-      payload = { status: "ELIGIBLE", reason: "DELIVERY_ACCEPTED" };
+      path = this.config.cashfreeSettlementEligibilityPathTemplate
+        .replace("{order_id}", encodeURIComponent(providerInstructionReference))
+        .replace("{vendor_id}", encodeURIComponent(providerPayoutReference));
+      method = "PUT";
+      payload = { settlementEligibilityDateUpdate: now };
     } else if (this.provider === "RAZORPAY_ROUTE") {
       if (
         !this.config.razorpayTransferReleasePathTemplate?.includes(

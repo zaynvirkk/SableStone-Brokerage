@@ -1127,6 +1127,15 @@ async function processSettlementEvent(
         "update trades set state='DISPUTED_FROZEN',updated_at=now() where id=$1 and state not in('SETTLED','RECURRING','DISPUTED_FROZEN')",
         [instruction.trade_id],
       );
+      await client.query("update counterparty_dispute_requests set state='FROZEN' where trade_id=$1 and state in('OPENED','PROVIDER_SUBMITTED')",[instruction.trade_id]);
+    } else if(internalType==="DISPUTE_RESOLVED_SUPPLIER"&&instruction.trade_state==="DISPUTED_FROZEN"){
+      await client.query("update counterparty_dispute_requests set state='RESOLVED' where trade_id=$1 and state in('PROVIDER_SUBMITTED','FROZEN')",[instruction.trade_id]);
+      await client.query("update trades set state='ACCEPTED',updated_at=now() where id=$1 and state='DISPUTED_FROZEN'",[instruction.trade_id]);
+      await client.query("update supplier_payout_controls set state='HELD',last_error_code=null,updated_at=now() where trade_id=$1 and state='FROZEN'",[instruction.trade_id]);
+    } else if(["DISPUTE_RESOLVED_BUYER","REFUNDED"].includes(internalType)&&instruction.trade_state==="DISPUTED_FROZEN"){
+      await client.query("update counterparty_dispute_requests set state='RESOLVED' where trade_id=$1 and state in('PROVIDER_SUBMITTED','FROZEN')",[instruction.trade_id]);
+      await client.query("update trades set state='CANCELLED',updated_at=now() where id=$1 and state='DISPUTED_FROZEN'",[instruction.trade_id]);
+      await client.query("update supplier_payout_controls set state='FAILED',last_error_code='DISPUTE_RESOLVED_BUYER',updated_at=now() where trade_id=$1 and state='FROZEN'",[instruction.trade_id]);
     }
   });
 }
@@ -1146,7 +1155,7 @@ export class OutboundGmailDispatcher {
       async (client) =>
         (
           await client.query(
-            "with claimed as(select id from outbound_email_jobs where state='PENDING' or(state='PROCESSING' and claimed_at<now()-interval '10 minutes') order by created_at for update skip locked limit $1) update outbound_email_jobs j set state='PROCESSING',claimed_at=now(),attempts=attempts+1 from claimed where j.id=claimed.id returning j.*",
+            "with redriven as(update outbound_email_jobs set state='PENDING',redrive_count=redrive_count+1,next_retry_at=null where state='DEAD_LETTER_PENDING_REDRIVE' and next_retry_at<=now()),claimed as(select id from outbound_email_jobs where state='PENDING' or(state='PROCESSING' and claimed_at<now()-interval '10 minutes') order by created_at for update skip locked limit $1) update outbound_email_jobs j set state='PROCESSING',claimed_at=now(),attempts=attempts+1 from claimed where j.id=claimed.id returning j.*",
             [limit],
           )
         ).rows,
@@ -1193,7 +1202,7 @@ export class OutboundGmailDispatcher {
         sent++;
       } catch (error) {
         await this.pool.query(
-          "update outbound_email_jobs set state=case when attempts>=5 then 'FAILED' else 'PENDING' end,claimed_at=null,last_error_code=$2 where id=$1 and state='PROCESSING'",
+          "update outbound_email_jobs set state=case when attempts>=5 then 'DEAD_LETTER_PENDING_REDRIVE' else 'PENDING' end,claimed_at=null,last_error_code=$2,next_retry_at=case when attempts>=5 then now()+least(interval '24 hours',interval '15 minutes'*power(2,least(redrive_count,6))) else null end where id=$1 and state='PROCESSING'",
           [row.id, (error as Error).name.slice(0, 100)],
         );
       }
@@ -1215,7 +1224,7 @@ export class CommercialNotificationDispatcher {
       async (client) =>
         (
           await client.query(
-            "with claimed as(select id from commercial_notification_jobs where state='PENDING' or(state='PROCESSING' and claimed_at<now()-interval '10 minutes') order by created_at for update skip locked limit $1) update commercial_notification_jobs j set state='PROCESSING',attempts=attempts+1,claimed_at=now() from claimed where j.id=claimed.id returning j.*",
+            "with redriven as(update commercial_notification_jobs set state='PENDING',redrive_count=redrive_count+1,next_retry_at=null where state='DEAD_LETTER_PENDING_REDRIVE' and next_retry_at<=now()),claimed as(select id from commercial_notification_jobs where state='PENDING' or(state='PROCESSING' and claimed_at<now()-interval '10 minutes') order by created_at for update skip locked limit $1) update commercial_notification_jobs j set state='PROCESSING',attempts=attempts+1,claimed_at=now() from claimed where j.id=claimed.id returning j.*",
             [limit],
           )
         ).rows,
@@ -1333,7 +1342,7 @@ export class CommercialNotificationDispatcher {
         completed++;
       } catch (error) {
         await this.pool.query(
-          "update commercial_notification_jobs set state=case when attempts>=5 then 'FAILED' else 'PENDING' end,completed_at=case when attempts>=5 then now() else null end,claimed_at=null,last_error_code=$2 where id=$1 and state='PROCESSING'",
+          "update commercial_notification_jobs set state=case when attempts>=5 then 'DEAD_LETTER_PENDING_REDRIVE' else 'PENDING' end,completed_at=null,claimed_at=null,last_error_code=$2,next_retry_at=case when attempts>=5 then now()+least(interval '24 hours',interval '15 minutes'*power(2,least(redrive_count,6))) else null end where id=$1 and state='PROCESSING'",
           [job.id, (error as Error).name.slice(0, 100)],
         );
       }

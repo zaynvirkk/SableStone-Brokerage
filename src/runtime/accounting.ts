@@ -153,14 +153,25 @@ export async function reconcileTradeAccounting(
       ).rows,
       bankRows = (
         await client.query(
-          "select distinct b.id,b.amount,b.currency,b.bank_reference from bank_receipt_events b join settlement_provider_events p on p.trade_id=$1 and p.event_type='DISBURSEMENT_REPORTED' and p.bank_reference=b.bank_reference order by b.id",
+          "select b.id,b.amount,b.currency,b.bank_reference from bank_receipt_events b where exists(select 1 from settlement_provider_events p where p.trade_id=$1 and p.event_type='DISBURSEMENT_REPORTED' and p.bank_reference=b.bank_reference) order by b.id for update",
           [tradeId],
         )
       ).rows;
     for(const row of providerRows)await client.query("insert into settlement_allocation_links(id,trade_id,source_kind,source_reference,amount,currency) values($1,$2,'PROVIDER_ENTRY',$3,$4,$5) on conflict(source_kind,source_reference,trade_id) do nothing",[randomUUID(),tradeId,row.id,row.amount,row.currency]);
-    for(const row of bankRows)await client.query("insert into settlement_allocation_links(id,trade_id,source_kind,source_reference,amount,currency) values($1,$2,'BANK_ENTRY',$3,$4,$5) on conflict(source_kind,source_reference,trade_id) do nothing",[randomUUID(),tradeId,row.id,row.amount,row.currency]);
+    let bankNeeded=decimal(String(facts.expected));
+    const existingBank=(await client.query("select coalesce(sum(amount),0) amount from settlement_allocation_links where trade_id=$1 and source_kind='BANK_ENTRY'",[tradeId])).rows[0];
+    bankNeeded=subtractDecimal(bankNeeded,decimal(String(existingBank.amount)));
+    for(const row of bankRows){
+      if(compareDecimalStrings(bankNeeded,decimal("0"))<=0)break;
+      const allocated=(await client.query("select coalesce(sum(amount),0) amount from settlement_allocation_links where source_kind='BANK_ENTRY' and source_reference=$1",[row.id])).rows[0],sourceRemaining=subtractDecimal(decimal(String(row.amount)),decimal(String(allocated.amount)));
+      if(compareDecimalStrings(sourceRemaining,decimal("0"))<=0)continue;
+      const amount=compareDecimalStrings(sourceRemaining,bankNeeded)<0?sourceRemaining:bankNeeded;
+      await client.query("insert into settlement_allocation_links(id,trade_id,source_kind,source_reference,amount,currency) values($1,$2,'BANK_ENTRY',$3,$4,$5) on conflict(source_kind,source_reference,trade_id) do nothing",[randomUUID(),tradeId,row.id,amount,row.currency]);
+      bankNeeded=subtractDecimal(bankNeeded,amount);
+    }
+    const allocatedBankRows=(await client.query("select l.amount,l.currency,b.bank_reference from settlement_allocation_links l join bank_receipt_events b on b.id::text=l.source_reference where l.trade_id=$1 and l.source_kind='BANK_ENTRY' order by l.linked_at",[tradeId])).rows;
     const provider = providerRows.length?{amount:providerRows.reduce((total,row)=>addDecimal(total,decimal(String(row.amount))),decimal("0")),currency:providerRows.every(row=>row.currency===facts.currency)?facts.currency:"MIXED",provider_reference:providerRows.map(row=>row.provider_reference).join(","),bank_reference:providerRows.map(row=>row.bank_reference).filter(Boolean).join(",")}:null,
-      bank = bankRows.length?{amount:bankRows.reduce((total,row)=>addDecimal(total,decimal(String(row.amount))),decimal("0")),currency:bankRows.every(row=>row.currency===facts.currency)?facts.currency:"MIXED",bank_reference:bankRows.map(row=>row.bank_reference).join(",")}:null;
+      bank = allocatedBankRows.length?{amount:allocatedBankRows.reduce((total,row)=>addDecimal(total,decimal(String(row.amount))),decimal("0")),currency:allocatedBankRows.every(row=>row.currency===facts.currency)?facts.currency:"MIXED",bank_reference:allocatedBankRows.map(row=>row.bank_reference).join(",")}:null;
     let state: "PROVIDER_ONLY" | "BANK_PARTIAL" | "MISMATCH" | "RECONCILED" =
       "PROVIDER_ONLY";
     if (provider && bank) {

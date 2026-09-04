@@ -8,6 +8,7 @@ import {
 } from "../../components";
 import { productionGet } from "../../lib/production-api";
 import { ProductionBoundary } from "../../production-state";
+import {FundingCheckout} from "../../funding-checkout";
 type Settlement = {
   id: string;
   provider: string;
@@ -19,6 +20,8 @@ type Settlement = {
   acknowledged: boolean;
   instructionDigest: string;
   acceptances: string[];
+  fundingReference: string | null;
+  fundingToken: string | null;
 };
 type TradeData = {
   id: string;
@@ -31,6 +34,8 @@ type TradeData = {
   settlement: Settlement | null;
   contractAcceptances: string[];
   nextAction: string;
+  demandId: string | null;
+  demandVersion: number | null;
 };
 const labels: Record<string, string> = {
   MATCHED: "Matched",
@@ -167,6 +172,7 @@ export default async function Trade({
                     </button>
                   </form>
                 ) : null}
+                {trade.state === "PROTECTED" && trade.viewerRole === "BUYER" && trade.settlement.acknowledged && trade.settlement.acceptances.includes("BUYER") && trade.settlement.fundingReference ? <FundingCheckout provider={trade.settlement.provider} reference={trade.settlement.fundingReference} token={trade.settlement.fundingToken} amount={trade.settlement.gross_amount} currency={trade.settlement.currency} tradeId={trade.id}/> : null}
               </>
             ) : (
               <p className="copy">
@@ -175,6 +181,8 @@ export default async function Trade({
               </p>
             )}
           </section>
+          {trade.state === "FUNDED" && trade.viewerRole === "SUPPLIER" ? <section><h2>Dispatch evidence</h2><form action={`/api/trades/${encodeURIComponent(trade.id)}/shipment-events`} method="post"><input type="hidden" name="responsiblePartyId" value={trade.supplierId}/><label>Carrier organization ID<input name="carrierOrganizationId" required/></label><label>Evidence document receipt ID<input name="documentReceiptId" required/></label><button type="submit">Record dispatch</button></form></section> : null}
+          {["SETTLED","RECURRING"].includes(trade.state) && trade.viewerRole === "BUYER" && trade.demandId && trade.demandVersion ? <section><h2>Standing order</h2><form action={`/api/demands/${encodeURIComponent(trade.demandId)}/${trade.demandVersion}/standing-authorization?tradeId=${encodeURIComponent(trade.id)}`} method="post"><label>Renewals<input name="maximumRenewals" type="number" min="1" required/></label><label>Cadence days<input name="cadenceDays" type="number" min="1" max="365" required/></label><label>Next required date<input name="nextRequiredAt" type="datetime-local" required/></label><label>Valid until<input name="validUntil" type="datetime-local" required/></label><label>Quantity tolerance MT<input name="quantityToleranceMt" inputMode="decimal" required/></label><label>Maximum all-in price/kg<input name="maximumAllInPricePerKg" inputMode="decimal" required/></label><label>Currency<input name="currency" defaultValue={trade.settlement?.currency??"INR"} required/></label><label>Supplier scope<select name="supplierScope"><option value="SAME_SUPPLIER">Same supplier</option><option value="APPROVED_SUBSTITUTION">Approved substitutes</option></select></label><button type="submit">Authorize standing order</button></form></section> : null}
           <section>
             <h2>Contract acceptance</h2>
             <FieldTable

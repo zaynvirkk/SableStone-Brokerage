@@ -9,6 +9,7 @@ export type SettlementCapability =
   | "DELIVERY_CONDITIONAL_SUPPLIER_RELEASE"
   | "REFUND_ALLOCATION"
   | "DISPUTE_FREEZE"
+  | "PROVIDER_DISPUTE_PROCESS"
   | "REVERSAL_EVENTS"
   | "BANK_ACKNOWLEDGEMENT"
   | "MULTI_BENEFICIARY"
@@ -25,6 +26,7 @@ export function requiredSettlementCapabilities(
         "DELIVERY_CONDITIONAL_SUPPLIER_RELEASE",
         "REFUND_ALLOCATION",
         "DISPUTE_FREEZE",
+        "PROVIDER_DISPUTE_PROCESS",
       ]);
     case "INDIAN_BANK_ESCROW":
       return Object.freeze([
@@ -32,21 +34,23 @@ export function requiredSettlementCapabilities(
         "CONDITIONAL_RELEASE",
         "DELIVERY_CONDITIONAL_SUPPLIER_RELEASE",
         "DISPUTE_FREEZE",
+        "PROVIDER_DISPUTE_PROCESS",
         "BANK_ACKNOWLEDGEMENT",
       ]);
     case "CASHFREE":
-      return Object.freeze(["BROKER_FEE_SPLIT", "CONDITIONAL_RELEASE", "DELIVERY_CONDITIONAL_SUPPLIER_RELEASE"]);
+      return Object.freeze(["BROKER_FEE_SPLIT", "CONDITIONAL_RELEASE", "DELIVERY_CONDITIONAL_SUPPLIER_RELEASE","PROVIDER_DISPUTE_PROCESS"]);
     case "CASHFREE_EASY_SPLIT":
       return Object.freeze([
         "BROKER_FEE_SPLIT",
         "DELIVERY_CONDITIONAL_SUPPLIER_RELEASE",
         "REFUND_ALLOCATION",
         "REVERSAL_EVENTS",
+        "PROVIDER_DISPUTE_PROCESS",
       ]);
     case "RAZORPAY_ROUTE":
-      return Object.freeze(["BROKER_FEE_SPLIT", "REVERSAL_EVENTS", "DELIVERY_CONDITIONAL_SUPPLIER_RELEASE"]);
+      return Object.freeze(["BROKER_FEE_SPLIT", "REVERSAL_EVENTS", "DELIVERY_CONDITIONAL_SUPPLIER_RELEASE","PROVIDER_DISPUTE_PROCESS"]);
     case "LC_PROCEEDS":
-      return Object.freeze(["BROKER_FEE_SPLIT", "BANK_ACKNOWLEDGEMENT", "DELIVERY_CONDITIONAL_SUPPLIER_RELEASE"]);
+      return Object.freeze(["BROKER_FEE_SPLIT", "BANK_ACKNOWLEDGEMENT", "DELIVERY_CONDITIONAL_SUPPLIER_RELEASE","PROVIDER_DISPUTE_PROCESS"]);
     default:
       throw new Error(`unknown settlement provider ${provider}`);
   }
@@ -366,8 +370,10 @@ export interface SettlementAdapter {
       state: "CREATED";
       providerReference: string;
       acknowledged: boolean;
+      fundingToken?: string;
     }>
   >;
+  openDispute?(input: Readonly<{providerReference:string;disputeId:string;reason:string;evidenceReceiptId:string|null}>,now:string):Promise<Readonly<{receiptSha256:string;providerDisputeReference:string}>>;
 }
 
 export function assertAdapterAvailable(

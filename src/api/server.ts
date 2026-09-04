@@ -239,7 +239,7 @@ export async function createProductionApi(
     },
     async (request, reply) => {
       const result = await deps.pool.query(
-          "select id,supplier_id,buyer_id,state,relationship_id,updated_at from trades where id=$1",
+          "select t.id,t.supplier_id,t.buyer_id,t.state,t.relationship_id,t.updated_at,m.demand_id,m.demand_version from trades t left join matches m on m.id=t.match_id where t.id=$1",
           [request.params.id],
         ),
         row = result.rows[0];
@@ -318,9 +318,24 @@ export async function createProductionApi(
               instructionDigest:
                 settlementInstructionAcceptanceDigest(instruction),
               acceptances: settlementAcceptances,
+              fundingReference:
+                p.role === "BUYER" && instruction.acknowledged
+                  ? instruction.provider_reference
+                  : null,
+              fundingToken:
+                p.role === "BUYER" && instruction.acknowledged && instruction.funding_token_ciphertext
+                  ? (
+                      await deps.pool.query(
+                        "select pgp_sym_decrypt($1::bytea,$2) token",
+                        [instruction.funding_token_ciphertext, process.env.SABLESTONE_DATA_KEY_BASE64 ?? ""],
+                      )
+                    ).rows[0]?.token ?? null
+                  : null,
             }
           : null,
         contractAcceptances,
+        demandId: row.demand_id ?? null,
+        demandVersion: row.demand_version ?? null,
         nextAction: tradeNextAction(
           row.state,
           instruction,

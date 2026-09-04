@@ -221,7 +221,7 @@ export class OutboxDispatcher {
       await client.query("begin");
       const rows = (
         await client.query(
-          "with claimed as (select event_id from transactional_outbox where state='PENDING' or (state='PROCESSING' and claimed_at<now()-interval '5 minutes') order by created_at for update skip locked limit $1) update transactional_outbox o set state='PROCESSING',claimed_at=now(),attempts=attempts+1 from claimed where o.event_id=claimed.event_id returning o.*",
+          "with redriven as(update transactional_outbox set state='PENDING',redrive_count=redrive_count+1,next_retry_at=null where state='DEAD_LETTER_PENDING_REDRIVE' and next_retry_at<=now()),claimed as (select event_id from transactional_outbox where state='PENDING' or (state='PROCESSING' and claimed_at<now()-interval '5 minutes') order by created_at for update skip locked limit $1) update transactional_outbox o set state='PROCESSING',claimed_at=now(),attempts=attempts+1 from claimed where o.event_id=claimed.event_id returning o.*",
           [limit],
         )
       ).rows;
@@ -236,7 +236,7 @@ export class OutboxDispatcher {
           count++;
         } catch {
           await this.pool.query(
-            "update transactional_outbox set state=case when attempts>=10 then 'FAILED' else 'PENDING' end,claimed_at=null where event_id=$1 and state='PROCESSING'",
+            "update transactional_outbox set state=case when attempts>=10 then 'DEAD_LETTER_PENDING_REDRIVE' else 'PENDING' end,claimed_at=null,next_retry_at=case when attempts>=10 then now()+least(interval '24 hours',interval '15 minutes'*power(2,least(redrive_count,6))) else null end where event_id=$1 and state='PROCESSING'",
             [row.event_id],
           );
         }

@@ -16,6 +16,7 @@ export type StageName =
   | "LOCK_SETTLEMENT"
   | "RELEASE_IDENTITY"
   | "MONITOR_SHIPMENT"
+  | "OPEN_DISPUTE"
   | "RECONCILE"
   | "RECURRENCE_SCHEDULE"
   | "RECUR";
@@ -106,6 +107,7 @@ export class ProductionActivityService implements BrokerageActivities {
   monitorShipment(input: { tradeId: string }) {
     return this.run("MONITOR_SHIPMENT", input);
   }
+  openDispute(input:{tradeId:string;disputeRequestId:string}){return this.run("OPEN_DISPUTE",input)}
   reconcile(input: { tradeId: string }) {
     return this.run("RECONCILE", input);
   }
@@ -130,6 +132,7 @@ export function bindBrokerageActivities(
     lockSettlement: (input) => service.lockSettlement(input),
     releaseIdentity: (input) => service.releaseIdentity(input),
     monitorShipment: (input) => service.monitorShipment(input),
+    openDispute: (input) => service.openDispute(input),
     reconcile: (input) => service.reconcile(input),
     recurrenceSchedule: (input) => service.recurrenceSchedule(input),
     recur: (input) => service.recur(input),
