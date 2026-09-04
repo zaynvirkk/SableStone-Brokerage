@@ -16,7 +16,8 @@ def test_recurring_candidate_enters_a_fresh_economics_and_settlement_cycle():
     assert "renewals_consumed=renewals_consumed+1" not in stage
     assert "persistFinalEconomicsSnapshot" in economics
     assert "protectApprovedRecurringMatch" in economics
-    assert "insert into protected_relationships" in execution
+    assert "insert into protected_transaction_terms" in execution
+    assert "select id from protected_relationships" in execution
     assert "insert into trades" in execution
     assert 'eventType:"TRADE_PROTECTED"' in execution
     assert 'eventType === "TRADE_PROTECTED"' in supervisor

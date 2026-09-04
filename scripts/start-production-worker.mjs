@@ -37,6 +37,11 @@ import {
   assertCurrentCredentialBinding,
   DatabaseCredentialUseGuard,
   DatabaseAuthorityUseGuard,
+  SupplierPayoutReleaseDispatcher,
+  startTelemetry,
+  CounterpartyActionDispatcher,
+  IdentityProvisioningDispatcher,
+  RuntimeHealthMonitor,
 } from "../dist/index.js";
 
 const runtime = await bootstrapProduction(process.env);
@@ -62,6 +67,9 @@ const adapters = runtime.activation.capabilities.includes("SETTLEMENT")
       process.env.SABLESTONE_SETTLEMENT_PROVIDERS_JSON,
     )
   : [];
+const telemetry=await startTelemetry({enabled:process.env.SABLESTONE_OTEL_ENABLED==="true",serviceName:"sablestone-worker",otlpEndpoint:process.env.SABLESTONE_OTEL_ENDPOINT??""});
+const supplierPayouts=adapters.length?new SupplierPayoutReleaseDispatcher(runtime.pool,adapters):null;
+const healthMonitor=new RuntimeHealthMonitor(runtime.pool);
 let gmail = null,
   cipher = runtime.activation.capabilities.some((capability) =>
     ["DISCOVERY", "OUTREACH", "TRADING"].includes(capability),
@@ -74,7 +82,9 @@ let gmail = null,
   outbound = null,
   commercialNotifications = null,
   acquisitionOutreach = null,
-  watch = null;
+  watch = null,
+  counterpartyActions=null;
+let identityProvisioning=null;
 if (runtime.activation.capabilities.includes("OUTREACH")) {
   const gmailConfig = {
     userId: process.env.SABLESTONE_GMAIL_USER_ID ?? "",
@@ -125,6 +135,10 @@ if (runtime.activation.capabilities.includes("OUTREACH")) {
     gmailConfig.userId,
   );
   watch = new GmailWatchManager(runtime.pool, gmail);
+  counterpartyActions=new CounterpartyActionDispatcher(runtime.pool,runtime.evidence,cipher,gmail,process.env.SABLESTONE_PORTAL_BASE_URL??"",process.env.SABLESTONE_ACTION_LINK_SECRET??"");
+  const identityConfig=JSON.parse(process.env.SABLESTONE_IDENTITY_PROVISIONING_JSON??"null");
+  if(!identityConfig)throw new Error("identity provisioning configuration required for outreach");
+  identityProvisioning=new IdentityProvisioningDispatcher(runtime.pool,runtime.evidence,cipher,identityConfig);
 }
 const documentPipeline = runtime.activation.capabilities.includes("OUTREACH")
     ? await buildProductionDocumentPipeline(
@@ -354,6 +368,10 @@ const periodic = async () => {
       await isolated("agreement-automation", () =>
         agreementAutomation.dispatchBatch(),
       );
+    if(supplierPayouts)await isolated("supplier-payout-release",()=>supplierPayouts.dispatchBatch());
+    if(counterpartyActions)await isolated("counterparty-actions",()=>counterpartyActions.dispatchBatch());
+    if(identityProvisioning)await isolated("identity-provisioning",()=>identityProvisioning.dispatchBatch());
+    await isolated("runtime-health",()=>healthMonitor.inspect());
     if (scheduler) await isolated("scheduler", () => scheduler.tick());
     await new Promise((resolve) => {
       const timer = setTimeout(resolve, 60_000);
@@ -377,6 +395,7 @@ try {
     periodic(),
   ]);
 } finally {
+  await telemetry.shutdown();
   await runtime.pool.end();
   runtime.redis.disconnect();
 }

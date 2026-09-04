@@ -15,6 +15,7 @@ import {
   assertCurrentCredentialBinding,
   DatabaseCredentialUseGuard,
   DatabaseAuthorityUseGuard,
+  startTelemetry,
 } from "../dist/index.js";
 
 const runtime = await bootstrapProduction(process.env);
@@ -22,9 +23,12 @@ const jwtPath = process.env.SABLESTONE_JWT_PUBLIC_KEY_PATH;
 if (!jwtPath) throw new Error("JWT public key path required");
 const jwtPublicKey = await readFile(jwtPath, "utf8");
 const jwtIssuer = process.env.SABLESTONE_JWT_ISSUER,
-  jwtAudience = process.env.SABLESTONE_JWT_AUDIENCE;
+  jwtAudience = process.env.SABLESTONE_JWT_AUDIENCE,
+  jwtAlgorithm=process.env.SABLESTONE_JWT_ALGORITHM;
 if (!jwtIssuer || !jwtAudience)
   throw new Error("JWT issuer and audience required");
+if(jwtAlgorithm!=="RS256"&&jwtAlgorithm!=="EdDSA")throw new Error("one exact JWT algorithm required");
+const telemetry=await startTelemetry({enabled:process.env.SABLESTONE_OTEL_ENABLED==="true",serviceName:"sablestone-api",otlpEndpoint:process.env.SABLESTONE_OTEL_ENDPOINT??""});
 const sensitiveDataCipher = runtime.activation.capabilities.some((capability) =>
   ["OUTREACH", "TRADING", "SETTLEMENT"].includes(capability),
 )
@@ -131,6 +135,8 @@ if (runtime.activation.capabilities.includes("OUTREACH")) {
     cursors: new PostgresHistoryCursorRepository(runtime.pool),
     oidc: new OAuth2Client(),
     audience: gmailConfig.pushAudience,
+    expectedServiceAccountEmail:
+      process.env.SABLESTONE_GMAIL_PUSH_SERVICE_ACCOUNT_EMAIL ?? "",
   });
 }
 
@@ -139,6 +145,7 @@ const app = await createProductionApi({
   jwtPublicKey,
   jwtIssuer,
   jwtAudience,
+  jwtAlgorithm,
   activation: runtime.activation,
   releaseDigest: runtime.releaseDigest,
   activationGuard: runtime.activationGuard,
@@ -150,6 +157,7 @@ const app = await createProductionApi({
 const port = Number(process.env.PORT ?? "8080");
 const shutdown = async () => {
   await app.close();
+  await telemetry.shutdown();
   await runtime.pool.end();
   runtime.redis.disconnect();
 };

@@ -371,6 +371,8 @@ export async function evaluateEconomics(
         )
       ).rows[0];
     if (!row) return "UNKNOWN";
+    const taxPolicy=(await client.query("select 1 from brokerage_tax_policies p join authority_receipts a on a.receipt_id=p.authority_receipt_id where p.currency=$1 and p.tax_inclusive and p.effective_at<=now() and p.expires_at>now() and a.authority_kind='TAX_POLICY_APPROVAL' and a.retrieved_at<=now() and a.effective_at<=now() and a.expires_at>now() limit 1",[floor.currency])).rows[0];
+    if(!taxPolicy){await client.query("update matches set compatible=false,rejection_reasons=rejection_reasons||'[\"TAX_INCLUSIVE_BROKERAGE_POLICY_UNAVAILABLE\"]'::jsonb where id=$1",[matchId]);return "UNKNOWN";}
     const policy: PricingPolicy = {
         policyId: row.id,
         version: row.version,
@@ -417,7 +419,7 @@ export async function evaluateEconomics(
     if (decision.state !== "EXECUTABLE") return decision.state;
     const recurring = (
       await client.query(
-        "select c.id candidate_id,c.relationship_id prior_relationship_id,c.reservation_id,c.status,a.maximum_all_in_price_per_kg,a.currency authorization_currency,a.acceptance_digest from recurring_candidates c join standing_renewal_reservations r on r.id=c.reservation_id and r.state='RESERVED' and r.expires_at>now() join standing_demand_authorizations a on a.demand_id=r.demand_id and a.demand_version=r.demand_version and a.automatic_renewal_permitted and a.valid_until>now() where c.match_id=$1 and c.status in('ECONOMICS_PENDING','PRICE_APPROVAL_REQUIRED') for update of c",
+        "select c.id candidate_id,c.relationship_id prior_relationship_id,c.reservation_id,c.status,a.maximum_all_in_price_per_kg,a.currency authorization_currency,a.acceptance_digest,a.supplier_scope,(o.supplier_id<>pr.supplier_id) substitution from recurring_candidates c join standing_renewal_reservations r on r.id=c.reservation_id and r.state='RESERVED' and r.expires_at>now() join standing_demand_authorizations a on a.demand_id=r.demand_id and a.demand_version=r.demand_version and a.automatic_renewal_permitted and a.valid_until>now() join matches m on m.id=c.match_id join supplier_offers o on o.id=m.offer_id and o.version=m.offer_version join protected_relationships pr on pr.id=c.relationship_id where c.match_id=$1 and c.status in('ECONOMICS_PENDING','PRICE_APPROVAL_REQUIRED') for update of c",
         [matchId],
       )
     ).rows[0];
@@ -458,7 +460,10 @@ export async function evaluateEconomics(
         amount_per_kg: floor.amountPerKg,
         component_digest: createHash("sha256").update(JSON.stringify(floor.componentReceiptIds)).digest("hex"),
       }, decisionId, decision.buyerExecutablePricePerKg, now);
-      await protectApprovedRecurringMatch(pool,client,matchId,recurring.candidate_id);
+      if(recurring.substitution){
+        await client.query("update recurring_candidates set status='PRICE_APPROVED',updated_at=now() where id=$1",[recurring.candidate_id]);
+        const outbox=new TransactionalOutboxRepository(pool);await outbox.append(client,{id:randomUUID(),aggregateType:"MATCH",aggregateId:matchId,eventType:"MATCH_EXECUTABLE",payload:{matchId,substitution:true},idempotencyKey:`match:${matchId}:substitution-executable`});
+      }else await protectApprovedRecurringMatch(pool,client,matchId,recurring.candidate_id);
       return "EXECUTABLE";
       }
     }

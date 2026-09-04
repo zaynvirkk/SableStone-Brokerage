@@ -145,20 +145,22 @@ export async function reconcileTradeAccounting(
           ],
         );
     }
-    const provider = (
+    const providerRows = (
         await client.query(
-          "select amount,currency,provider_reference,bank_reference from settlement_provider_events where trade_id=$1 and event_type='DISBURSEMENT_REPORTED' order by occurred_at desc limit 1",
+          "select id,amount,currency,provider_reference,bank_reference from settlement_provider_events where trade_id=$1 and event_type='DISBURSEMENT_REPORTED' order by occurred_at,id",
           [tradeId],
         )
-      ).rows[0],
-      bank = provider?.bank_reference
-        ? (
-            await client.query(
-              "select amount,currency,bank_reference from bank_receipt_events where bank_reference=$1",
-              [provider.bank_reference],
-            )
-          ).rows[0]
-        : null;
+      ).rows,
+      bankRows = (
+        await client.query(
+          "select distinct b.id,b.amount,b.currency,b.bank_reference from bank_receipt_events b join settlement_provider_events p on p.trade_id=$1 and p.event_type='DISBURSEMENT_REPORTED' and p.bank_reference=b.bank_reference order by b.id",
+          [tradeId],
+        )
+      ).rows;
+    for(const row of providerRows)await client.query("insert into settlement_allocation_links(id,trade_id,source_kind,source_reference,amount,currency) values($1,$2,'PROVIDER_ENTRY',$3,$4,$5) on conflict(source_kind,source_reference,trade_id) do nothing",[randomUUID(),tradeId,row.id,row.amount,row.currency]);
+    for(const row of bankRows)await client.query("insert into settlement_allocation_links(id,trade_id,source_kind,source_reference,amount,currency) values($1,$2,'BANK_ENTRY',$3,$4,$5) on conflict(source_kind,source_reference,trade_id) do nothing",[randomUUID(),tradeId,row.id,row.amount,row.currency]);
+    const provider = providerRows.length?{amount:providerRows.reduce((total,row)=>addDecimal(total,decimal(String(row.amount))),decimal("0")),currency:providerRows.every(row=>row.currency===facts.currency)?facts.currency:"MIXED",provider_reference:providerRows.map(row=>row.provider_reference).join(","),bank_reference:providerRows.map(row=>row.bank_reference).filter(Boolean).join(",")}:null,
+      bank = bankRows.length?{amount:bankRows.reduce((total,row)=>addDecimal(total,decimal(String(row.amount))),decimal("0")),currency:bankRows.every(row=>row.currency===facts.currency)?facts.currency:"MIXED",bank_reference:bankRows.map(row=>row.bank_reference).join(",")}:null;
     let state: "PROVIDER_ONLY" | "BANK_PARTIAL" | "MISMATCH" | "RECONCILED" =
       "PROVIDER_ONLY";
     if (provider && bank) {
@@ -196,11 +198,11 @@ export async function reconcileTradeAccounting(
         bank?.bank_reference ?? null,
       ],
     );
-    if (state === "RECONCILED" && facts.state === "ACCEPTED") {
+    if (state === "RECONCILED" && facts.state === "ACCEPTED" && bank && provider) {
       const transactionId = randomUUID();
       await client.query(
         "insert into ledger_transactions(id,idempotency_key,trade_id,event_type,occurred_at) values($1,$2,$3,'BROKERAGE_BANK_RECEIVED',now()) on conflict(idempotency_key) do nothing",
-        [transactionId, `bank:${bank.bank_reference}`, tradeId],
+        [transactionId, `bank:${tradeId}:${bank.bank_reference}`, tradeId],
       );
       if (
         (

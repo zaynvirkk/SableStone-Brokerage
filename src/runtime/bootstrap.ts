@@ -13,6 +13,7 @@ import {
   type SignedProductionActivation,
 } from "./activation.js";
 import type { AuthorityUseGuard } from "./authority_receipts.js";
+import { validateProductionEnvironment } from "./production_config.js";
 export interface ProductionRuntime {
   readonly activation: Readonly<ProductionActivationPayload>;
   readonly pool: Pool;
@@ -58,12 +59,14 @@ export async function bootstrapProduction(
       accessKeyId: required(env, "SABLESTONE_OBJECT_STORAGE_ACCESS_KEY"),
       secretAccessKey: required(env, "SABLESTONE_OBJECT_STORAGE_SECRET_KEY"),
       forcePathStyle: env["SABLESTONE_OBJECT_STORAGE_PATH_STYLE"] === "true",
+      requireObjectLock: env["SABLESTONE_OBJECT_STORAGE_OBJECT_LOCK"] === "true",
     },
     redisConfig: RedisRuntimeConfig = {
       url: required(env, "SABLESTONE_REDIS_URL"),
       keyPrefix: "sablestone:",
       connectTimeoutMs: 5000,
     };
+  validateProductionEnvironment(env,activation);
   const pool = createDatabasePool(database),
     redis = createRedis(redisConfig),
     evidence = new ImmutableEvidenceStore(objectStore);
@@ -78,6 +81,7 @@ export async function bootstrapProduction(
       );
     await redis.connect();
     await evidence.client.config.credentials();
+    await evidence.assertRetentionPolicy();
   } catch (error) {
     await pool.end();
     redis.disconnect();

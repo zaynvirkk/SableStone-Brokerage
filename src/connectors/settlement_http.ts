@@ -37,7 +37,9 @@ export interface ProviderHttpConfig {
   readonly createPath: string;
   readonly cashfreeSplitPathTemplate?: string;
   readonly cashfreeSplitVerificationPathTemplate?: string;
+  readonly cashfreeSettlementEligibilityPathTemplate?: string;
   readonly razorpayTransferPathTemplate?: string;
+  readonly razorpayTransferReleasePathTemplate?: string;
   readonly authorizationHeader: string;
   readonly additionalHeaders: Readonly<Record<string, string>>;
   readonly webhookSecret: string;
@@ -305,7 +307,7 @@ export class ProductionSettlementHttpAdapter implements SettlementAdapter {
   async applyCashfreeCapturedSplit(
     draft: SettlementInstructionDraft,
     now: string,
-  ): Promise<{ receiptSha256: string }> {
+  ): Promise<{ receiptSha256: string; providerPayoutReference: string }> {
     await this.authorityGuard?.assertCurrent();
     await this.apiCredentialGuard?.assertCurrent();
     if (this.provider !== "CASHFREE_EASY_SPLIT")
@@ -399,13 +401,17 @@ export class ProductionSettlementHttpAdapter implements SettlementAdapter {
         .update(receipt.sha256)
         .update(verificationReceipt.sha256)
         .digest("hex"),
+      providerPayoutReference: providerReference(
+        draft.providerParties.supplier,
+        "vendor_id",
+      ),
     };
   }
   async applyRazorpayCapturedTransfer(
     draft: SettlementInstructionDraft,
     paymentReference: string,
     now: string,
-  ): Promise<{ receiptSha256: string }> {
+  ): Promise<{ receiptSha256: string; providerPayoutReference: string }> {
     await this.authorityGuard?.assertCurrent();
     await this.apiCredentialGuard?.assertCurrent();
     if (this.provider !== "RAZORPAY_ROUTE")
@@ -451,7 +457,7 @@ export class ProductionSettlementHttpAdapter implements SettlementAdapter {
         `Razorpay transfer HTTP ${response.status}; request=${requestReceipt.objectKey}; response=${receipt.objectKey}`,
       );
     const decoded = JSON.parse(new TextDecoder().decode(bytes)) as {
-        items?: { account?: string; amount?: number; currency?: string }[];
+        items?: { id?: string; account?: string; amount?: number; currency?: string; on_hold?: boolean }[];
       },
       expected = razorpayRouteRequest(draft) as {
         transfers: { account: string; amount: number; currency: string }[];
@@ -461,11 +467,89 @@ export class ProductionSettlementHttpAdapter implements SettlementAdapter {
       decoded.items?.length !== 1 ||
       item?.account !== expected.transfers[0]!.account ||
       item.amount !== expected.transfers[0]!.amount ||
-      item.currency !== "INR"
+      item.currency !== "INR" || item.on_hold !== true || !item.id
     )
       throw new Error(
         `Razorpay transfer acknowledgement mismatch; response=${receipt.objectKey}`,
       );
+    return { receiptSha256: receipt.sha256, providerPayoutReference: item.id };
+  }
+  async releaseSupplierPayout(
+    providerPayoutReference: string,
+    now: string,
+  ): Promise<{ receiptSha256: string }> {
+    await this.authorityGuard?.assertCurrent();
+    await this.apiCredentialGuard?.assertCurrent();
+    let path: string,
+      method: "POST" | "PATCH",
+      payload: Readonly<Record<string, unknown>>;
+    if (this.provider === "CASHFREE_EASY_SPLIT") {
+      if (
+        !this.config.cashfreeSettlementEligibilityPathTemplate?.includes(
+          "{vendor_id}",
+        )
+      )
+        throw new Error("Cashfree delayed-settlement release path unavailable");
+      path = this.config.cashfreeSettlementEligibilityPathTemplate.replace(
+        "{vendor_id}",
+        encodeURIComponent(providerPayoutReference),
+      );
+      method = "POST";
+      payload = { status: "ELIGIBLE", reason: "DELIVERY_ACCEPTED" };
+    } else if (this.provider === "RAZORPAY_ROUTE") {
+      if (
+        !this.config.razorpayTransferReleasePathTemplate?.includes(
+          "{transfer_id}",
+        )
+      )
+        throw new Error("Razorpay held-transfer release path unavailable");
+      path = this.config.razorpayTransferReleasePathTemplate.replace(
+        "{transfer_id}",
+        encodeURIComponent(providerPayoutReference),
+      );
+      method = "PATCH";
+      payload = { on_hold: false };
+    } else {
+      throw new Error("provider supplier-payout release is not API implemented");
+    }
+    const url = resolveExternalProviderEndpoint(this.config.baseUrl, path),
+      body = JSON.stringify(payload),
+      response = await this.fetcher(url, {
+        method,
+        headers: {
+          authorization: this.config.authorizationHeader,
+          "content-type": "application/json",
+          "x-idempotency-key": `supplier-release:${providerPayoutReference}`,
+          ...this.config.additionalHeaders,
+        },
+        body,
+        signal: AbortSignal.timeout(30_000),
+      }),
+      bytes = await readBoundedResponseBody(response, 2_000_000),
+      receipt = await this.store.preserve(
+        `settlement/${this.provider}/supplier-release`,
+        bytes,
+        response.headers.get("content-type") ?? "application/json",
+        url.toString(),
+        now,
+      );
+    if (!response.ok)
+      throw new Error(
+        `${this.provider} supplier release HTTP ${response.status}; response=${receipt.objectKey}`,
+      );
+    const decoded = JSON.parse(new TextDecoder().decode(bytes)) as Record<
+      string,
+      unknown
+    >;
+    if (this.provider === "RAZORPAY_ROUTE" && decoded.on_hold !== false)
+      throw new Error("Razorpay supplier release acknowledgement mismatch");
+    if (
+      this.provider === "CASHFREE_EASY_SPLIT" &&
+      !["ELIGIBLE", "SUCCESS", "OK"].includes(
+        String(decoded.status ?? decoded.settlement_eligibility ?? "").toUpperCase(),
+      )
+    )
+      throw new Error("Cashfree supplier release acknowledgement mismatch");
     return { receiptSha256: receipt.sha256 };
   }
 }

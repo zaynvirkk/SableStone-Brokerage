@@ -52,6 +52,7 @@ export interface ApiDependencies {
   readonly jwtPublicKey: string;
   readonly jwtIssuer: string;
   readonly jwtAudience: string;
+  readonly jwtAlgorithm?: "RS256" | "EdDSA";
   readonly activation: Readonly<ProductionActivationPayload> | null;
   readonly releaseDigest: string;
   readonly activationGuard?: AuthorityUseGuard;
@@ -100,7 +101,7 @@ export async function createProductionApi(
   await app.register(jwt, {
     secret: { public: deps.jwtPublicKey },
     verify: {
-      algorithms: ["EdDSA", "RS256"],
+      algorithms: [deps.jwtAlgorithm ?? "RS256"],
       allowedIss: deps.jwtIssuer,
       allowedAud: deps.jwtAudience,
     },
@@ -133,6 +134,17 @@ export async function createProductionApi(
         !request.user.organizationId)
     )
       throw new Error("JWT claims invalid");
+    if (request.user.role === "SUPPLIER" || request.user.role === "BUYER") {
+      const current = await deps.pool.query(
+        "select p.state from counterparty_principals p join organizations o on o.id=p.organization_id where p.issuer_subject=$1 and p.organization_id=$2 and p.role=$3 and p.state in('INVITED','ACTIVE') and o.organization_type=$3",
+        [request.user.sub, request.user.organizationId, request.user.role],
+      );
+      if (!current.rowCount) throw new Error("principal disabled or organization unavailable");
+      if(current.rows[0]?.state==='INVITED'){
+        if(request.user.emailVerified!==true||!(request.user.amr??[]).length)throw new Error("invited principal requires verified authentication");
+        await deps.pool.query("update counterparty_principals set state='ACTIVE',activated_at=now() where issuer_subject=$1 and state='INVITED'",[request.user.sub]);
+      }
+    }
   });
   app.get("/healthz", async () => ({
     state: "OK",
@@ -775,6 +787,14 @@ export async function createProductionApi(
       }
     },
   );
+  app.post<{
+    Params:{id:string};Body:{reason?:string;evidenceReceiptId?:string|null};
+  }>("/v1/trades/:id/disputes",{onRequest:[app.authenticate]},async(request,reply)=>{
+    const p=principal(request);if(p.role!=="BUYER"||!p.organizationId)return reply.code(403).send({error:"ROLE_FORBIDDEN"});
+    if(!request.body?.reason)return reply.code(400).send({error:"DISPUTE_REASON_REQUIRED"});
+    try{return reply.code(201).send({disputeId:await commands.openDispute({tradeId:request.params.id,buyerId:p.organizationId,reason:request.body.reason,evidenceReceiptId:request.body.evidenceReceiptId??null,openedAt:new Date().toISOString()})});}catch{return reply.code(409).send({error:"DISPUTE_REJECTED"});}
+  });
+  app.get("/v1/actions",{onRequest:[app.authenticate]},async(request)=>{const p=principal(request);assertAuthorized(p,{organizationId:p.organizationId,allowedRoles:["OPERATIONS","SYSTEM","SUPPLIER","BUYER"]},new Date().toISOString());const clause=p.role==="OPERATIONS"||p.role==="SYSTEM"?"":"where a.organization_id=$1",params=clause?[p.organizationId]:[];return{items:(await deps.pool.query(`select a.id,a.action_type,a.resource_type,a.resource_id,case when a.resource_type='SETTLEMENT_INSTRUCTION' then si.trade_id else a.resource_id end destination_resource_id,a.actor_role,a.state,a.deadline,a.evidence_required from counterparty_actions a left join settlement_instructions si on a.resource_type='SETTLEMENT_INSTRUCTION' and si.id=a.resource_id ${clause} order by case a.state when 'REQUIRED' then 0 when 'NOTIFIED' then 1 else 2 end,a.deadline limit 200`,params)).rows};});
   app.post<{
     Params: { id: string; version: string };
     Body: { agreementBindingId?: string };

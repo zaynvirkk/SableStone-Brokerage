@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import { TransactionalOutboxRepository } from "./database.js";
 
@@ -13,21 +13,23 @@ export async function protectApprovedRecurringMatch(
     [candidateId,matchId],
   )).rows[0];
   if(!facts)throw new Error("approved recurring candidate unavailable");
-  const relationshipId=randomUUID(),tradeId=randomUUID();
-  const relationship=(await client.query(
-    "insert into protected_relationships(id,supplier_id,buyer_id,introduced_at,protected_until,commodity_scope,affiliate_scope,qualifying_purchase_definition,commission_type,commission_rate,currency,supplier_acceptance_id,buyer_acceptance_id,required_settlement_capabilities,status,final_economics_snapshot_id) select $1,supplier_id,buyer_id,now(),protected_until,commodity_scope,affiliate_scope,qualifying_purchase_definition,'PER_KG',$2,$3,supplier_acceptance_id,buyer_acceptance_id,required_settlement_capabilities,'PROTECTED',(select id from final_economics_snapshots where match_id=$4) from protected_relationships where id=$5 and status='PROTECTED' and protected_until>now() returning id",
-    [relationshipId,facts.realized_commission_per_kg,facts.currency,matchId,facts.prior_relationship_id],
-  )).rows[0];
+  const relationshipId=String(facts.prior_relationship_id),tradeId=randomUUID(),snapshot=(await client.query("select id,waterfall_digest from final_economics_snapshots where match_id=$1",[matchId])).rows[0];
+  if(!snapshot)throw new Error("recurring final economics unavailable");
+  const relationship=(await client.query("select id from protected_relationships where id=$1 and status='PROTECTED' and protected_until>now() for share",[relationshipId])).rows[0];
   if(!relationship)throw new Error("recurring protected relationship unavailable");
   await client.query(
     "insert into trades(id,match_id,supplier_id,buyer_id,relationship_id,state,geography,relationship_maturity,has_documentary_lc) values($1,$2,$3,$4,$5,'PROTECTED',$6,'ESTABLISHED',$7)",
     [tradeId,matchId,facts.supplier_id,facts.buyer_id,relationshipId,facts.geography,facts.has_lc],
   );
+  const termsDigest=createHash("sha256").update(JSON.stringify({relationshipId,tradeId,finalEconomicsSnapshotId:snapshot.id,commissionRate:String(facts.realized_commission_per_kg),currency:String(facts.currency),waterfallDigest:String(snapshot.waterfall_digest)})).digest("hex");
+  await client.query("insert into protected_transaction_terms(id,relationship_id,trade_id,final_economics_snapshot_id,commission_rate,currency,terms_digest) values($1,$2,$3,$4,$5,$6,$7)",[randomUUID(),relationshipId,tradeId,snapshot.id,facts.realized_commission_per_kg,facts.currency,termsDigest]);
   const updated=await client.query(
     "update recurring_candidates set relationship_id=$2,trade_id=$3,status='TRADE_PROTECTED',updated_at=now() where id=$1 and trade_id is null and status in('ECONOMICS_PENDING','PRICE_APPROVED','PRICE_APPROVAL_REQUIRED')",
     [candidateId,relationshipId,tradeId],
   );
   if((updated.rowCount??0)!==1)throw new Error("recurring candidate promotion conflict");
+  const committed=await client.query("update standing_renewal_reservations set state='COMMITTED',committed_at=now(),trade_id=$2,final_economics_snapshot_id=$3 where id=$1 and state='RESERVED' and expires_at>now()",[facts.reservation_id,tradeId,snapshot.id]);
+  if((committed.rowCount??0)!==1)throw new Error("recurring reservation commitment conflict");
   await new TransactionalOutboxRepository(pool).append(client,{
     id:randomUUID(),aggregateType:"TRADE",aggregateId:tradeId,eventType:"TRADE_PROTECTED",
     payload:{matchId,tradeId,candidateId,reservationId:facts.reservation_id},
@@ -42,7 +44,7 @@ export async function releaseRecurringReservation(
   terminalState:"DECLINED"|"EXPIRED"|"FAILED",
 ):Promise<void>{
   const released=(await client.query(
-    "update standing_renewal_reservations r set state='RELEASED',released_at=now() from recurring_candidates c where c.id=$1 and c.reservation_id=r.id and r.state='RESERVED' returning r.demand_id,r.demand_version",
+    "update standing_renewal_reservations r set state='RELEASED',released_at=now() from recurring_candidates c where c.id=$1 and c.reservation_id=r.id and r.state in('RESERVED','COMMITTED') returning r.demand_id,r.demand_version",
     [candidateId],
   )).rows[0];
   if(released)await client.query(

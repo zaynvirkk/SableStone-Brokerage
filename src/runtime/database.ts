@@ -149,14 +149,15 @@ export class DurableInboxRepository {
       async (client) =>
         (
           await client.query(
-            "with claimed as (select provider,external_event_id from external_event_inbox where processing_state='PENDING' or (processing_state='PROCESSING' and claimed_at<now()-interval '5 minutes') order by received_at for update skip locked limit $1) update external_event_inbox i set processing_state='PROCESSING',claimed_at=now(),attempts=attempts+1 from claimed where i.provider=claimed.provider and i.external_event_id=claimed.external_event_id returning i.*",
+            "with redriven as(update external_event_inbox set processing_state='PENDING',redrive_count=redrive_count+1,next_retry_at=null where processing_state='DEAD_LETTER_PENDING_REDRIVE' and next_retry_at<=now() returning provider,external_event_id),claimed as (select provider,external_event_id from external_event_inbox where processing_state='PENDING' or (processing_state='PROCESSING' and claimed_at<now()-interval '5 minutes') order by received_at for update skip locked limit $1) update external_event_inbox i set processing_state='PROCESSING',claimed_at=now(),attempts=attempts+1 from claimed where i.provider=claimed.provider and i.external_event_id=claimed.external_event_id returning i.*",
             [limit],
           )
         ).rows,
     );
   }
   async complete(provider:string,externalEventId:string,state:"PROCESSED"|"REJECTED"):Promise<void>{const result=await this.pool.query("update external_event_inbox set processing_state=$3,processed_at=now(),claimed_at=null where provider=$1 and external_event_id=$2 and processing_state='PROCESSING'",[provider,externalEventId,state]);if((result.rowCount??0)!==1)throw new Error("inbox completion conflict")}
-  async fail(provider:string,externalEventId:string,errorCode:string):Promise<void>{const result=await this.pool.query("update external_event_inbox set processing_state=case when attempts>=5 then 'REJECTED' else 'PENDING' end,processed_at=case when attempts>=5 then now() else null end,claimed_at=null,last_error_code=$3 where provider=$1 and external_event_id=$2 and processing_state='PROCESSING'",[provider,externalEventId,errorCode.slice(0,100)]);if((result.rowCount??0)!==1)throw new Error("inbox failure transition conflict")}
+  async fail(provider:string,externalEventId:string,errorCode:string):Promise<void>{const result=await this.pool.query("update external_event_inbox set processing_state=case when attempts>=5 then 'DEAD_LETTER_PENDING_REDRIVE' else 'PENDING' end,processed_at=null,claimed_at=null,last_error_code=$3,failure_class='INFRASTRUCTURE_OR_TRANSIENT',next_retry_at=case when attempts>=5 then now()+least(interval '24 hours',interval '15 minutes'*power(2,least(redrive_count,6))) else null end where provider=$1 and external_event_id=$2 and processing_state='PROCESSING'",[provider,externalEventId,errorCode.slice(0,100)]);if((result.rowCount??0)!==1)throw new Error("inbox failure transition conflict")}
+  async reject(provider:string,externalEventId:string,errorCode:string):Promise<void>{const result=await this.pool.query("update external_event_inbox set processing_state='REJECTED',processed_at=now(),claimed_at=null,last_error_code=$3,failure_class='PERMANENT_INVALID' where provider=$1 and external_event_id=$2 and processing_state='PROCESSING'",[provider,externalEventId,errorCode.slice(0,100)]);if((result.rowCount??0)!==1)throw new Error("inbox rejection transition conflict")}
 }
 
 export class TransactionalOutboxRepository {

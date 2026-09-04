@@ -194,6 +194,13 @@ export default async function Trade({
               ]}
             />
           </section>
+          {trade.state === "DELIVERED" && trade.viewerRole === "BUYER" ? (
+            <section>
+              <h2>Delivery decision</h2>
+              <form action={`/api/trades/${encodeURIComponent(trade.id)}/delivery-acceptance`} method="post"><button type="submit">Accept delivered material</button></form>
+              <form action={`/api/trades/${encodeURIComponent(trade.id)}/disputes`} method="post"><label>Dispute reason<input name="reason" required maxLength={2000}/></label><button type="submit">Open provider dispute and freeze release</button></form>
+            </section>
+          ) : null}
         </div>
         <aside className="decision">
           <p>Deterministic next action</p>

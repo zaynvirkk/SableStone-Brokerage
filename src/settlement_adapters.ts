@@ -84,6 +84,7 @@ export class EscrowComAdapter extends ApprovedAdapter {
       [
         "BROKER_FEE_SPLIT",
         "CONDITIONAL_RELEASE",
+        "DELIVERY_CONDITIONAL_SUPPLIER_RELEASE",
         "REFUND_ALLOCATION",
         "DISPUTE_FREEZE",
       ],
@@ -127,6 +128,7 @@ export class IndianBankEscrowAdapter extends ApprovedAdapter {
       [
         "BROKER_FEE_SPLIT",
         "CONDITIONAL_RELEASE",
+        "DELIVERY_CONDITIONAL_SUPPLIER_RELEASE",
         "DISPUTE_FREEZE",
         "BANK_ACKNOWLEDGEMENT",
       ],
@@ -179,7 +181,7 @@ export class CashfreeEasySplitAdapter extends ApprovedAdapter {
   ): Promise<Readonly<CreatedInstruction>> {
     this.validate(
       draft,
-      ["BROKER_FEE_SPLIT", "REFUND_ALLOCATION", "REVERSAL_EVENTS"],
+      ["BROKER_FEE_SPLIT", "DELIVERY_CONDITIONAL_SUPPLIER_RELEASE", "REFUND_ALLOCATION", "REVERSAL_EVENTS"],
       now,
     );
     if (
@@ -228,7 +230,7 @@ export class RazorpayRouteAdapter extends ApprovedAdapter {
   ): Promise<Readonly<CreatedInstruction>> {
     if (this.eligibility !== "ELIGIBLE" || !this.eligibilityReceiptId)
       throw new Error(`Razorpay Route ${this.eligibility.toLowerCase()}`);
-    this.validate(draft, ["BROKER_FEE_SPLIT", "REVERSAL_EVENTS"], now);
+    this.validate(draft, ["BROKER_FEE_SPLIT", "REVERSAL_EVENTS", "DELIVERY_CONDITIONAL_SUPPLIER_RELEASE"], now);
     return Object.freeze({
       state: "CREATED",
       providerReference: `razorpay-fixture:${draft.instructionId}`,
@@ -252,7 +254,7 @@ export class LcProceedsAdapter extends ApprovedAdapter {
     draft: SettlementInstructionDraft,
     now: string,
   ): Promise<Readonly<CreatedInstruction>> {
-    this.validate(draft, ["BROKER_FEE_SPLIT", "BANK_ACKNOWLEDGEMENT"], now);
+    this.validate(draft, ["BROKER_FEE_SPLIT", "BANK_ACKNOWLEDGEMENT", "DELIVERY_CONDITIONAL_SUPPLIER_RELEASE"], now);
     this.#drafts.set(draft.instructionId, Object.freeze({ ...draft }));
     return Object.freeze({
       state: "CREATED",

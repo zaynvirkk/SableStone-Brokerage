@@ -1,0 +1,44 @@
+name: launch-engine-verification
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: sablestone_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s
+          --health-timeout 5s --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - run: npm run build
+      - run: npm test
+      - run: npm ci && npm run build
+        working-directory: apps/web
+      - name: Fresh migration replay
+        env:
+          PGPASSWORD: postgres
+        run: |
+          for migration in $(find migrations -maxdepth 1 -name '*.sql' ! -name '*.down.sql' | sort); do psql postgresql://postgres:postgres@localhost:5432/sablestone_test -v ON_ERROR_STOP=1 -f "$migration"; done
+          psql postgresql://postgres:postgres@localhost:5432/sablestone_test -v ON_ERROR_STOP=1 -c "select count(*) from schema_migrations"
+      - run: npm audit --omit=dev --audit-level=high
+      - run: node scripts/prepare-release.mjs
+      - run: node scripts/verify-release.mjs

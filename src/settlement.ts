@@ -6,6 +6,7 @@ import { addDecimal, decimal } from "./money.js";
 export type SettlementCapability =
   | "BROKER_FEE_SPLIT"
   | "CONDITIONAL_RELEASE"
+  | "DELIVERY_CONDITIONAL_SUPPLIER_RELEASE"
   | "REFUND_ALLOCATION"
   | "DISPUTE_FREEZE"
   | "REVERSAL_EVENTS"
@@ -21,6 +22,7 @@ export function requiredSettlementCapabilities(
       return Object.freeze([
         "BROKER_FEE_SPLIT",
         "CONDITIONAL_RELEASE",
+        "DELIVERY_CONDITIONAL_SUPPLIER_RELEASE",
         "REFUND_ALLOCATION",
         "DISPUTE_FREEZE",
       ]);
@@ -28,21 +30,23 @@ export function requiredSettlementCapabilities(
       return Object.freeze([
         "BROKER_FEE_SPLIT",
         "CONDITIONAL_RELEASE",
+        "DELIVERY_CONDITIONAL_SUPPLIER_RELEASE",
         "DISPUTE_FREEZE",
         "BANK_ACKNOWLEDGEMENT",
       ]);
     case "CASHFREE":
-      return Object.freeze(["BROKER_FEE_SPLIT", "CONDITIONAL_RELEASE"]);
+      return Object.freeze(["BROKER_FEE_SPLIT", "CONDITIONAL_RELEASE", "DELIVERY_CONDITIONAL_SUPPLIER_RELEASE"]);
     case "CASHFREE_EASY_SPLIT":
       return Object.freeze([
         "BROKER_FEE_SPLIT",
+        "DELIVERY_CONDITIONAL_SUPPLIER_RELEASE",
         "REFUND_ALLOCATION",
         "REVERSAL_EVENTS",
       ]);
     case "RAZORPAY_ROUTE":
-      return Object.freeze(["BROKER_FEE_SPLIT", "REVERSAL_EVENTS"]);
+      return Object.freeze(["BROKER_FEE_SPLIT", "REVERSAL_EVENTS", "DELIVERY_CONDITIONAL_SUPPLIER_RELEASE"]);
     case "LC_PROCEEDS":
-      return Object.freeze(["BROKER_FEE_SPLIT", "BANK_ACKNOWLEDGEMENT"]);
+      return Object.freeze(["BROKER_FEE_SPLIT", "BANK_ACKNOWLEDGEMENT", "DELIVERY_CONDITIONAL_SUPPLIER_RELEASE"]);
     default:
       throw new Error(`unknown settlement provider ${provider}`);
   }

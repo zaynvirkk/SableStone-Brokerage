@@ -12,6 +12,25 @@ status, provider approval, successful deployment, market demand, a trade,
 revenue or profitability. Operational capabilities remain unavailable without
 a release-bound signed activation containing genuine current receipts.
 
+Launch hardening is part of that software boundary. A domestic provider is not
+routable unless current written approval includes
+`DELIVERY_CONDITIONAL_SUPPLIER_RELEASE`. Cashfree supplier balances remain
+ineligible and Razorpay transfers remain held until receipt-backed buyer
+delivery acceptance; a dispute or expired delivery action freezes release.
+Provider and bank reconciliation supports multiple entries per trade and must
+sum exactly to the immutable fee entitlement and tax-inclusive brokerage
+invoice. Valid money events enter an autonomous durable-redrive queue after
+repeated infrastructure failures rather than becoming permanently lost.
+
+Counterparty work is represented as durable organization-scoped actions.
+Verified contacts are invited through the configured identity provider, and
+current principal state is checked on authenticated requests. Agreement,
+settlement, funding, dispatch, delivery, dispute and standing-order actions
+receive signed deep links and deadline reminders. Operational startup requires
+one pinned JWT algorithm, the expected Gmail Pub/Sub service-account identity,
+capability-complete configuration, telemetry when enabled, and COMPLIANCE-mode
+Object Lock on the evidence bucket.
+
 Recurring execution is part of the verified software boundary. A reconciled
 trade loads the mandate's persisted `next_required_at`, uses a Temporal durable
 timer for any 1–365 day cadence, and retries unavailable supply only within the
@@ -20,7 +39,13 @@ the immutable buyer, product/specification, quantity/tolerance, cadence,
 currency, all-in-price, supplier-scope and renewal bounds. Every cycle creates
 a fresh demand execution instance, reserves (but does not consume) one renewal,
 requotes current economics and creates a fresh protected trade and settlement
-instruction. An above-ceiling cycle remains explicitly linked to its candidate
+instruction. Authorization moves `RESERVED → COMMITTED` only when a specific
+trade and final-economics snapshot are bound; only a new secured entitlement
+can move it to `CONSUMED`, while terminal failure releases it. Enduring
+introduction protection is separate from each cycle's transaction terms and
+exact settlement acceptances. Quantity tolerance controls execution sizing,
+and approved substitution searches qualified suppliers but requires fresh
+match-specific protected-account acceptance. An above-ceiling cycle remains explicitly linked to its candidate
 and reservation through buyer approval, decline or expiry. The cycle is
 consumed only after the provider proves a new secured SableStone entitlement;
 decline, failure or expiry releases it. Paid quote work is withheld when the

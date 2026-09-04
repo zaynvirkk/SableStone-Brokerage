@@ -346,7 +346,7 @@ async function createQualifiedRecurringMatch(
       "with expired as(update standing_renewal_reservations set state='RELEASED',released_at=now() where state='RESERVED' and expires_at<=now() returning demand_id,demand_version,candidate_id),counts as(select demand_id,demand_version,count(*) releases from expired group by demand_id,demand_version) update standing_demand_authorizations a set renewals_reserved=greatest(a.renewals_reserved-counts.releases,0) from counts where a.demand_id=counts.demand_id and a.demand_version=counts.demand_version",
     );
     await client.query(
-      "update recurring_candidates c set status='EXPIRED',failure_reason='RESERVATION_EXPIRED',updated_at=now() from standing_renewal_reservations r where r.candidate_id=c.id and r.state='RELEASED' and c.status in('ECONOMICS_PENDING','PRICE_APPROVAL_REQUIRED','TRADE_PROTECTED')",
+      "update recurring_candidates c set status='EXPIRED',failure_reason='RESERVATION_EXPIRED',updated_at=now() from standing_renewal_reservations r where r.candidate_id=c.id and r.state='RELEASED' and c.status in('ECONOMICS_PENDING','PRICE_APPROVAL_REQUIRED','PRICE_APPROVED')",
     );
     const prior = (
       await client.query(
@@ -374,17 +374,16 @@ async function createQualifiedRecurringMatch(
         candidateId: existing.id,
         status: existing.status,
       });
-    if (authorization.supplier_scope !== "SAME_SUPPLIER")
-      return unknown("approved substitution requires fresh protected-account acceptance");
     const buyerRisk=(await client.query("select state from risk_decisions where organization_id=$1 order by decided_at desc limit 1",[authorization.buyer_id])).rows[0];
     if(buyerRisk?.state!=="PASS")return unknown("recurring buyer risk gate failed");
     const offers = (await client.query(
-      "select o.* from supplier_offers o where o.supplier_id=$1 and o.product_family=$2 and o.verification='VERIFIED' and o.freshness='CURRENT' and o.expires_at>now() and o.quantity_mt>=$3 and $3>=o.moq_mt and exists(select 1 from qualification_decisions q where q.subject_type='SUPPLIER_OFFER' and q.subject_id=o.id and q.subject_version=o.version and q.verdict='PASS') and exists(select 1 from risk_decisions r where r.organization_id=o.supplier_id and r.state='PASS') order by o.created_at desc",
-      [prior.supplier_id,authorization.product_family,authorization.quantity_per_cycle_mt],
+      "select o.*,least(o.quantity_mt,$4::numeric) executable_quantity_mt from supplier_offers o where ($1='APPROVED_SUBSTITUTION' or o.supplier_id=$2) and o.product_family=$3 and o.verification='VERIFIED' and o.freshness='CURRENT' and o.expires_at>now() and o.quantity_mt>=greatest($4::numeric-$5::numeric,0) and o.moq_mt<=least(o.quantity_mt,$4::numeric+$5::numeric) and exists(select 1 from qualification_decisions q where q.subject_type='SUPPLIER_OFFER' and q.subject_id=o.id and q.subject_version=o.version and q.verdict='PASS') and exists(select 1 from risk_decisions r where r.organization_id=o.supplier_id and r.state='PASS') order by least(o.quantity_mt,$4::numeric+$5::numeric)*greatest(($6::numeric-o.supplier_net),0) desc,o.created_at desc",
+      [authorization.supplier_scope,prior.supplier_id,authorization.product_family,authorization.quantity_per_cycle_mt,authorization.quantity_tolerance_mt,authorization.maximum_all_in_price_per_kg],
     )).rows;
     const pair=offers.find((offer)=>deepCompatible(offer.product_spec,authorization.product_spec));
     if (!pair)
       return unknown("no current fully-qualified compatible recurring match");
+    const executionQuantity=String(pair.executable_quantity_mt);
     const id = randomUUID(), matchId = randomUUID(), reservationId = randomUUID(),executionDemandId=randomUUID(),sourceEventId=randomUUID(),
       cycleNumber = Number(authorization.renewals_reserved)+Number(authorization.renewals_consumed)+1,
       contextDigest=createHash("sha256").update(JSON.stringify({recurringCandidate:id,priorFeeLock:prior.fee_lock_id,cycleNumber})).digest("hex");
@@ -394,7 +393,7 @@ async function createQualifiedRecurringMatch(
     );
     await client.query(
       "insert into buyer_demands(id,version,buyer_id,source_event_id,product_family,product_spec,quantity_mt,buyer_ceiling,ceiling_state,currency,standing,expires_at,verification,freshness) values($1,1,$2,$3,$4,$5,$6,$7,'KNOWN',$8,true,$9,'VERIFIED','CURRENT')",
-      [executionDemandId,authorization.buyer_id,sourceEventId,authorization.product_family,authorization.product_spec,authorization.quantity_per_cycle_mt,authorization.maximum_all_in_price_per_kg,authorization.currency,authorization.valid_until],
+      [executionDemandId,authorization.buyer_id,sourceEventId,authorization.product_family,authorization.product_spec,executionQuantity,authorization.maximum_all_in_price_per_kg,authorization.currency,authorization.valid_until],
     );
     await client.query(
       "insert into qualification_decisions(id,organization_id,subject_type,subject_id,subject_version,verdict,reasons,policy_version,decided_at) values(gen_random_uuid(),$1,'BUYER_DEMAND',$2,1,'PASS','[]'::jsonb,$3,now())",
@@ -748,6 +747,16 @@ async function protectMatch(pool: Pool, matchId: string): Promise<StageResult> {
           ],
         )
       ).rows[0];
+      const recurring=(await client.query("select c.id,c.reservation_id from recurring_candidates c join standing_renewal_reservations r on r.id=c.reservation_id and r.state='RESERVED' and r.expires_at>now() where c.match_id=$1 and c.status='PRICE_APPROVED' for update of c",[matchId])).rows[0];
+      if(recurring){
+        const snapshot=(await client.query("select id,realized_commission_per_kg,currency,waterfall_digest from final_economics_snapshots where match_id=$1",[matchId])).rows[0];
+        if(!snapshot)throw new Error("substitution final economics missing");
+        const termsDigest=createHash("sha256").update(JSON.stringify({relationshipId:relationship.id,tradeId,finalEconomicsSnapshotId:snapshot.id,commissionRate:String(snapshot.realized_commission_per_kg),currency:String(snapshot.currency),waterfallDigest:String(snapshot.waterfall_digest)})).digest("hex");
+        await client.query("insert into protected_transaction_terms(id,relationship_id,trade_id,final_economics_snapshot_id,commission_rate,currency,terms_digest) values($1,$2,$3,$4,$5,$6,$7)",[randomUUID(),relationship.id,tradeId,snapshot.id,snapshot.realized_commission_per_kg,snapshot.currency,termsDigest]);
+        await client.query("update recurring_candidates set relationship_id=$2,trade_id=$3,status='TRADE_PROTECTED',updated_at=now() where id=$1",[recurring.id,relationship.id,tradeId]);
+        const committed=await client.query("update standing_renewal_reservations set state='COMMITTED',committed_at=now(),trade_id=$2,final_economics_snapshot_id=$3 where id=$1 and state='RESERVED' and expires_at>now()",[recurring.reservation_id,tradeId,snapshot.id]);
+        if((committed.rowCount??0)!==1)throw new Error("substitution reservation commitment conflict");
+      }
       const outbox = new TransactionalOutboxRepository(pool);
       await outbox.append(client, {
         id: randomUUID(),
@@ -785,7 +794,7 @@ async function lockSettlement(
     });
   const facts = (
     await pool.query(
-      "select t.*,pr.id relationship_id,pr.commission_rate,pr.currency relationship_currency,m.offer_id,m.offer_version,m.demand_id,m.demand_version,o.product_family,d.quantity_mt,fe.id final_economics_snapshot_id,fe.accepted_buyer_price_per_kg,fe.realized_commission_per_kg,fe.settlement_supplier_per_kg,fe.settlement_gross_per_kg,fe.third_party_allocations,fe.provider_deductions,fe.reserve_allocations,fe.buyer_direct_costs,fe.waterfall_digest from trades t join protected_relationships pr on pr.id=t.relationship_id join final_economics_snapshots fe on fe.id=pr.final_economics_snapshot_id and fe.match_id=t.match_id join matches m on m.id=t.match_id join supplier_offers o on o.id=m.offer_id and o.version=m.offer_version join buyer_demands d on d.id=m.demand_id and d.version=m.demand_version where t.id=$1 and t.state in('PROTECTED','FEE_LOCKED') and pr.protected_until>now()",
+      "select t.*,pr.id relationship_id,coalesce(pt.commission_rate,pr.commission_rate) commission_rate,coalesce(pt.currency,pr.currency) relationship_currency,m.offer_id,m.offer_version,m.demand_id,m.demand_version,o.product_family,d.quantity_mt,fe.id final_economics_snapshot_id,fe.accepted_buyer_price_per_kg,fe.realized_commission_per_kg,fe.settlement_supplier_per_kg,fe.settlement_gross_per_kg,fe.third_party_allocations,fe.provider_deductions,fe.reserve_allocations,fe.buyer_direct_costs,fe.waterfall_digest from trades t join protected_relationships pr on pr.id=t.relationship_id left join protected_transaction_terms pt on pt.trade_id=t.id join final_economics_snapshots fe on fe.id=coalesce(pt.final_economics_snapshot_id,pr.final_economics_snapshot_id) and fe.match_id=t.match_id join matches m on m.id=t.match_id join supplier_offers o on o.id=m.offer_id and o.version=m.offer_version join buyer_demands d on d.id=m.demand_id and d.version=m.demand_version where t.id=$1 and t.state in('PROTECTED','FEE_LOCKED') and pr.protected_until>now()",
       [tradeId],
     )
   ).rows[0];
@@ -991,6 +1000,14 @@ async function releaseIdentity(
       relationshipId: existing.relationship_id,
       feeLockId,
     });
+  const priorRelease=(await pool.query("select i.* from trades t join identity_release_events i on i.relationship_id=t.relationship_id where t.id=$1",[tradeId])).rows[0];
+  if(priorRelease){
+    const freshLock=(await pool.query("select 1 from fee_locks f join entitlement_security_events e on e.id=f.entitlement_security_event_id and e.funds_secured and e.beneficiary_verified where f.id=$1 and f.trade_id=$2 and f.state='LOCKED'",[feeLockId,tradeId])).rows[0];
+    if(!freshLock)return rejected(`fee-lock:${feeLockId}`,"recurring identity release lacks fresh entitlement");
+    const updated=await pool.query("update trades set state='IDENTITY_RELEASED',updated_at=now() where id=$1 and state='FEE_LOCKED'",[tradeId]);
+    if((updated.rowCount??0)!==1)throw new Error("recurring identity release trade-state conflict");
+    return accepted(`identity-release:${priorRelease.relationship_id}:${tradeId}`,{relationshipId:priorRelease.relationship_id,feeLockId,previouslyReleased:true});
+  }
   const facts = (
     await pool.query(
       "select f.*,pr.supplier_id,pr.buyer_id,pr.protected_until,sa.acceptance_sha256 supplier_hash,ba.acceptance_sha256 buyer_hash from fee_locks f join entitlement_security_events e on e.id=f.entitlement_security_event_id and e.instruction_id=f.instruction_id and e.beneficiary_verified and e.funds_secured join protected_relationships pr on pr.id=f.relationship_id join agreement_acceptances sa on sa.id=pr.supplier_acceptance_id join agreement_acceptances ba on ba.id=pr.buyer_acceptance_id where f.id=$1 and f.trade_id=$2 and f.state='LOCKED' and pr.protected_until>now()",

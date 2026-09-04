@@ -236,10 +236,11 @@ export class ProductionCommandService {
           throw new Error("settlement acceptance conflict");
         return prior.instruction_digest;
       }
+      const acceptanceId=randomUUID();
       await client.query(
         "insert into settlement_instruction_acceptances(id,instruction_id,role,organization_id,instruction_digest,accepted_at) values($1,$2,$3,$4,$5,$6)",
         [
-          randomUUID(),
+          acceptanceId,
           input.instructionId,
           input.role,
           input.organizationId,
@@ -247,6 +248,7 @@ export class ProductionCommandService {
           input.acceptedAt,
         ],
       );
+      await client.query(`update protected_transaction_terms pt set ${input.role==="SUPPLIER"?"supplier_settlement_acceptance_id":"buyer_settlement_acceptance_id"}=$2 from settlement_instructions i where i.id=$1 and pt.trade_id=i.trade_id`,[input.instructionId,acceptanceId]);
       const both =
         Number(
           (
@@ -535,6 +537,20 @@ export class ProductionCommandService {
         payload: { deliveryAcceptanceId: id },
         idempotencyKey: `trade:${input.tradeId}:accepted`,
       });
+      return id;
+    });
+  }
+  async openDispute(input:{tradeId:string;buyerId:string;reason:string;evidenceReceiptId:string|null;openedAt:string}):Promise<string>{
+    if(!input.reason.trim()||input.reason.length>2000)throw new Error("dispute reason invalid");
+    return inTransaction(this.pool,async(client)=>{
+      const trade=(await client.query("select * from trades where id=$1 and buyer_id=$2 and state in('FUNDED','DISPATCHED','IN_TRANSIT','DELIVERED') for update",[input.tradeId,input.buyerId])).rows[0];
+      if(!trade)throw new Error("disputable trade unavailable");
+      if(input.evidenceReceiptId&&!(await client.query("select 1 from documents where id=$1 and organization_id=$2",[input.evidenceReceiptId,input.buyerId])).rowCount)throw new Error("dispute evidence invalid");
+      const id=randomUUID();
+      await client.query("insert into counterparty_dispute_requests(id,trade_id,buyer_id,reason,evidence_receipt_id,state,opened_at) values($1,$2,$3,$4,$5,'OPENED',$6)",[id,input.tradeId,input.buyerId,input.reason.trim(),input.evidenceReceiptId,input.openedAt]);
+      await client.query("update trades set state='DISPUTED_FROZEN',updated_at=now() where id=$1",[input.tradeId]);
+      await client.query("update supplier_payout_controls set state='FROZEN',updated_at=now() where trade_id=$1 and state in('HELD','RELEASE_PENDING')",[input.tradeId]);
+      await this.outbox.append(client,{id:randomUUID(),aggregateType:"TRADE",aggregateId:input.tradeId,eventType:"DISPUTE_INITIATED",payload:{disputeRequestId:id},idempotencyKey:`trade:${input.tradeId}:dispute`});
       return id;
     });
   }

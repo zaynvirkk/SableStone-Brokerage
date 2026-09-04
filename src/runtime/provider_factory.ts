@@ -66,11 +66,22 @@ export async function buildProductionSettlementAdapters(
       (!definition.cashfreeSplitPathTemplate?.includes("{order_id}") ||
         !definition.cashfreeSplitVerificationPathTemplate?.includes(
           "{order_id}",
+        ) ||
+        !definition.cashfreeSettlementEligibilityPathTemplate?.includes(
+          "{vendor_id}",
         ))
     )
       throw new Error(
         "Cashfree split creation and exact verification paths required",
       );
+    if (
+      definition.provider === "RAZORPAY_ROUTE" &&
+      (!definition.razorpayTransferPathTemplate?.includes("{payment_id}") ||
+        !definition.razorpayTransferReleasePathTemplate?.includes(
+          "{transfer_id}",
+        ))
+    )
+      throw new Error("Razorpay held-transfer create and release paths required");
     if (
       Object.values(definition.webhookEventTypeMap ?? {}).includes(
         "ENTITLEMENT_SECURED",

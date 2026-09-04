@@ -803,6 +803,7 @@ async function processSettlementEvent(
   let internalType = mappedType,
     securityEvidenceSha256 = String(event.payload_digest),
     platformAllocationVerified = false,
+    supplierPayoutReference: string | null = null,
     verifiedParties: ProviderPartyReferences | null = null;
   if (adapter.provider === "CASHFREE_EASY_SPLIT" && mappedType === "FUNDED") {
     if (!providerParties)
@@ -845,6 +846,7 @@ async function processSettlementEvent(
       .update(split.receiptSha256)
       .digest("hex");
     platformAllocationVerified = true;
+    supplierPayoutReference = split.providerPayoutReference;
     internalType = "ENTITLEMENT_SECURED";
   }
   if (adapter.provider === "RAZORPAY_ROUTE" && mappedType === "FUNDED") {
@@ -897,6 +899,7 @@ async function processSettlementEvent(
       .update(transfer.receiptSha256)
       .digest("hex");
     platformAllocationVerified = true;
+    supplierPayoutReference = transfer.providerPayoutReference;
     internalType = "ENTITLEMENT_SECURED";
   }
   if (internalType === "ENTITLEMENT_SECURED" && !platformAllocationVerified) {
@@ -1008,6 +1011,14 @@ async function processSettlementEvent(
         throw new Error("secured entitlement lacks exact accepted instruction");
       const securityId = randomUUID(),
         feeLockId = randomUUID();
+      if (["CASHFREE_EASY_SPLIT", "RAZORPAY_ROUTE"].includes(adapter.provider)) {
+        if (!supplierPayoutReference)
+          throw new Error("conditional supplier payout reference missing");
+        await client.query(
+          "insert into supplier_payout_controls(instruction_id,trade_id,provider,provider_payout_reference,state,hold_evidence_sha256,held_at) values($1,$2,$3,$4,'HELD',$5,$6) on conflict(instruction_id) do nothing",
+          [instruction.id,instruction.trade_id,adapter.provider,supplierPayoutReference,securityEvidenceSha256,occurredAt],
+        );
+      }
       await client.query(
         "insert into entitlement_security_events(id,instruction_id,settlement_provider_event_id,provider,provider_reference,gross_amount,supplier_entitlement,sablestone_entitlement,currency,beneficiary_verified,funds_secured,evidence_sha256,secured_at) values($1,$2,$3,$4,$5,$6,$7,$8,$9,true,true,$10,$11)",
         [
@@ -1045,7 +1056,7 @@ async function processSettlementEvent(
       );
       const recurringReservation = (
         await client.query(
-          "update standing_renewal_reservations r set state='CONSUMED',consumed_at=$2 from recurring_candidates c where c.trade_id=$1 and c.reservation_id=r.id and r.state='RESERVED' returning r.demand_id,r.demand_version,r.id,c.id candidate_id",
+          "update standing_renewal_reservations r set state='CONSUMED',consumed_at=$2 from recurring_candidates c where c.trade_id=$1 and c.reservation_id=r.id and r.state='COMMITTED' and r.trade_id=$1 returning r.demand_id,r.demand_version,r.id,c.id candidate_id",
           [instruction.trade_id,occurredAt],
         )
       ).rows[0];
@@ -1106,6 +1117,8 @@ async function processSettlementEvent(
         "update trades set state='SETTLEMENT_FAILED',updated_at=now() where id=$1 and state not in('SETTLED','RECURRING','SETTLEMENT_FAILED')",
         [instruction.trade_id],
       );
+      const released=(await client.query("update standing_renewal_reservations set state='RELEASED',released_at=now() where trade_id=$1 and state='COMMITTED' returning demand_id,demand_version",[instruction.trade_id])).rows[0];
+      if(released)await client.query("update standing_demand_authorizations set renewals_reserved=greatest(renewals_reserved-1,0) where demand_id=$1 and demand_version=$2",[released.demand_id,released.demand_version]);
     } else if (
       internalType === "DISPUTE_OPENED" &&
       !["SETTLED", "RECURRING"].includes(instruction.trade_state)

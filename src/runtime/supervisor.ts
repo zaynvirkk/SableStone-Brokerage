@@ -54,11 +54,15 @@ export class RuntimeSupervisor {
         );
         processed++;
       } catch (error) {
-        await this.inbox.fail(
-          provider,
-          String(event.external_event_id),
-          (error as Error).name,
-        );
+        const message=(error as Error).message;
+        if(/signature invalid|replay conflict|unsupported settlement event|semantically impossible/i.test(message))
+          await this.inbox.reject(provider,String(event.external_event_id),"PERMANENT_INVALID");
+        else
+          await this.inbox.fail(
+            provider,
+            String(event.external_event_id),
+            (error as Error).name,
+          );
       }
     }
     return { inbox: processed, outbox: await this.outbox.dispatchBatch(50) };

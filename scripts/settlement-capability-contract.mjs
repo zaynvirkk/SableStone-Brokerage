@@ -9,7 +9,7 @@ import {
   LcProceedsAdapter,
 } from "../dist/index.js";
 const now = "2026-08-31T00:00:00Z",
-  required = ["BROKER_FEE_SPLIT", "CONDITIONAL_RELEASE"];
+  required = ["BROKER_FEE_SPLIT", "CONDITIONAL_RELEASE", "DELIVERY_CONDITIONAL_SUPPLIER_RELEASE"];
 const approval = {
   approvalId: "approval-1",
   provider: "FIXTURE_RAIL",

@@ -18,6 +18,7 @@ export function createGmailPushHandler(input: {
   cursors: HistoryCursorRepository;
   oidc: OAuth2Client;
   audience: string;
+  expectedServiceAccountEmail: string;
 }) {
   return async (
     raw: Uint8Array,
@@ -31,7 +32,11 @@ export function createGmailPushHandler(input: {
         audience: input.audience,
       }),
       payload = ticket.getPayload();
-    if (!payload?.email_verified)
+    if (
+      !payload?.email_verified ||
+      !input.expectedServiceAccountEmail ||
+      payload.email !== input.expectedServiceAccountEmail
+    )
       throw new Error("Gmail push identity unverified");
     const body = JSON.parse(new TextDecoder().decode(raw)) as GmailPushBody,
       pushReceipt = await input.store.preserve(
