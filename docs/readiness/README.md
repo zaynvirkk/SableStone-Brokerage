@@ -12,6 +12,17 @@ status, provider approval, successful deployment, market demand, a trade,
 revenue or profitability. Operational capabilities remain unavailable without
 a release-bound signed activation containing genuine current receipts.
 
+Recurring execution is part of the verified software boundary. A due standing
+order reserves (but does not consume) one authorized cycle, creates a fresh
+match and current economic quotes, enforces the buyer's quantity, cadence,
+currency and all-in-price bounds, then creates a new protected trade and a new
+settlement instruction. The cycle is consumed only after the provider proves a
+fresh secured SableStone entitlement; failure or expiry releases the
+reservation. Paid quote work is withheld when the buyer ceiling is unknown,
+and pre-quote ranking deducts conservative historical lane-cost priors. These
+are deterministic software claims only, not proof that a buyer has granted a
+standing authorization or that a provider will execute one.
+
 The following packets are operator gates and must contain genuine, current
 receipts before any later task can proceed:
 

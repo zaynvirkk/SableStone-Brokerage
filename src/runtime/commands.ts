@@ -1,6 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { Pool } from "pg";
 import { inTransaction, TransactionalOutboxRepository } from "./database.js";
+import { compareDecimalStrings } from "../domain.js";
+import { decimal } from "../money.js";
 export class ProductionCommandService {
   readonly outbox: TransactionalOutboxRepository;
   constructor(readonly pool: Pool) {
@@ -543,12 +545,24 @@ export class ProductionCommandService {
     maximumRenewals: number;
     validUntil: string;
     confirmedAt: string;
+    cadenceDays: number;
+    nextRequiredAt: string;
+    quantityToleranceMt: string;
+    maximumAllInPricePerKg: string;
+    currency: string;
+    supplierScope: "SAME_SUPPLIER" | "APPROVED_SUBSTITUTION";
   }): Promise<string> {
     if (
       !Number.isInteger(input.maximumRenewals) ||
       input.maximumRenewals < 1 ||
       input.maximumRenewals > 120 ||
       Date.parse(input.validUntil) <= Date.parse(input.confirmedAt)
+      || !Number.isInteger(input.cadenceDays) || input.cadenceDays < 1 || input.cadenceDays > 365
+      || Date.parse(input.nextRequiredAt) < Date.parse(input.confirmedAt)
+      || Date.parse(input.nextRequiredAt) > Date.parse(input.validUntil)
+      || compareDecimalStrings(decimal(input.quantityToleranceMt), decimal("0")) < 0
+      || compareDecimalStrings(decimal(input.maximumAllInPricePerKg), decimal("0")) <= 0
+      || !/^[A-Z]{3}$/.test(input.currency)
     )
       throw new Error("standing demand bounds invalid");
     return inTransaction(this.pool, async (client) => {
@@ -568,11 +582,18 @@ export class ProductionCommandService {
             maximumRenewals: input.maximumRenewals,
             validUntil: input.validUntil,
             confirmedAt: input.confirmedAt,
+            cadenceDays: input.cadenceDays,
+            nextRequiredAt: input.nextRequiredAt,
+            quantityPerCycleMt: String(demand.quantity_mt),
+            quantityToleranceMt: input.quantityToleranceMt,
+            maximumAllInPricePerKg: input.maximumAllInPricePerKg,
+            currency: input.currency,
+            supplierScope: input.supplierScope,
           }),
         )
         .digest("hex");
       await client.query(
-        "insert into standing_demand_authorizations(demand_id,demand_version,automatic_renewal_permitted,maximum_renewals,renewals_used,confirmed_at,valid_until,acceptance_digest) values($1,$2,true,$3,0,$4,$5,$6) on conflict(demand_id,demand_version) do nothing",
+        "insert into standing_demand_authorizations(demand_id,demand_version,automatic_renewal_permitted,maximum_renewals,renewals_consumed,renewals_reserved,confirmed_at,valid_until,acceptance_digest,quantity_per_cycle_mt,quantity_tolerance_mt,cadence_days,next_required_at,maximum_all_in_price_per_kg,currency,supplier_scope) values($1,$2,true,$3,0,0,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) on conflict(demand_id,demand_version) do nothing",
         [
           input.demandId,
           input.version,
@@ -580,6 +601,13 @@ export class ProductionCommandService {
           input.confirmedAt,
           input.validUntil,
           digest,
+          String(demand.quantity_mt),
+          input.quantityToleranceMt,
+          input.cadenceDays,
+          input.nextRequiredAt,
+          input.maximumAllInPricePerKg,
+          input.currency,
+          input.supplierScope,
         ],
       );
       return digest;

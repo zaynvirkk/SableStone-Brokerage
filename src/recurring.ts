@@ -5,6 +5,7 @@ import type { ProtectedRelationship } from "./vault.js";
 export interface StandingDemandAuthorization {
   readonly demandId: string; readonly demandVersion: number; readonly automaticRenewalPermitted: boolean;
   readonly maximumRenewals: number; readonly renewalsUsed: number; readonly confirmedAt: string; readonly validUntil: string;
+  readonly renewalsReserved?:number; readonly cadenceDays?:number; readonly nextRequiredAt?:string; readonly quantityPerCycleMt?:string; readonly quantityToleranceMt?:string; readonly maximumAllInPricePerKg?:string; readonly currency?:string; readonly supplierScope?:"SAME_SUPPLIER"|"APPROVED_SUBSTITUTION";
   readonly acceptanceDigest: string;
 }
 export interface RecurringCandidate { readonly relationshipId: string;readonly priorFeeLockId:string;readonly offerId:string;readonly offerVersion:number;readonly demandId:string;readonly demandVersion:number;readonly status:"MATCHED_REQUIRES_NEW_FEE_LOCK"; }

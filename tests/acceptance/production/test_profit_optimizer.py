@@ -18,11 +18,18 @@ def test_verified_geography_hierarchy_and_prequote_ev_drive_paid_work():
     priority=(ROOT/"src/runtime/opportunity_priority.ts").read_text()
     stage=(ROOT/"src/runtime/stage_handlers.ts").read_text()
     economics=(ROOT/"src/runtime/economic_jobs.ts").read_text()
-    for scope in ("GLOBAL","COUNTRY","POLYMER","APPLICATION","BUYER","SUPPLIER","PAIR"):
+    for scope in ("GLOBAL","SEGMENT","PAIR"):
         assert scope in priority
+    for removed_scope in ("COUNTRY", "POLYMER", "APPLICATION", "BUYER", "SUPPLIER"):
+        assert f'\"{removed_scope}\"' not in priority
+    assert "not(h.geography=$2 and h.product_family=$3 and h.application=$4)" in priority
+    assert "and not(h.buyer_id=$5 and h.supplier_id=$6)" in priority
+    assert "strength+settled" in priority
     assert "organization_jurisdictions" in priority
     assert "left join trades t on t.match_id=m.id" not in priority
     assert "preQuotePriority" in stage
+    assert "percentile_cont(.75)" in stage
+    assert 'demand.ceiling_state !== "KNOWN"' in stage
     assert "segment-close" in stage and "segment-settlement" in stage
     assert "order by m.priority_score desc" in economics
     assert "fulfillment_measurements" in priority

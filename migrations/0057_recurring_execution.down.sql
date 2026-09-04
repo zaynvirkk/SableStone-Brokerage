@@ -1,0 +1,13 @@
+begin;
+alter table recurring_candidates drop constraint if exists recurring_candidates_reservation_fk;
+alter table recurring_candidates drop constraint if exists recurring_candidates_live_binding;
+drop table if exists standing_renewal_reservations;
+alter table recurring_candidates drop constraint if exists recurring_candidates_status_check;
+update recurring_candidates set status='MATCHED_REQUIRES_NEW_FEE_LOCK';
+alter table recurring_candidates drop column if exists updated_at,drop column if exists failure_reason,drop column if exists reservation_id,drop column if exists trade_id,drop column if exists match_id;
+alter table recurring_candidates add constraint recurring_candidates_status_check check(status='MATCHED_REQUIRES_NEW_FEE_LOCK');
+alter table standing_demand_authorizations drop constraint if exists standing_authorization_execution_bounds,drop constraint if exists standing_authorization_capacity;
+alter table standing_demand_authorizations drop column if exists supplier_scope,drop column if exists currency,drop column if exists maximum_all_in_price_per_kg,drop column if exists next_required_at,drop column if exists cadence_days,drop column if exists quantity_tolerance_mt,drop column if exists quantity_per_cycle_mt,drop column if exists renewals_reserved;
+alter table standing_demand_authorizations rename column renewals_consumed to renewals_used;
+delete from schema_migrations where version='0057_recurring_execution';
+commit;

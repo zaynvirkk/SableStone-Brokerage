@@ -993,20 +993,26 @@ export async function createProductionApi(
   );
   app.post<{
     Params: { id: string; version: string };
-    Body: { maximumRenewals?: number; validUntil?: string };
+    Body: { maximumRenewals?: number; validUntil?: string; cadenceDays?: number; nextRequiredAt?: string; quantityToleranceMt?: string; maximumAllInPricePerKg?: string; currency?: string; supplierScope?: "SAME_SUPPLIER"|"APPROVED_SUBSTITUTION" };
   }>(
     "/v1/demands/:id/:version/standing-authorization",
     { onRequest: [app.authenticate] },
     async (request, reply) => {
       const p = principal(request),
         maximumRenewals = request.body?.maximumRenewals,
-        validUntil = request.body?.validUntil;
+        validUntil = request.body?.validUntil,
+        cadenceDays=request.body?.cadenceDays,
+        nextRequiredAt=request.body?.nextRequiredAt,
+        quantityToleranceMt=request.body?.quantityToleranceMt,
+        maximumAllInPricePerKg=request.body?.maximumAllInPricePerKg,
+        currency=request.body?.currency,
+        supplierScope=request.body?.supplierScope;
       if (p.role !== "BUYER" || !p.organizationId)
         return reply.code(403).send({ error: "ROLE_FORBIDDEN" });
       if (
         !maximumRenewals ||
         !validUntil ||
-        Number.isNaN(Date.parse(validUntil))
+        Number.isNaN(Date.parse(validUntil)) || !cadenceDays || !nextRequiredAt || Number.isNaN(Date.parse(nextRequiredAt)) || quantityToleranceMt===undefined || !maximumAllInPricePerKg || !currency || !supplierScope
       )
         return reply
           .code(400)
@@ -1020,6 +1026,12 @@ export async function createProductionApi(
             maximumRenewals,
             validUntil,
             confirmedAt: new Date().toISOString(),
+            cadenceDays,
+            nextRequiredAt,
+            quantityToleranceMt,
+            maximumAllInPricePerKg,
+            currency,
+            supplierScope,
           }),
         });
       } catch {

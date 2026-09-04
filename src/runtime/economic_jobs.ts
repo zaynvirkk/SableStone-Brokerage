@@ -19,6 +19,7 @@ import {
 } from "./production_credentials.js";
 import { createPinnedPublicFetch } from "./public_network.js";
 import { refreshMatchPriority } from "./opportunity_priority.js";
+import { persistFinalEconomicsSnapshot } from "./inbox_processors.js";
 import type { SettlementCapability } from "../settlement.js";
 
 function requiredWaterfallCapabilities(
@@ -413,6 +414,81 @@ export async function evaluateEconomics(
       ],
     );
     if (decision.state !== "EXECUTABLE") return decision.state;
+    const recurring = (
+      await client.query(
+        "select c.id candidate_id,c.relationship_id prior_relationship_id,c.reservation_id,a.maximum_all_in_price_per_kg,a.currency authorization_currency,a.acceptance_digest from recurring_candidates c join standing_renewal_reservations r on r.id=c.reservation_id and r.state='RESERVED' and r.expires_at>now() join standing_demand_authorizations a on a.demand_id=r.demand_id and a.demand_version=r.demand_version and a.automatic_renewal_permitted and a.valid_until>now() where c.match_id=$1 and c.status='ECONOMICS_PENDING' for update of c",
+        [matchId],
+      )
+    ).rows[0];
+    if (recurring) {
+      if (
+        recurring.authorization_currency !== decision.currency ||
+        compareDecimalStrings(
+          decision.buyerExecutablePricePerKg,
+          decimal(String(recurring.maximum_all_in_price_per_kg)),
+        ) > 0
+      ) {
+        await client.query(
+          "update recurring_candidates set status='PRICE_APPROVAL_REQUIRED',updated_at=now() where id=$1 and status='ECONOMICS_PENDING'",
+          [recurring.candidate_id],
+        );
+        return "UNKNOWN";
+      }
+      const negotiationId = randomUUID(), decisionId = randomUUID(), eventId = randomUUID(),
+        intentDigest = createHash("sha256").update(JSON.stringify({ recurringCandidateId: recurring.candidate_id, authorizationDigest: recurring.acceptance_digest, price: decision.buyerExecutablePricePerKg })).digest("hex"),
+        expiresAt = new Date(Date.now() + 7 * 86400_000).toISOString();
+      await client.query(
+        "insert into domain_events(event_id,idempotency_key,aggregate_type,aggregate_id,event_type,event_time,policy_version,payload) values($1,$2,'MATCH',$3,'RECURRING_PRICE_AUTHORIZED',now(),$4,$5)",
+        [eventId,`match:${matchId}:recurring-authorized`,matchId,policy.version,{candidateId:recurring.candidate_id,authorizationDigest:recurring.acceptance_digest,price:decision.buyerExecutablePricePerKg}],
+      );
+      await client.query(
+        "insert into negotiations(id,revision,match_id,offer_version,demand_version,pricing_policy_id,pricing_policy_version,current_quote_per_kg,currency,status,expires_at,last_event_id) values($1,0,$2,$3,$4,$5,$6,$7,$8,'ACCEPTED',$9,$10)",
+        [negotiationId,matchId,facts.offer_version,facts.demand_version,policy.policyId,policy.version,decision.buyerExecutablePricePerKg,decision.currency,expiresAt,eventId],
+      );
+      await client.query(
+        "insert into negotiation_decisions(id,negotiation_id,session_revision,intent_digest,action,executable_price_per_kg,reason,policy_version,decided_at) values($1,$2,0,$3,'ACCEPT',$4,'STANDING_ORDER_AUTHORIZATION',$5,$6)",
+        [decisionId,negotiationId,intentDigest,decision.buyerExecutablePricePerKg,policy.version,now],
+      );
+      await persistFinalEconomicsSnapshot(client, {
+        id: negotiationId,
+        match_id: matchId,
+        revision: 0,
+        currency: decision.currency,
+        amount_per_kg: floor.amountPerKg,
+        component_digest: createHash("sha256").update(JSON.stringify(floor.componentReceiptIds)).digest("hex"),
+      }, decisionId, decision.buyerExecutablePricePerKg, now);
+      const relationshipId = randomUUID(), tradeId = randomUUID();
+      const relationship = (
+        await client.query(
+          "insert into protected_relationships(id,supplier_id,buyer_id,introduced_at,protected_until,commodity_scope,affiliate_scope,qualifying_purchase_definition,commission_type,commission_rate,currency,supplier_acceptance_id,buyer_acceptance_id,required_settlement_capabilities,status,final_economics_snapshot_id) select $1,supplier_id,buyer_id,now(),protected_until,commodity_scope,affiliate_scope,qualifying_purchase_definition,'PER_KG',$2,$3,supplier_acceptance_id,buyer_acceptance_id,required_settlement_capabilities,'PROTECTED',(select id from final_economics_snapshots where match_id=$4) from protected_relationships where id=$5 and status='PROTECTED' and protected_until>now() returning *",
+          [relationshipId,decision.commissionPerKg,decision.currency,matchId,recurring.prior_relationship_id],
+        )
+      ).rows[0];
+      if (!relationship) throw new Error("recurring protected relationship unavailable");
+      const routeFacts = (
+        await client.query(
+          "select o.supplier_id,d.buyer_id,case when sj.country_code='IN' and bj.country_code='IN' then 'DOMESTIC_INDIA' else 'INTERNATIONAL' end geography,exists(select 1 from documentary_lc_route_evidence l join document_checks dc on dc.id=l.document_check_id and dc.state='VERIFIED' and (dc.valid_until is null or dc.valid_until>now()) where l.relationship_id=$2 and l.valid_until>now()) has_lc from matches m join supplier_offers o on o.id=m.offer_id and o.version=m.offer_version join buyer_demands d on d.id=m.demand_id and d.version=m.demand_version join organization_jurisdictions sj on sj.organization_id=o.supplier_id and sj.state='VERIFIED' and sj.valid_until>now() join organization_jurisdictions bj on bj.organization_id=d.buyer_id and bj.state='VERIFIED' and bj.valid_until>now() where m.id=$1",
+          [matchId,recurring.prior_relationship_id],
+        )
+      ).rows[0];
+      if (!routeFacts) throw new Error("recurring route facts unavailable");
+      await client.query(
+        "insert into trades(id,match_id,supplier_id,buyer_id,relationship_id,state,geography,relationship_maturity,has_documentary_lc) values($1,$2,$3,$4,$5,'PROTECTED',$6,'ESTABLISHED',$7)",
+        [tradeId,matchId,routeFacts.supplier_id,routeFacts.buyer_id,relationshipId,routeFacts.geography,routeFacts.has_lc],
+      );
+      await client.query(
+        "update recurring_candidates set relationship_id=$2,trade_id=$3,status='TRADE_PROTECTED',updated_at=now() where id=$1 and status='ECONOMICS_PENDING'",
+        [recurring.candidate_id,relationshipId,tradeId],
+      );
+      const outbox = new TransactionalOutboxRepository(pool);
+      await outbox.append(client, {
+        id: randomUUID(), aggregateType: "TRADE", aggregateId: tradeId,
+        eventType: "TRADE_PROTECTED",
+        payload: { matchId, tradeId, candidateId: recurring.candidate_id, reservationId: recurring.reservation_id },
+        idempotencyKey: `trade:${tradeId}:protected`,
+      });
+      return "EXECUTABLE";
+    }
     const negotiationPolicy = (
       await client.query(
         "select p.* from negotiation_policies p join authority_receipts a on a.receipt_id=p.authority_receipt_id where p.currency=$1 and p.valid_from<=now() and p.valid_until>now() and a.authority_kind='NEGOTIATION_POLICY_APPROVAL' and a.retrieved_at<=now() and a.effective_at<=now() and a.expires_at>now() order by p.valid_from desc limit 1",

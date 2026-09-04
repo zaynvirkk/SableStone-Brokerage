@@ -235,7 +235,7 @@ export function buildDatabaseStageHandlers(
           });
       });
       if (!hasContinuation)
-        await activateEconomicJobsForSweep(
+        await ensureEconomicJobs(
           pool,
           anchorType,
           String(anchor.id),
@@ -322,6 +322,12 @@ async function createQualifiedRecurringMatch(
     await client.query("select pg_advisory_xact_lock(hashtext($1))", [
       `recurring-safe:${tradeId}`,
     ]);
+    await client.query(
+      "with expired as(update standing_renewal_reservations set state='RELEASED',released_at=now() where state='RESERVED' and expires_at<=now() returning demand_id,demand_version,candidate_id),counts as(select demand_id,demand_version,count(*) releases from expired group by demand_id,demand_version) update standing_demand_authorizations a set renewals_reserved=greatest(a.renewals_reserved-counts.releases,0) from counts where a.demand_id=counts.demand_id and a.demand_version=counts.demand_version",
+    );
+    await client.query(
+      "update recurring_candidates c set status='EXPIRED',failure_reason='RESERVATION_EXPIRED',updated_at=now() from standing_renewal_reservations r where r.candidate_id=c.id and r.state='RELEASED' and c.status in('ECONOMICS_PENDING','PRICE_APPROVAL_REQUIRED','TRADE_PROTECTED')",
+    );
     const prior = (
       await client.query(
         "select t.*,f.id fee_lock_id,pr.id protected_relationship_id,m.demand_id,m.demand_version from trades t join fee_locks f on f.trade_id=t.id join protected_relationships pr on pr.id=f.relationship_id join matches m on m.id=t.match_id where t.id=$1 and t.state in('SETTLED','RECURRING') and pr.protected_until>now()",
@@ -331,7 +337,7 @@ async function createQualifiedRecurringMatch(
     if (!prior) return unknown("settled protected relationship missing");
     const authorization = (
       await client.query(
-        "select * from standing_demand_authorizations where demand_id=$1 and demand_version=$2 and automatic_renewal_permitted and renewals_used<maximum_renewals and valid_until>now() for update",
+        "select * from standing_demand_authorizations where demand_id=$1 and demand_version=$2 and automatic_renewal_permitted and renewals_reserved+renewals_consumed<maximum_renewals and valid_until>now() and next_required_at<=now() for update",
         [prior.demand_id, prior.demand_version],
       )
     ).rows[0];
@@ -339,7 +345,7 @@ async function createQualifiedRecurringMatch(
       return unknown("standing demand authorization unavailable");
     const existing = (
       await client.query(
-        "select * from recurring_candidates where prior_fee_lock_id=$1 order by created_at desc limit 1",
+        "select * from recurring_candidates where prior_fee_lock_id=$1 and status not in('FAILED','EXPIRED') order by created_at desc limit 1",
         [prior.fee_lock_id],
       )
     ).rows[0];
@@ -348,22 +354,32 @@ async function createQualifiedRecurringMatch(
         candidateId: existing.id,
         status: existing.status,
       });
+    if (authorization.supplier_scope !== "SAME_SUPPLIER")
+      return unknown("approved substitution requires fresh protected-account acceptance");
     const pair = (
       await client.query(
-        "select m.offer_id,m.offer_version,m.demand_id,m.demand_version from matches m join supplier_offers o on o.id=m.offer_id and o.version=m.offer_version join buyer_demands d on d.id=m.demand_id and d.version=m.demand_version where m.compatible and m.matcher_version='production-v1' and d.id=$1 and d.version=$2 and o.supplier_id=$3 and d.buyer_id=$4 and o.verification='VERIFIED' and o.freshness='CURRENT' and o.expires_at>now() and d.verification='VERIFIED' and d.freshness='CURRENT' and d.expires_at>now() and exists(select 1 from qualification_decisions q where q.subject_type='SUPPLIER_OFFER' and q.subject_id=o.id and q.subject_version=o.version and q.verdict='PASS') and exists(select 1 from qualification_decisions q where q.subject_type='BUYER_DEMAND' and q.subject_id=d.id and q.subject_version=d.version and q.verdict='PASS') and exists(select 1 from risk_decisions r where r.organization_id=o.supplier_id and r.state='PASS') and exists(select 1 from risk_decisions r where r.organization_id=d.buyer_id and r.state='PASS') order by m.evaluated_at desc limit 1",
+        "select m.offer_id,m.offer_version,m.demand_id,m.demand_version,o.source_event_id,o.supplier_net,o.currency,o.expires_at,d.quantity_mt from matches m join supplier_offers o on o.id=m.offer_id and o.version=m.offer_version join buyer_demands d on d.id=m.demand_id and d.version=m.demand_version where m.compatible and d.id=$1 and d.version=$2 and o.supplier_id=$3 and d.buyer_id=$4 and o.verification='VERIFIED' and o.freshness='CURRENT' and o.expires_at>now() and d.verification='VERIFIED' and d.freshness='CURRENT' and d.expires_at>now() and d.quantity_mt between $5-$6 and $5+$6 and exists(select 1 from qualification_decisions q where q.subject_type='SUPPLIER_OFFER' and q.subject_id=o.id and q.subject_version=o.version and q.verdict='PASS') and exists(select 1 from qualification_decisions q where q.subject_type='BUYER_DEMAND' and q.subject_id=d.id and q.subject_version=d.version and q.verdict='PASS') and exists(select 1 from risk_decisions r where r.organization_id=o.supplier_id and r.state='PASS') and exists(select 1 from risk_decisions r where r.organization_id=d.buyer_id and r.state='PASS') order by m.priority_score desc,m.evaluated_at desc limit 1",
         [
           prior.demand_id,
           prior.demand_version,
           prior.supplier_id,
           prior.buyer_id,
+          authorization.quantity_per_cycle_mt,
+          authorization.quantity_tolerance_mt,
         ],
       )
     ).rows[0];
     if (!pair)
       return unknown("no current fully-qualified compatible recurring match");
-    const id = randomUUID();
+    const id = randomUUID(), matchId = randomUUID(), reservationId = randomUUID(),
+      cycleNumber = Number(authorization.renewals_reserved)+Number(authorization.renewals_consumed)+1,
+      contextDigest=createHash("sha256").update(JSON.stringify({recurringCandidate:id,priorFeeLock:prior.fee_lock_id,cycleNumber})).digest("hex");
     await client.query(
-      "insert into recurring_candidates(id,relationship_id,prior_fee_lock_id,offer_id,offer_version,demand_id,demand_version,status,created_at) values($1,$2,$3,$4,$5,$6,$7,'MATCHED_REQUIRES_NEW_FEE_LOCK',now())",
+      "insert into matches(id,offer_id,offer_version,demand_id,demand_version,compatible,rejection_reasons,matcher_version,context_digest,evaluated_at,priority_score) values($1,$2,$3,$4,$5,true,'[]'::jsonb,'recurring-v1',$6,now(),0)",
+      [matchId,pair.offer_id,pair.offer_version,pair.demand_id,pair.demand_version,contextDigest],
+    );
+    await client.query(
+      "insert into recurring_candidates(id,relationship_id,prior_fee_lock_id,offer_id,offer_version,demand_id,demand_version,status,created_at,match_id,updated_at) values($1,$2,$3,$4,$5,$6,$7,'ECONOMICS_PENDING',now(),$8,now())",
       [
         id,
         prior.protected_relationship_id,
@@ -372,11 +388,25 @@ async function createQualifiedRecurringMatch(
         pair.offer_version,
         pair.demand_id,
         pair.demand_version,
+        matchId,
       ],
     );
     await client.query(
-      "update standing_demand_authorizations set renewals_used=renewals_used+1 where demand_id=$1 and demand_version=$2",
-      [prior.demand_id, prior.demand_version],
+      "insert into standing_renewal_reservations(id,demand_id,demand_version,candidate_id,cycle_number,state,reserved_at,expires_at) values($1,$2,$3,$4,$5,'RESERVED',now(),least($6,now()+interval '14 days'))",
+      [reservationId,prior.demand_id,prior.demand_version,id,cycleNumber,authorization.valid_until],
+    );
+    await client.query("update recurring_candidates set reservation_id=$2 where id=$1",[id,reservationId]);
+    await client.query(
+      "update standing_demand_authorizations set renewals_reserved=renewals_reserved+1 where demand_id=$1 and demand_version=$2",
+      [prior.demand_id,prior.demand_version],
+    );
+    await client.query(
+      "insert into cost_components(id,match_id,cost_kind,amount_per_kg,currency,evidence,source_receipt_id,valid_until,basis,payer_role,settlement_treatment,beneficiary_role) values(gen_random_uuid(),$1,'SUPPLIER_NET',$2,$3,'FIRM',$4,$5,'current recurring supplier net','BUYER','SUPPLIER_ENTITLEMENT','SUPPLIER')",
+      [matchId,pair.supplier_net,pair.currency,pair.source_event_id,pair.expires_at],
+    );
+    await client.query(
+      "insert into economic_quote_jobs(id,match_id,cost_kind,state) select gen_random_uuid(),$1,k.kind,'PENDING' from(values('FREIGHT'),('INSPECTION'),('PAYMENT_RAIL'),('TAX_CHARGE'),('RISK_RESERVE'))k(kind)",
+      [matchId],
     );
     await client.query(
       "update trades set state='RECURRING',updated_at=now() where id=$1 and state='SETTLED'",
@@ -384,7 +414,9 @@ async function createQualifiedRecurringMatch(
     );
     return accepted(`recurring:${id}`, {
       candidateId: id,
-      status: "MATCHED_REQUIRES_NEW_FEE_LOCK",
+      matchId,
+      reservationId,
+      status: "ECONOMICS_PENDING",
     });
   });
 }
@@ -409,79 +441,6 @@ async function runDiscovery(
     return rejected(`source:${sourceId}`, (error as Error).message);
   }
 }
-async function createRecurringMatch(
-  pool: Pool,
-  tradeId: string,
-): Promise<StageResult> {
-  return inTransaction(pool, async (client) => {
-    await client.query("select pg_advisory_xact_lock(hashtext($1))", [
-      `recurring:${tradeId}`,
-    ]);
-    const prior = (
-      await client.query(
-        "select t.*,f.id fee_lock_id,pr.id protected_relationship_id,m.offer_id,m.offer_version,m.demand_id,m.demand_version,o.product_family from trades t join fee_locks f on f.trade_id=t.id join protected_relationships pr on pr.id=f.relationship_id join matches m on m.id=t.match_id join supplier_offers o on o.id=m.offer_id and o.version=m.offer_version where t.id=$1 and t.state in('SETTLED','RECURRING') and pr.protected_until>now()",
-        [tradeId],
-      )
-    ).rows[0];
-    if (!prior) return unknown("settled protected relationship missing");
-    const authorization = (
-      await client.query(
-        "select * from standing_demand_authorizations where demand_id=$1 and demand_version=$2 and automatic_renewal_permitted and renewals_used<maximum_renewals and valid_until>now() for update",
-        [prior.demand_id, prior.demand_version],
-      )
-    ).rows[0];
-    if (!authorization)
-      return unknown("standing demand authorization unavailable");
-    const existing = (
-      await client.query(
-        "select * from recurring_candidates where prior_fee_lock_id=$1 order by created_at desc limit 1",
-        [prior.fee_lock_id],
-      )
-    ).rows[0];
-    if (existing)
-      return accepted(receipt(existing, "recurring"), {
-        candidateId: existing.id,
-        status: existing.status,
-      });
-    const pair = (
-      await client.query(
-        "select o.id offer_id,o.version offer_version,d.id demand_id,d.version demand_version from supplier_offers o join buyer_demands d on d.id=$1 and d.version=$2 where o.supplier_id=$3 and d.buyer_id=$4 and o.product_family=d.product_family and o.verification='VERIFIED' and o.freshness='CURRENT' and o.expires_at>now() and d.verification='VERIFIED' and d.freshness='CURRENT' and d.expires_at>now() and o.quantity_mt>=d.quantity_mt and d.quantity_mt>=o.moq_mt order by o.created_at desc limit 1",
-        [
-          prior.demand_id,
-          prior.demand_version,
-          prior.supplier_id,
-          prior.buyer_id,
-        ],
-      )
-    ).rows[0];
-    if (!pair) return unknown("no fresh recurring supply match");
-    const id = randomUUID();
-    await client.query(
-      "insert into recurring_candidates(id,relationship_id,prior_fee_lock_id,offer_id,offer_version,demand_id,demand_version,status,created_at) values($1,$2,$3,$4,$5,$6,$7,'MATCHED_REQUIRES_NEW_FEE_LOCK',now())",
-      [
-        id,
-        prior.protected_relationship_id,
-        prior.fee_lock_id,
-        pair.offer_id,
-        pair.offer_version,
-        pair.demand_id,
-        pair.demand_version,
-      ],
-    );
-    await client.query(
-      "update standing_demand_authorizations set renewals_used=renewals_used+1 where demand_id=$1 and demand_version=$2",
-      [prior.demand_id, prior.demand_version],
-    );
-    await client.query(
-      "update trades set state='RECURRING',updated_at=now() where id=$1 and state='SETTLED'",
-      [tradeId],
-    );
-    return accepted(`recurring:${id}`, {
-      candidateId: id,
-      status: "MATCHED_REQUIRES_NEW_FEE_LOCK",
-    });
-  });
-}
 async function activateEconomicJobsForSweep(
   pool: Pool,
   anchorType: "OFFER" | "DEMAND",
@@ -498,11 +457,12 @@ async function activateEconomicJobsForSweep(
       [anchorId, anchorVersion],
     );
     await client.query(
-      `insert into economic_quote_jobs(id,match_id,cost_kind,state) select gen_random_uuid(),m.id,k.kind,'PENDING' from matches m cross join(values('FREIGHT'),('INSPECTION'),('PAYMENT_RAIL'),('TAX_CHARGE'),('RISK_RESERVE'))k(kind) where ${anchorPredicate} and m.compatible on conflict(match_id,cost_kind) do nothing`,
+      `insert into economic_quote_jobs(id,match_id,cost_kind,state) select gen_random_uuid(),m.id,k.kind,'PENDING' from matches m join buyer_demands d on d.id=m.demand_id and d.version=m.demand_version cross join(values('FREIGHT'),('INSPECTION'),('PAYMENT_RAIL'),('TAX_CHARGE'),('RISK_RESERVE'))k(kind) where ${anchorPredicate} and m.compatible and d.ceiling_state='KNOWN' and m.priority_score>0 on conflict(match_id,cost_kind) do nothing`,
       [anchorId, anchorVersion],
     );
   });
 }
+const ensureEconomicJobs = activateEconomicJobsForSweep;
 async function executableCounterparts(
   pool: Pool,
   table: "supplier_offers" | "buyer_demands",
@@ -569,30 +529,37 @@ async function matchGates(
 }
 
 async function preQuotePriority(pool: Pool, offer: QueryResultRow, demand: QueryResultRow, geography: string | null, now: string): Promise<string> {
-  if (!geography) return "0";
+  if (!geography || demand.ceiling_state !== "KNOWN" || demand.buyer_ceiling === null) return "0";
   const policy = (await pool.query(
     "select p.commission_floor_per_kg,p.surplus_capture_rate,p.hard_commission_cap_per_kg from pricing_policies p join authority_receipts a on a.receipt_id=p.approval_receipt_id and a.authority_kind='PRICING_POLICY_APPROVAL' and a.retrieved_at<=$2 and a.effective_at<=$2 and a.expires_at>$2 where p.currency=$1 and p.valid_from<=$2 and p.valid_until>$2 order by p.valid_from desc limit 1",
     [String(demand.currency ?? offer.currency), now],
   )).rows[0];
   if (!policy) return "0";
-  let commission = decimal(String(policy.commission_floor_per_kg));
-  if (demand.ceiling_state === "KNOWN" && demand.buyer_ceiling !== null) {
-    const spread = subtractDecimal(decimal(String(demand.buyer_ceiling)), decimal(String(offer.supplier_net)));
-    if (compareDecimalStrings(spread, decimal("0")) <= 0) return "0";
-    commission = minDecimal(decimal(String(policy.hard_commission_cap_per_kg)), maxDecimal(commission, multiplyDecimal(decimal(String(policy.surplus_capture_rate)), spread)));
-    commission = minDecimal(commission, spread);
-  }
+  const offerSpec=(offer.product_spec??{}) as Record<string,unknown>,demandSpec=(demand.product_spec??{}) as Record<string,unknown>,
+    costPrior=(await pool.query(
+      "with lane as(select sum(c.amount_per_kg) external_cost from matches m join supplier_offers o on o.id=m.offer_id and o.version=m.offer_version join buyer_demands d on d.id=m.demand_id and d.version=m.demand_version join trades t on t.match_id=m.id and t.state in('SETTLED','RECURRING') join cost_components c on c.match_id=m.id and c.cost_kind<>'SUPPLIER_NET' where o.product_family=$1 and t.geography=$2 and coalesce(o.product_spec->>'incoterm','UNKNOWN')=$3 and coalesce(d.product_spec->>'application',o.product_spec->>'application','UNKNOWN')=$4 group by m.id),broad as(select sum(c.amount_per_kg) external_cost from matches m join supplier_offers o on o.id=m.offer_id and o.version=m.offer_version join trades t on t.match_id=m.id and t.state in('SETTLED','RECURRING') join cost_components c on c.match_id=m.id and c.cost_kind<>'SUPPLIER_NET' where t.geography=$2 group by m.id) select coalesce((select percentile_cont(.75) within group(order by external_cost) from lane),(select percentile_cont(.75) within group(order by external_cost) from broad),0)::text p75",
+      [offer.product_family,geography,String(offerSpec.incoterm??"UNKNOWN"),String(demandSpec.application??offerSpec.application??"UNKNOWN")],
+    )).rows[0],
+    grossSpread=subtractDecimal(decimal(String(demand.buyer_ceiling)),decimal(String(offer.supplier_net))),
+    spread=subtractDecimal(grossSpread,decimal(String(costPrior?.p75??"0")));
+  if(compareDecimalStrings(spread,decimal("0"))<=0)return "0";
+  let commission=minDecimal(decimal(String(policy.hard_commission_cap_per_kg)),maxDecimal(decimal(String(policy.commission_floor_per_kg)),multiplyDecimal(decimal(String(policy.surplus_capture_rate)),spread)));
+  commission=minDecimal(commission,spread);
   const segment = (await pool.query(
     "with p as(select segment_id from acquisition_profiles where organization_id=$1 and target_product_family=$2 and classification_state in('SOURCE_STATED','VERIFIED') and valid_until>$3 order by created_at desc limit 1),counts as(select count(distinct subject_id) filter(where event_type='QUALIFIED') qualified,count(distinct subject_id) filter(where event_type='FUNDED') funded,count(distinct subject_id) filter(where event_type='SETTLED') settled from acquisition_funnel_observations where segment_id=(select segment_id from p)) select qualified,funded,settled from counts",
     [demand.buyer_id, offer.product_family, now],
   )).rows[0] ?? { qualified: 0, funded: 0, settled: 0 };
+  const authorization = demand.standing ? (await pool.query(
+    "select greatest(least(maximum_renewals-renewals_consumed-renewals_reserved,greatest(floor(extract(epoch from(valid_until-greatest(next_required_at,$3::timestamptz)))/(86400*cadence_days))+1,0)),0)::text remaining_orders from standing_demand_authorizations where demand_id=$1 and demand_version=$2 and automatic_renewal_permitted and valid_until>$3",
+    [demand.id,demand.version,now],
+  )).rows[0] : null;
   const qualified = Number(segment.qualified), funded = Number(segment.funded), settled = Number(segment.settled),
     close = divideDecimal(decimal(String(funded + 5)), decimal(String(qualified + 20)), 8),
     settleGivenFunded = divideDecimal(decimal(String(settled + 7)), decimal(String(funded + 10)), 8),
     result = expectedProfitPriority({
       monthlyVolumeKg: known(multiplyDecimal(decimal(String(demand.quantity_mt)), decimal("1000")), "prequote:volume"),
       expectedCommissionPerKg: known(commission, "prequote:spread-policy"),
-      expectedMonths: known(decimal(demand.standing ? "24" : "1"), "prequote:recurrence"),
+      expectedMonths: known(decimal(String(authorization?.remaining_orders ?? (demand.standing ? "0" : "1"))), "prequote:authorized-remaining-orders"),
       physicalFillRatio: known(decimal("0.8"), "prequote:physical-prior"),
       closeProbability: known(close, "prequote:segment-close"),
       settlementGivenFundedProbability: known(settleGivenFunded, "prequote:segment-settlement"),

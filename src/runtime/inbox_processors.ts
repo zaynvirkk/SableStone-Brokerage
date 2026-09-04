@@ -585,7 +585,7 @@ function mapWaterfallCost(component: CostComponentRow): WaterfallCost {
     sourceReceiptId: String(component.source_receipt_id),
   };
 }
-async function persistFinalEconomicsSnapshot(
+export async function persistFinalEconomicsSnapshot(
   client: PoolClient,
   negotiation: QueryResultRow,
   decisionId: string,
@@ -1034,6 +1034,22 @@ async function processSettlementEvent(
           securityId,
         ],
       );
+      const recurringReservation = (
+        await client.query(
+          "update standing_renewal_reservations r set state='CONSUMED',consumed_at=$2 from recurring_candidates c where c.trade_id=$1 and c.reservation_id=r.id and r.state='RESERVED' returning r.demand_id,r.demand_version,r.id,c.id candidate_id",
+          [instruction.trade_id,occurredAt],
+        )
+      ).rows[0];
+      if (recurringReservation) {
+        await client.query(
+          "update standing_demand_authorizations set renewals_reserved=renewals_reserved-1,renewals_consumed=renewals_consumed+1,next_required_at=next_required_at+(interval '1 day'*cadence_days) where demand_id=$1 and demand_version=$2 and renewals_reserved>0",
+          [recurringReservation.demand_id,recurringReservation.demand_version],
+        );
+        await client.query(
+          "update recurring_candidates set status='FEE_LOCKED',updated_at=$2 where id=$1 and status='TRADE_PROTECTED'",
+          [recurringReservation.candidate_id,occurredAt],
+        );
+      }
       await client.query(
         "update settlement_instructions set entitlement_secured_at=$2,entitlement_security_event_id=$3 where id=$1 and entitlement_secured_at is null",
         [instruction.id, occurredAt, securityId],
