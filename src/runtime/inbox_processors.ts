@@ -28,6 +28,7 @@ import { compareDecimalStrings } from "../domain.js";
 import { settlementInstructionAcceptanceDigest } from "./commands.js";
 import { assertCurrentAcquisitionOutreachPolicy } from "./outreach_policy.js";
 import { refreshMatchPriority } from "./opportunity_priority.js";
+import { protectApprovedRecurringMatch,releaseRecurringReservation } from "./recurring_execution.js";
 
 function path(value: unknown, dotted: string | undefined): unknown {
   return dotted
@@ -398,6 +399,7 @@ async function processGmailEvent(
         contact.organization_type === "BUYER"
       )
         await applyNegotiationIntent(
+          pool,
           client,
           envelope.threadId,
           contact.organization_id,
@@ -442,6 +444,7 @@ async function processGmailEvent(
   });
 }
 async function applyNegotiationIntent(
+  pool:Pool,
   client: PoolClient,
   providerThreadId: string,
   buyerId: string,
@@ -551,6 +554,12 @@ async function applyNegotiationIntent(
       decision.executablePricePerKg,
       occurredAt,
     );
+    if(row.recurring_candidate_id){
+      await client.query("update recurring_candidates set status='PRICE_APPROVED',updated_at=now() where id=$1 and status='PRICE_APPROVAL_REQUIRED'",[row.recurring_candidate_id]);
+      await protectApprovedRecurringMatch(pool,client,row.match_id,row.recurring_candidate_id);
+    }
+  } else if((decision.action === "DECLINE" || decision.action === "EXPIRE") && row.recurring_candidate_id){
+    await releaseRecurringReservation(client,row.recurring_candidate_id,decision.action === "DECLINE" ? "DECLINED" : "EXPIRED");
   }
 }
 

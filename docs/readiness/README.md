@@ -12,16 +12,22 @@ status, provider approval, successful deployment, market demand, a trade,
 revenue or profitability. Operational capabilities remain unavailable without
 a release-bound signed activation containing genuine current receipts.
 
-Recurring execution is part of the verified software boundary. A due standing
-order reserves (but does not consume) one authorized cycle, creates a fresh
-match and current economic quotes, enforces the buyer's quantity, cadence,
-currency and all-in-price bounds, then creates a new protected trade and a new
-settlement instruction. The cycle is consumed only after the provider proves a
-fresh secured SableStone entitlement; failure or expiry releases the
-reservation. Paid quote work is withheld when the buyer ceiling is unknown,
-and pre-quote ranking deducts conservative historical lane-cost priors. These
-are deterministic software claims only, not proof that a buyer has granted a
-standing authorization or that a provider will execute one.
+Recurring execution is part of the verified software boundary. A reconciled
+trade loads the mandate's persisted `next_required_at`, uses a Temporal durable
+timer for any 1–365 day cadence, and retries unavailable supply only within the
+mandate's validity window. The standing authorization—not its source RFQ—owns
+the immutable buyer, product/specification, quantity/tolerance, cadence,
+currency, all-in-price, supplier-scope and renewal bounds. Every cycle creates
+a fresh demand execution instance, reserves (but does not consume) one renewal,
+requotes current economics and creates a fresh protected trade and settlement
+instruction. An above-ceiling cycle remains explicitly linked to its candidate
+and reservation through buyer approval, decline or expiry. The cycle is
+consumed only after the provider proves a new secured SableStone entitlement;
+decline, failure or expiry releases it. Paid quote work is withheld when the
+buyer ceiling is unknown, and pre-quote ranking deducts conservative historical
+lane-cost priors. These are deterministic software claims only, not proof that
+a buyer has granted a standing authorization or that a provider will execute
+one.
 
 The following packets are operator gates and must contain genuine, current
 receipts before any later task can proceed:

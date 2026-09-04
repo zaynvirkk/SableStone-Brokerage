@@ -1,0 +1,10 @@
+begin;
+drop index if exists standing_demand_due;
+alter table negotiations drop column if exists recurring_candidate_id;
+alter table recurring_candidates drop constraint if exists recurring_candidates_status_check;
+alter table recurring_candidates drop column if exists execution_demand_version,drop column if exists execution_demand_id;
+alter table recurring_candidates add constraint recurring_candidates_status_check check(status in('ECONOMICS_PENDING','PRICE_APPROVAL_REQUIRED','TRADE_PROTECTED','FEE_LOCKED','FAILED','EXPIRED'));
+alter table recurring_candidates add constraint recurring_candidates_legacy_pair_unique unique(relationship_id,offer_id,offer_version,demand_id,demand_version);
+alter table standing_demand_authorizations drop column if exists product_spec,drop column if exists product_family,drop column if exists buyer_id;
+delete from schema_migrations where version='0058_recurring_mandate_and_approval';
+commit;

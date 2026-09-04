@@ -593,7 +593,7 @@ export class ProductionCommandService {
         )
         .digest("hex");
       await client.query(
-        "insert into standing_demand_authorizations(demand_id,demand_version,automatic_renewal_permitted,maximum_renewals,renewals_consumed,renewals_reserved,confirmed_at,valid_until,acceptance_digest,quantity_per_cycle_mt,quantity_tolerance_mt,cadence_days,next_required_at,maximum_all_in_price_per_kg,currency,supplier_scope) values($1,$2,true,$3,0,0,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) on conflict(demand_id,demand_version) do nothing",
+        "insert into standing_demand_authorizations(demand_id,demand_version,automatic_renewal_permitted,maximum_renewals,renewals_consumed,renewals_reserved,confirmed_at,valid_until,acceptance_digest,quantity_per_cycle_mt,quantity_tolerance_mt,cadence_days,next_required_at,maximum_all_in_price_per_kg,currency,supplier_scope,buyer_id,product_family,product_spec) values($1,$2,true,$3,0,0,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) on conflict(demand_id,demand_version) do nothing",
         [
           input.demandId,
           input.version,
@@ -608,6 +608,9 @@ export class ProductionCommandService {
           input.maximumAllInPricePerKg,
           input.currency,
           input.supplierScope,
+          input.buyerId,
+          demand.product_family,
+          demand.product_spec,
         ],
       );
       return digest;

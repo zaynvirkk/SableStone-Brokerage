@@ -14,6 +14,7 @@ import { reconcileTradeAccounting } from "./accounting.js";
 import { compareDecimalStrings, known } from "../domain.js";
 import { expectedProfitPriority } from "../pricing.js";
 import type { ProviderPartyReferenceResolver } from "./provider_parties.js";
+import { releaseRecurringReservation } from "./recurring_execution.js";
 
 const accepted = (
   receipt: string,
@@ -263,7 +264,17 @@ export function buildDatabaseStageHandlers(
           [input.matchId],
         )
       ).rows[0];
-      if (!row) return unknown("negotiation decision missing");
+      if (!row) {
+        const expired=(await pool.query("select id,recurring_candidate_id from negotiations where match_id=$1 and status='OPEN' and expires_at<=now()",[input.matchId])).rows[0];
+        if(expired?.recurring_candidate_id){
+          await inTransaction(pool,async(client)=>{
+            await releaseRecurringReservation(client,expired.recurring_candidate_id,"EXPIRED");
+            await client.query("update negotiations set status='EXPIRED' where id=$1 and status='OPEN'",[expired.id]);
+          });
+          return rejected(`negotiation:${expired.id}`,"recurring price approval expired");
+        }
+        return unknown("negotiation decision missing");
+      }
       return row.action === "ACCEPT"
         ? accepted(receipt(row, "negotiation"), {
             action: row.action,
@@ -310,6 +321,15 @@ export function buildDatabaseStageHandlers(
           ? rejected(`reconciliation:${input.tradeId}`, state)
           : unknown(`bank reconciliation ${state}`);
     },
+    RECURRENCE_SCHEDULE: async (input) => {
+      const row = (await pool.query(
+        "select a.next_required_at,a.valid_until,a.acceptance_digest from trades t join matches m on m.id=t.match_id left join recurring_candidates rc on rc.trade_id=t.id join standing_demand_authorizations a on a.demand_id=coalesce(rc.demand_id,m.demand_id) and a.demand_version=coalesce(rc.demand_version,m.demand_version) where t.id=$1 and t.state in('SETTLED','RECURRING') and a.automatic_renewal_permitted and a.renewals_reserved+a.renewals_consumed<a.maximum_renewals and a.valid_until>now()",
+        [String(input.tradeId)],
+      )).rows[0];
+      return row
+        ? accepted(`standing-authorization:${row.acceptance_digest}`, { nextRequiredAt:new Date(row.next_required_at).toISOString(), validUntil:new Date(row.valid_until).toISOString() })
+        : unknown("standing recurrence schedule unavailable");
+    },
     RECUR: async (input) =>
       createQualifiedRecurringMatch(pool, String(input.tradeId)),
   });
@@ -330,7 +350,7 @@ async function createQualifiedRecurringMatch(
     );
     const prior = (
       await client.query(
-        "select t.*,f.id fee_lock_id,pr.id protected_relationship_id,m.demand_id,m.demand_version from trades t join fee_locks f on f.trade_id=t.id join protected_relationships pr on pr.id=f.relationship_id join matches m on m.id=t.match_id where t.id=$1 and t.state in('SETTLED','RECURRING') and pr.protected_until>now()",
+        "select t.*,f.id fee_lock_id,pr.id protected_relationship_id,coalesce(rc.demand_id,m.demand_id) authorization_demand_id,coalesce(rc.demand_version,m.demand_version) authorization_demand_version from trades t join fee_locks f on f.trade_id=t.id join protected_relationships pr on pr.id=f.relationship_id join matches m on m.id=t.match_id left join recurring_candidates rc on rc.trade_id=t.id where t.id=$1 and t.state in('SETTLED','RECURRING') and pr.protected_until>now()",
         [tradeId],
       )
     ).rows[0];
@@ -338,7 +358,7 @@ async function createQualifiedRecurringMatch(
     const authorization = (
       await client.query(
         "select * from standing_demand_authorizations where demand_id=$1 and demand_version=$2 and automatic_renewal_permitted and renewals_reserved+renewals_consumed<maximum_renewals and valid_until>now() and next_required_at<=now() for update",
-        [prior.demand_id, prior.demand_version],
+        [prior.authorization_demand_id, prior.authorization_demand_version],
       )
     ).rows[0];
     if (!authorization)
@@ -356,27 +376,33 @@ async function createQualifiedRecurringMatch(
       });
     if (authorization.supplier_scope !== "SAME_SUPPLIER")
       return unknown("approved substitution requires fresh protected-account acceptance");
-    const pair = (
-      await client.query(
-        "select m.offer_id,m.offer_version,m.demand_id,m.demand_version,o.source_event_id,o.supplier_net,o.currency,o.expires_at,d.quantity_mt from matches m join supplier_offers o on o.id=m.offer_id and o.version=m.offer_version join buyer_demands d on d.id=m.demand_id and d.version=m.demand_version where m.compatible and d.id=$1 and d.version=$2 and o.supplier_id=$3 and d.buyer_id=$4 and o.verification='VERIFIED' and o.freshness='CURRENT' and o.expires_at>now() and d.verification='VERIFIED' and d.freshness='CURRENT' and d.expires_at>now() and d.quantity_mt between $5-$6 and $5+$6 and exists(select 1 from qualification_decisions q where q.subject_type='SUPPLIER_OFFER' and q.subject_id=o.id and q.subject_version=o.version and q.verdict='PASS') and exists(select 1 from qualification_decisions q where q.subject_type='BUYER_DEMAND' and q.subject_id=d.id and q.subject_version=d.version and q.verdict='PASS') and exists(select 1 from risk_decisions r where r.organization_id=o.supplier_id and r.state='PASS') and exists(select 1 from risk_decisions r where r.organization_id=d.buyer_id and r.state='PASS') order by m.priority_score desc,m.evaluated_at desc limit 1",
-        [
-          prior.demand_id,
-          prior.demand_version,
-          prior.supplier_id,
-          prior.buyer_id,
-          authorization.quantity_per_cycle_mt,
-          authorization.quantity_tolerance_mt,
-        ],
-      )
-    ).rows[0];
+    const buyerRisk=(await client.query("select state from risk_decisions where organization_id=$1 order by decided_at desc limit 1",[authorization.buyer_id])).rows[0];
+    if(buyerRisk?.state!=="PASS")return unknown("recurring buyer risk gate failed");
+    const offers = (await client.query(
+      "select o.* from supplier_offers o where o.supplier_id=$1 and o.product_family=$2 and o.verification='VERIFIED' and o.freshness='CURRENT' and o.expires_at>now() and o.quantity_mt>=$3 and $3>=o.moq_mt and exists(select 1 from qualification_decisions q where q.subject_type='SUPPLIER_OFFER' and q.subject_id=o.id and q.subject_version=o.version and q.verdict='PASS') and exists(select 1 from risk_decisions r where r.organization_id=o.supplier_id and r.state='PASS') order by o.created_at desc",
+      [prior.supplier_id,authorization.product_family,authorization.quantity_per_cycle_mt],
+    )).rows;
+    const pair=offers.find((offer)=>deepCompatible(offer.product_spec,authorization.product_spec));
     if (!pair)
       return unknown("no current fully-qualified compatible recurring match");
-    const id = randomUUID(), matchId = randomUUID(), reservationId = randomUUID(),
+    const id = randomUUID(), matchId = randomUUID(), reservationId = randomUUID(),executionDemandId=randomUUID(),sourceEventId=randomUUID(),
       cycleNumber = Number(authorization.renewals_reserved)+Number(authorization.renewals_consumed)+1,
       contextDigest=createHash("sha256").update(JSON.stringify({recurringCandidate:id,priorFeeLock:prior.fee_lock_id,cycleNumber})).digest("hex");
     await client.query(
+      "insert into domain_events(event_id,idempotency_key,aggregate_type,aggregate_id,event_type,event_time,policy_version,payload) values($1,$2,'BUYER_DEMAND',$3,'STANDING_DEMAND_CYCLE_CREATED',now(),'standing-mandate-v1',$4)",
+      [sourceEventId,`standing:${authorization.acceptance_digest}:cycle:${cycleNumber}`,executionDemandId,{authorizationDemandId:authorization.demand_id,authorizationDemandVersion:authorization.demand_version,cycleNumber}],
+    );
+    await client.query(
+      "insert into buyer_demands(id,version,buyer_id,source_event_id,product_family,product_spec,quantity_mt,buyer_ceiling,ceiling_state,currency,standing,expires_at,verification,freshness) values($1,1,$2,$3,$4,$5,$6,$7,'KNOWN',$8,true,$9,'VERIFIED','CURRENT')",
+      [executionDemandId,authorization.buyer_id,sourceEventId,authorization.product_family,authorization.product_spec,authorization.quantity_per_cycle_mt,authorization.maximum_all_in_price_per_kg,authorization.currency,authorization.valid_until],
+    );
+    await client.query(
+      "insert into qualification_decisions(id,organization_id,subject_type,subject_id,subject_version,verdict,reasons,policy_version,decided_at) values(gen_random_uuid(),$1,'BUYER_DEMAND',$2,1,'PASS','[]'::jsonb,$3,now())",
+      [authorization.buyer_id,executionDemandId,`standing-authorization:${authorization.acceptance_digest}`],
+    );
+    await client.query(
       "insert into matches(id,offer_id,offer_version,demand_id,demand_version,compatible,rejection_reasons,matcher_version,context_digest,evaluated_at,priority_score) values($1,$2,$3,$4,$5,true,'[]'::jsonb,'recurring-v1',$6,now(),0)",
-      [matchId,pair.offer_id,pair.offer_version,pair.demand_id,pair.demand_version,contextDigest],
+      [matchId,pair.id,pair.version,executionDemandId,1,contextDigest],
     );
     await client.query(
       "insert into recurring_candidates(id,relationship_id,prior_fee_lock_id,offer_id,offer_version,demand_id,demand_version,status,created_at,match_id,updated_at) values($1,$2,$3,$4,$5,$6,$7,'ECONOMICS_PENDING',now(),$8,now())",
@@ -384,21 +410,22 @@ async function createQualifiedRecurringMatch(
         id,
         prior.protected_relationship_id,
         prior.fee_lock_id,
-        pair.offer_id,
-        pair.offer_version,
-        pair.demand_id,
-        pair.demand_version,
+        pair.id,
+        pair.version,
+        authorization.demand_id,
+        authorization.demand_version,
         matchId,
       ],
     );
+    await client.query("update recurring_candidates set execution_demand_id=$2,execution_demand_version=1 where id=$1",[id,executionDemandId]);
     await client.query(
       "insert into standing_renewal_reservations(id,demand_id,demand_version,candidate_id,cycle_number,state,reserved_at,expires_at) values($1,$2,$3,$4,$5,'RESERVED',now(),least($6,now()+interval '14 days'))",
-      [reservationId,prior.demand_id,prior.demand_version,id,cycleNumber,authorization.valid_until],
+      [reservationId,authorization.demand_id,authorization.demand_version,id,cycleNumber,authorization.valid_until],
     );
     await client.query("update recurring_candidates set reservation_id=$2 where id=$1",[id,reservationId]);
     await client.query(
       "update standing_demand_authorizations set renewals_reserved=renewals_reserved+1 where demand_id=$1 and demand_version=$2",
-      [prior.demand_id,prior.demand_version],
+      [authorization.demand_id,authorization.demand_version],
     );
     await client.query(
       "insert into cost_components(id,match_id,cost_kind,amount_per_kg,currency,evidence,source_receipt_id,valid_until,basis,payer_role,settlement_treatment,beneficiary_role) values(gen_random_uuid(),$1,'SUPPLIER_NET',$2,$3,'FIRM',$4,$5,'current recurring supplier net','BUYER','SUPPLIER_ENTITLEMENT','SUPPLIER')",

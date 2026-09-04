@@ -17,6 +17,7 @@ export type StageName =
   | "RELEASE_IDENTITY"
   | "MONITOR_SHIPMENT"
   | "RECONCILE"
+  | "RECURRENCE_SCHEDULE"
   | "RECUR";
 export interface StageResult {
   readonly state: "ACCEPTED" | "REJECTED" | "UNKNOWN";
@@ -76,7 +77,7 @@ export class ProductionActivityService implements BrokerageActivities {
         idempotencyKey: `stage:${stage}:${digest}`,
       });
     });
-    return Object.freeze({ receiptId, digest, state: result.state });
+    return Object.freeze({ receiptId, digest, state: result.state, facts: result.facts });
   }
   discoverSupplier(input: { sourceId: string; cursor: string | null }) {
     return this.run("DISCOVER_SUPPLIER", input);
@@ -108,6 +109,9 @@ export class ProductionActivityService implements BrokerageActivities {
   reconcile(input: { tradeId: string }) {
     return this.run("RECONCILE", input);
   }
+  recurrenceSchedule(input: { tradeId: string }) {
+    return this.run("RECURRENCE_SCHEDULE", input);
+  }
   recur(input: { tradeId: string }) {
     return this.run("RECUR", input);
   }
@@ -127,6 +131,7 @@ export function bindBrokerageActivities(
     releaseIdentity: (input) => service.releaseIdentity(input),
     monitorShipment: (input) => service.monitorShipment(input),
     reconcile: (input) => service.reconcile(input),
+    recurrenceSchedule: (input) => service.recurrenceSchedule(input),
     recur: (input) => service.recur(input),
   };
   return Object.freeze(activities);
