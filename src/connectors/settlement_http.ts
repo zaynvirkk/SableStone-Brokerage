@@ -62,7 +62,9 @@ export interface ProviderHttpConfig {
   readonly webhookSupplierAmountPath?: string;
   readonly webhookEventTypeMap?: Readonly<Record<string, InternalEvent>>;
   readonly responseReferenceField: string;
-  readonly responseAcknowledgedField: string;
+  readonly responseAcknowledgedField?: string;
+  readonly responseStatusField?: string;
+  readonly responseAcceptedStatuses?: readonly string[];
   readonly responseFundingTokenField?: string;
   readonly disputeCreatePathTemplate?: string;
   readonly disputeResponseReferenceField?: string;
@@ -155,14 +157,21 @@ export class ProductionSettlementHttpAdapter implements SettlementAdapter {
         unknown
       >,
       reference = field(decoded, this.config.responseReferenceField),
-      acknowledged = field(decoded, this.config.responseAcknowledgedField),
+      acknowledged = this.config.responseAcknowledgedField
+        ? field(decoded, this.config.responseAcknowledgedField)
+        : undefined,
+      responseStatus = this.config.responseStatusField
+        ? field(decoded, this.config.responseStatusField)
+        : undefined,
       fundingToken = this.config.responseFundingTokenField
         ? field(decoded, this.config.responseFundingTokenField)
         : undefined;
     if (
       (typeof reference !== "string" && typeof reference !== "number") ||
       !String(reference).trim() ||
-      acknowledged !== true
+      (this.config.responseAcknowledgedField && acknowledged !== true) ||
+      (this.config.responseStatusField &&
+        !(this.config.responseAcceptedStatuses ?? []).map(value=>value.toUpperCase()).includes(String(responseStatus).toUpperCase()))
     )
       throw new Error(
         `${this.provider} instruction acknowledgement incomplete; response=${responseReceipt.objectKey}`,
@@ -659,6 +668,12 @@ function inrPaise(value: string): number {
     throw new Error("Razorpay amount exceeds safe integer");
   return Number(paise);
 }
+function cashfreeAmount(value:string):number{
+  if(!/^\d+(?:\.\d{1,2})?$/.test(value))throw new Error("Cashfree amount must have at most two decimals");
+  const [whole,fraction=""]=value.split("."),minor=BigInt(whole!)*100n+BigInt(fraction.padEnd(2,"0"));
+  if(minor>BigInt(Number.MAX_SAFE_INTEGER))throw new Error("Cashfree amount exceeds safe minor-unit integer");
+  return Number(value);
+}
 function providerReference(
   party: Readonly<Record<string, string>>,
   key: string,
@@ -747,7 +762,7 @@ export const cashfreeSplitRequest: SettlementRequestBuilder = (draft) => ({
 });
 export const cashfreeOrderRequest: SettlementRequestBuilder = (draft) => ({
   order_id: draft.instructionId,
-  order_amount: draft.grossAmount,
+  order_amount: cashfreeAmount(draft.grossAmount),
   order_currency: draft.currency,
   order_note: `protected trade ${draft.tradeId}`,
   customer_details: {

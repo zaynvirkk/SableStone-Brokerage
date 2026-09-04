@@ -19,6 +19,9 @@ ineligible and Razorpay transfers remain held until receipt-backed buyer
 delivery acceptance; a dispute or expired delivery action freezes release.
 Cashfree release is keyed by the exact order and vendor and uses the provider's
 settlement-eligibility date update; Razorpay releases the exact held transfer.
+Direct order acknowledgement is provider-specific: Cashfree requires an
+`ACTIVE` order plus its payment session, while Razorpay requires a `created`
+order; neither rail depends on a fictitious boolean acknowledgement field.
 Provider and bank reconciliation supports multiple entries per trade and
 allocates shared bank-settlement rows without allocating any source amount
 twice. Allocated amounts must sum exactly to the immutable fee entitlement and
@@ -32,7 +35,11 @@ Verified contacts are invited through the configured identity provider, and
 current principal state is checked on authenticated requests. Agreement,
 settlement, funding, dispatch, delivery, dispute and standing-order actions
 receive signed deep links and deadline reminders. Cashfree and Razorpay buyers
-receive their provider checkout surface; suppliers can submit dispatch evidence;
+receive their provider checkout surface; Razorpay Checkout uses exact integer
+paise and an in-page completion handler while money state still waits for the
+signed provider event. Suppliers select a registered carrier, upload malware-
+scanned evidence, and can progress `DISPATCHED → IN_TRANSIT → DELIVERED` through
+the same organization-scoped portal without knowing internal document IDs;
 buyers can authorize standing orders. A dispute launches the configured,
 approval-bound provider dispute process and provider resolution controls the
 frozen trade and supplier payout. Operational startup requires
@@ -45,6 +52,11 @@ the repository and verified against the pinned public trust root under
 `release-trust/`; ephemeral self-generated signing keys are forbidden. GitHub
 Actions is intentionally not installed. Verification is repository-local and
 does not constitute an external CI status or satisfy any live/operator gate.
+The same pinned authority can produce `plan66-verification-report.json` by
+executing the complete local compile, production build, acceptance suite,
+provider-response contract, full simulation and release verification. That
+signed report proves execution against its exact source attestation without
+reintroducing GitHub Actions; it remains build evidence, never live evidence.
 
 Recurring execution is part of the verified software boundary. A reconciled
 trade loads the mandate's persisted `next_required_at`, uses a Temporal durable

@@ -1,8 +1,8 @@
 import {createHash,createPrivateKey,createPublicKey,sign} from "node:crypto";
 import {readdirSync,readFileSync,statSync,mkdirSync,writeFileSync} from "node:fs";
 import {join,relative} from "node:path";
-const root=process.cwd(),excluded=new Set(["node_modules","dist",".next","releases","artifacts",".git"]),files=[];
-function walk(directory){for(const name of readdirSync(directory).sort()){if(excluded.has(name))continue;const path=join(directory,name),stat=statSync(path);if(stat.isDirectory())walk(path);else files.push(relative(root,path));}}
+const root=process.cwd(),excluded=new Set(["node_modules","dist",".next","releases","artifacts",".git","__pycache__",".pytest_cache"]),files=[];
+function walk(directory){for(const name of readdirSync(directory).sort()){if(excluded.has(name)||name.endsWith(".pyc"))continue;const path=join(directory,name),stat=statSync(path);if(stat.isDirectory())walk(path);else files.push(relative(root,path));}}
 for(const directory of ["src","migrations","scripts","tests","apps/web/app","docs","deploy","release-trust"]){walk(join(root,directory))}for(const file of ["package.json","package-lock.json","tsconfig.json","PRODUCT.md","DESIGN.md","apps/web/package.json","apps/web/package-lock.json"]){if(!files.includes(file))files.push(file)}files.sort();
 const hashes=Object.fromEntries(files.map(file=>[file,createHash("sha256").update(readFileSync(join(root,file))).digest("hex")]));
 const rootLock=JSON.parse(readFileSync("package-lock.json","utf8")),webLock=JSON.parse(readFileSync("apps/web/package-lock.json","utf8"));

@@ -434,7 +434,7 @@ export class ProductionCommandService {
       if (
         !(
           await client.query(
-            "select 1 from organizations where id=$1 and organization_type='PROVIDER'",
+            "select 1 from organizations o join carrier_profiles c on c.organization_id=o.id and c.state='VERIFIED' and c.valid_until>now() join authority_receipts a on a.receipt_id=c.authority_receipt_id and a.authority_kind='CARRIER_PROVIDER_APPROVAL' and a.effective_at<=now() and a.expires_at>now() where o.id=$1 and o.organization_type='PROVIDER'",
             [input.carrierOrganizationId],
           )
         ).rowCount ||

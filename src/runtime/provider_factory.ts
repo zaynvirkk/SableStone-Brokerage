@@ -61,6 +61,7 @@ export async function buildProductionSettlementAdapters(
       throw new Error(
         `provider secrets/config incomplete: ${definition.provider}`,
       );
+    if(!definition.responseAcknowledgedField&&(!definition.responseStatusField||!definition.responseAcceptedStatuses?.length))throw new Error(`provider acknowledgement contract incomplete: ${definition.provider}`);
     if(!definition.disputeCreatePathTemplate?.includes("{provider_reference}")||!definition.disputeResponseReferenceField)throw new Error(`provider dispute process incomplete: ${definition.provider}`);
     if (
       definition.provider === "CASHFREE_EASY_SPLIT" &&
@@ -70,7 +71,7 @@ export async function buildProductionSettlementAdapters(
         ) ||
         !definition.cashfreeSettlementEligibilityPathTemplate?.includes(
           "{vendor_id}",
-        ) || !definition.cashfreeSettlementEligibilityPathTemplate?.includes("{order_id}") || !definition.responseFundingTokenField)
+        ) || !definition.cashfreeSettlementEligibilityPathTemplate?.includes("{order_id}") || definition.responseReferenceField!=="order_id" || definition.responseFundingTokenField!=="payment_session_id" || definition.responseStatusField!=="order_status" || !definition.responseAcceptedStatuses?.map(value=>value.toUpperCase()).includes("ACTIVE"))
     )
       throw new Error(
         "Cashfree split creation and exact verification paths required",
@@ -80,7 +81,7 @@ export async function buildProductionSettlementAdapters(
       (!definition.razorpayTransferPathTemplate?.includes("{payment_id}") ||
         !definition.razorpayTransferReleasePathTemplate?.includes(
           "{transfer_id}",
-        ))
+        ) || definition.responseReferenceField!=="id" || definition.responseStatusField!=="status" || !definition.responseAcceptedStatuses?.map(value=>value.toUpperCase()).includes("CREATED"))
     )
       throw new Error("Razorpay held-transfer create and release paths required");
     if (

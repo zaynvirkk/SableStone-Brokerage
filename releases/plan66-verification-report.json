@@ -1,0 +1,87 @@
+{
+  "kind": "SABLESTONE_LOCAL_EXECUTION_PROOF",
+  "generatedAt": "2026-09-04T23:09:14.370Z",
+  "claim": "BUILD_VERIFIED executable local proof only; no live/provider/legal/deployment claim",
+  "sourceAttestationSha256": "5d12049ea2e86a03ebc4ff32d96f85b8be95ae61c2d61bfb3a1324e71d932524",
+  "trustRootSha256": "f2672e284aa008722301ac5b15a82469202d4cc46df81bbd7ea7d7bfbde2e0c7",
+  "liveEffects": 0,
+  "results": [
+    {
+      "command": [
+        "npm",
+        "run",
+        "check"
+      ],
+      "startedAt": "2026-09-04T22:47:59.587Z",
+      "finishedAt": "2026-09-04T22:48:16.965Z",
+      "exitCode": 0,
+      "outputSha256": "404df8f4f2df089ec00a2cea15b9dfa5171e4e7b133d079191ae5ba9fae91ed6"
+    },
+    {
+      "command": [
+        "npm",
+        "run",
+        "build"
+      ],
+      "startedAt": "2026-09-04T22:48:16.968Z",
+      "finishedAt": "2026-09-04T22:48:34.748Z",
+      "exitCode": 0,
+      "outputSha256": "187d831f35d5c6a39be6c8850acf62ee87fd8f14ccfc4656e83a2490cc43d6ab"
+    },
+    {
+      "command": [
+        "npm",
+        "--prefix",
+        "apps/web",
+        "run",
+        "build"
+      ],
+      "startedAt": "2026-09-04T22:48:34.748Z",
+      "finishedAt": "2026-09-04T22:48:42.278Z",
+      "exitCode": 0,
+      "outputSha256": "2df79ecbd3835ad1c9b2fd0a6f4227de8f7e43ad38d8d57683a91c458a7d055c"
+    },
+    {
+      "command": [
+        "npm",
+        "test"
+      ],
+      "startedAt": "2026-09-04T22:48:42.278Z",
+      "finishedAt": "2026-09-04T23:08:37.052Z",
+      "exitCode": 0,
+      "outputSha256": "b3f179b7f1d534c5fa6c54856348a5934cee1f88cfc29deb52e0e0a3720577dd"
+    },
+    {
+      "command": [
+        "node",
+        "scripts/provider-order-response-contract.mjs"
+      ],
+      "startedAt": "2026-09-04T23:08:37.052Z",
+      "finishedAt": "2026-09-04T23:08:38.657Z",
+      "exitCode": 0,
+      "outputSha256": "3baefdd0cd5dfa60c8c4076de3904e0fd5466a82d3269f5423e05d74a8eee0cc"
+    },
+    {
+      "command": [
+        "node",
+        "scripts/full-simulation.mjs"
+      ],
+      "startedAt": "2026-09-04T23:08:38.657Z",
+      "finishedAt": "2026-09-04T23:09:14.308Z",
+      "exitCode": 0,
+      "outputSha256": "31f0db32c374f020c44db2d453a1f31f38c118f98a1b53ff0e3c4b0f48e3dc22"
+    },
+    {
+      "command": [
+        "node",
+        "scripts/verify-release.mjs"
+      ],
+      "startedAt": "2026-09-04T23:09:14.309Z",
+      "finishedAt": "2026-09-04T23:09:14.370Z",
+      "exitCode": 0,
+      "outputSha256": "70b2c8cc8bf7302e24fefde62740403ebb886b46355bee8abcf2563ccc7a9e96"
+    }
+  ],
+  "signatureAlgorithm": "Ed25519",
+  "signatureBase64": "2SbompMvM7OnjijMFh++NOR2hvfDZTQ5nu4wxZa7ZVGVWF0pJzFU+vhDNVHaNItvwEINWwzDGy+D5lU1mC1lCA=="
+}

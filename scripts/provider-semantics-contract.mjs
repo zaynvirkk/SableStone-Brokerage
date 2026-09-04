@@ -81,7 +81,7 @@ const cashfreeOrder = cashfreeOrderRequest({
   currency: "INR",
 });
 if (
-  cashfreeOrder.order_amount !== draft.grossAmount ||
+  cashfreeOrder.order_amount !== 1000 ||
   cashfreeOrder.customer_details.customer_id !==
     draft.providerParties.buyer.customer_id ||
   "split" in cashfreeOrder

@@ -11,12 +11,13 @@ import {
   settlementInstructionAcceptanceDigest,
 } from "../runtime/commands.js";
 import type { SensitiveDataCipher } from "../runtime/sensitive_data.js";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   ProviderPartyAccountRegistry,
   type ProviderPartyRole,
 } from "../runtime/provider_parties.js";
 import type { ImmutableEvidenceStore } from "../runtime/object_store.js";
+import type { DocumentIngestionPipeline } from "../connectors/documents.js";
 import {
   AgreementRegistry,
   type AgreementResourceType,
@@ -58,6 +59,7 @@ export interface ApiDependencies {
   readonly activationGuard?: AuthorityUseGuard;
   readonly sensitiveDataCipher?: SensitiveDataCipher;
   readonly evidenceStore?: ImmutableEvidenceStore;
+  readonly documentPipeline?: DocumentIngestionPipeline;
   readonly redis: Redis;
   readonly webhookHandlers: Readonly<
     Record<
@@ -290,6 +292,9 @@ export async function createProductionApi(
                 ],
               )
             ).rows.map((value) => value.role)
+          : [],
+        carrierRows = p.role === "SUPPLIER" && ["FUNDED","DISPATCHED","IN_TRANSIT"].includes(row.state)
+          ? (await deps.pool.query("select o.id,o.legal_name_ciphertext from organizations o join carrier_profiles c on c.organization_id=o.id and c.state='VERIFIED' and c.valid_until>now() join authority_receipts a on a.receipt_id=c.authority_receipt_id and a.authority_kind='CARRIER_PROVIDER_APPROVAL' and a.effective_at<=now() and a.expires_at>now() where o.organization_type='PROVIDER' order by o.created_at limit 100")).rows
           : [];
       return {
         id: row.id,
@@ -336,6 +341,12 @@ export async function createProductionApi(
         contractAcceptances,
         demandId: row.demand_id ?? null,
         demandVersion: row.demand_version ?? null,
+        carriers: carrierRows.map(carrier=>({
+          id: carrier.id,
+          name: deps.sensitiveDataCipher
+            ? deps.sensitiveDataCipher.decrypt(carrier.legal_name_ciphertext)
+            : `Carrier ${String(carrier.id).slice(0,8)}`,
+        })),
         nextAction: tradeNextAction(
           row.state,
           instruction,
@@ -412,6 +423,20 @@ export async function createProductionApi(
       };
     },
   );
+  app.post<{
+    Body:{fileName?:string;contentType?:string;dataBase64?:string;kind?:"SHIPMENT_DISPATCH"|"SHIPMENT_TRANSIT"|"SHIPMENT_DELIVERY"};
+  }>("/v1/documents",{onRequest:[app.authenticate],config:{rateLimit:{max:20,timeWindow:"1 minute"}}},async(request,reply)=>{
+    const p=principal(request),body=request.body;
+    if((p.role!=="SUPPLIER"&&p.role!=="BUYER")||!p.organizationId)return reply.code(403).send({error:"ROLE_FORBIDDEN"});
+    if(!deps.documentPipeline||!deps.sensitiveDataCipher||!body?.fileName||!body.contentType||!body.dataBase64||!body.kind)return reply.code(400).send({error:"DOCUMENT_UPLOAD_UNAVAILABLE"});
+    let bytes:Buffer;
+    try{bytes=Buffer.from(body.dataBase64,"base64");if(!bytes.length||bytes.toString("base64")!==body.dataBase64.replace(/\s/g,""))throw new Error("invalid base64")}catch{return reply.code(400).send({error:"DOCUMENT_INVALID"})}
+    try{
+      const ingested=await deps.documentPipeline.ingest(body.fileName,bytes,body.contentType,`portal:${p.organizationId}:${body.kind}`),documentId=randomUUID();
+      await deps.pool.query("insert into documents(id,organization_id,kind,object_key_ciphertext,sha256) values($1,$2,$3,$4,$5)",[documentId,p.organizationId,body.kind,deps.sensitiveDataCipher.encrypt(ingested.objectKey),ingested.sha256]);
+      return reply.code(201).send({documentId,sha256:ingested.sha256,mediaType:ingested.mediaType});
+    }catch{return reply.code(409).send({error:"DOCUMENT_REJECTED"})}
+  });
   app.post<{
     Body: {
       kind?: AgreementKind;

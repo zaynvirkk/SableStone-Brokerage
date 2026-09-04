@@ -3,6 +3,7 @@ import { OAuth2Client } from "google-auth-library";
 import {
   bootstrapProduction,
   buildProductionSettlementAdapters,
+  buildProductionDocumentPipeline,
   createGmailPushHandler,
   createProductionApi,
   createSettlementWebhookHandler,
@@ -37,6 +38,10 @@ const sensitiveDataCipher = runtime.activation.capabilities.some((capability) =>
       process.env.SABLESTONE_LOOKUP_HMAC_SECRET ?? "",
     )
   : undefined;
+const documentPipeline=runtime.activation.capabilities.includes("TRADING")
+  ? await buildProductionDocumentPipeline(runtime.pool,runtime.evidence,process.env.SABLESTONE_DOCUMENT_EXTRACTOR_JSON,process.env.SABLESTONE_CLAMAV_HOST,process.env.SABLESTONE_CLAMAV_PORT)
+  : undefined;
+if(runtime.activation.capabilities.includes("TRADING")&&!documentPipeline)throw new Error("document upload pipeline required for trading");
 const inbox = new DurableInboxRepository(runtime.pool);
 const webhookHandlers = {};
 
@@ -151,6 +156,7 @@ const app = await createProductionApi({
   activationGuard: runtime.activationGuard,
   sensitiveDataCipher,
   evidenceStore: runtime.evidence,
+  documentPipeline,
   redis: runtime.redis,
   webhookHandlers,
 });

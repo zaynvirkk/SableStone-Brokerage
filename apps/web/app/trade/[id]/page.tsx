@@ -36,6 +36,7 @@ type TradeData = {
   nextAction: string;
   demandId: string | null;
   demandVersion: number | null;
+  carriers: {id:string;name:string}[];
 };
 const labels: Record<string, string> = {
   MATCHED: "Matched",
@@ -181,7 +182,7 @@ export default async function Trade({
               </p>
             )}
           </section>
-          {trade.state === "FUNDED" && trade.viewerRole === "SUPPLIER" ? <section><h2>Dispatch evidence</h2><form action={`/api/trades/${encodeURIComponent(trade.id)}/shipment-events`} method="post"><input type="hidden" name="responsiblePartyId" value={trade.supplierId}/><label>Carrier organization ID<input name="carrierOrganizationId" required/></label><label>Evidence document receipt ID<input name="documentReceiptId" required/></label><button type="submit">Record dispatch</button></form></section> : null}
+          {["FUNDED","DISPATCHED","IN_TRANSIT"].includes(trade.state) && trade.viewerRole === "SUPPLIER" ? <section><h2>{trade.state==="FUNDED"?"Dispatch evidence":trade.state==="DISPATCHED"?"Transit evidence":"Delivery evidence"}</h2><form action={`/api/trades/${encodeURIComponent(trade.id)}/shipment-events`} method="post" encType="multipart/form-data"><input type="hidden" name="responsiblePartyId" value={trade.supplierId}/><input type="hidden" name="eventType" value={trade.state==="FUNDED"?"DISPATCHED":trade.state==="DISPATCHED"?"IN_TRANSIT":"DELIVERED"}/><label>Carrier<select name="carrierOrganizationId" required><option value="">Select carrier</option>{trade.carriers.map(carrier=><option key={carrier.id} value={carrier.id}>{carrier.name}</option>)}</select></label><label>Carrier document<input name="evidence" type="file" accept="application/pdf,image/jpeg,image/png,image/tiff" required/></label><button type="submit">Record {trade.state==="FUNDED"?"dispatch":trade.state==="DISPATCHED"?"in transit":"delivery"}</button></form></section> : null}
           {["SETTLED","RECURRING"].includes(trade.state) && trade.viewerRole === "BUYER" && trade.demandId && trade.demandVersion ? <section><h2>Standing order</h2><form action={`/api/demands/${encodeURIComponent(trade.demandId)}/${trade.demandVersion}/standing-authorization?tradeId=${encodeURIComponent(trade.id)}`} method="post"><label>Renewals<input name="maximumRenewals" type="number" min="1" required/></label><label>Cadence days<input name="cadenceDays" type="number" min="1" max="365" required/></label><label>Next required date<input name="nextRequiredAt" type="datetime-local" required/></label><label>Valid until<input name="validUntil" type="datetime-local" required/></label><label>Quantity tolerance MT<input name="quantityToleranceMt" inputMode="decimal" required/></label><label>Maximum all-in price/kg<input name="maximumAllInPricePerKg" inputMode="decimal" required/></label><label>Currency<input name="currency" defaultValue={trade.settlement?.currency??"INR"} required/></label><label>Supplier scope<select name="supplierScope"><option value="SAME_SUPPLIER">Same supplier</option><option value="APPROVED_SUBSTITUTION">Approved substitutes</option></select></label><button type="submit">Authorize standing order</button></form></section> : null}
           <section>
             <h2>Contract acceptance</h2>
