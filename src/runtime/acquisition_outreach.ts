@@ -23,7 +23,7 @@ export class AcquisitionOutreachDispatcher {
       async (client) =>
         (
           await client.query(
-            "with claimed as(select id from acquisition_outreach_jobs where state in('WAITING_CONTACT','WAITING_RISK','WAITING_PROFILE','WAITING_INVENTORY','READY') or(state='PROCESSING' and claimed_at<now()-interval '10 minutes') order by priority_score desc,created_at for update skip locked limit $1) update acquisition_outreach_jobs j set state='PROCESSING',attempts=attempts+1,claimed_at=now() from claimed where j.id=claimed.id returning j.*",
+            "with redriven as(update acquisition_outreach_jobs set state='READY',redrive_count=redrive_count+1,next_retry_at=null where state='DEAD_LETTER_PENDING_REDRIVE' and next_retry_at<=now()),claimed as(select id from acquisition_outreach_jobs where state in('WAITING_CONTACT','WAITING_RISK','WAITING_PROFILE','WAITING_INVENTORY','READY') or(state='PROCESSING' and claimed_at<now()-interval '10 minutes') order by priority_score desc,created_at for update skip locked limit $1) update acquisition_outreach_jobs j set state='PROCESSING',attempts=attempts+1,claimed_at=now() from claimed where j.id=claimed.id returning j.*",
             [limit],
           )
         ).rows,
@@ -178,7 +178,7 @@ export class AcquisitionOutreachDispatcher {
         const waiting = error instanceof WaitingState,
           suppress = error instanceof TerminalSuppression;
         await this.pool.query(
-          "update acquisition_outreach_jobs set state=case when $2 then $3 when $4 then 'SUPPRESSED' when attempts>=5 then 'FAILED' else 'READY' end,completed_at=case when $4 or(not $2 and attempts>=5) then now() else null end,claimed_at=null,last_error_code=$5 where id=$1 and state='PROCESSING'",
+          "update acquisition_outreach_jobs set state=case when $2 then $3 when $4 then 'SUPPRESSED' when attempts>=5 then 'DEAD_LETTER_PENDING_REDRIVE' else 'READY' end,completed_at=case when $4 then now() else null end,claimed_at=null,next_retry_at=case when $2 or $4 then null when attempts>=5 then now()+least(interval '24 hours',interval '15 minutes'*power(2,least(redrive_count,6))) else null end,last_error_code=$5 where id=$1 and state='PROCESSING'",
           [
             job.id,
             waiting,

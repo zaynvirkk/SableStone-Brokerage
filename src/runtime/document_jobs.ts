@@ -103,7 +103,7 @@ export class DocumentJobDispatcher {
       async (client) =>
         (
           await client.query(
-            "with claimed as(select id from document_processing_jobs where state='PENDING' or(state='PROCESSING' and claimed_at<now()-interval '10 minutes') order by created_at for update skip locked limit $1) update document_processing_jobs j set state='PROCESSING',attempts=attempts+1,claimed_at=now() from claimed where j.id=claimed.id returning j.*",
+            "with redriven as(update document_processing_jobs set state='PENDING',redrive_count=redrive_count+1,next_retry_at=null where state='DEAD_LETTER_PENDING_REDRIVE' and next_retry_at<=now()),claimed as(select id from document_processing_jobs where state='PENDING' or(state='PROCESSING' and claimed_at<now()-interval '10 minutes') order by created_at for update skip locked limit $1) update document_processing_jobs j set state='PROCESSING',attempts=attempts+1,claimed_at=now() from claimed where j.id=claimed.id returning j.*",
             [limit],
           )
         ).rows,
@@ -184,7 +184,7 @@ export class DocumentJobDispatcher {
             (error as Error).message,
           );
         await this.pool.query(
-          "update document_processing_jobs set state=case when $2 then 'REJECTED_SECURITY' when attempts>=5 then 'FAILED' else 'PENDING' end,completed_at=case when $2 or attempts>=5 then now() else null end,claimed_at=null,last_error_code=$3 where id=$1 and state='PROCESSING'",
+          "update document_processing_jobs set state=case when $2 then 'REJECTED_SECURITY' when attempts>=5 then 'DEAD_LETTER_PENDING_REDRIVE' else 'PENDING' end,completed_at=case when $2 then now() else null end,claimed_at=null,next_retry_at=case when $2 then null when attempts>=5 then now()+least(interval '24 hours',interval '15 minutes'*power(2,least(redrive_count,6))) else null end,last_error_code=$3 where id=$1 and state='PROCESSING'",
           [job.id, security, (error as Error).name.slice(0, 100)],
         );
       }
@@ -205,7 +205,7 @@ export class DocumentVerificationJobDispatcher {
       async (client) =>
         (
           await client.query(
-            "with claimed as(select id from document_verification_jobs where state='PENDING' or(state='PROCESSING' and claimed_at<now()-interval '10 minutes') order by created_at for update skip locked limit $1) update document_verification_jobs j set state='PROCESSING',attempts=attempts+1,claimed_at=now() from claimed where j.id=claimed.id returning j.*",
+            "with redriven as(update document_verification_jobs set state='PENDING',redrive_count=redrive_count+1,next_retry_at=null where state='DEAD_LETTER_PENDING_REDRIVE' and next_retry_at<=now()),claimed as(select id from document_verification_jobs where state='PENDING' or(state='PROCESSING' and claimed_at<now()-interval '10 minutes') order by created_at for update skip locked limit $1) update document_verification_jobs j set state='PROCESSING',attempts=attempts+1,claimed_at=now() from claimed where j.id=claimed.id returning j.*",
             [limit],
           )
         ).rows,
@@ -278,7 +278,7 @@ export class DocumentVerificationJobDispatcher {
           (error as Error).message,
         );
         await this.pool.query(
-          "update document_verification_jobs set state=case when $2 then 'UNAVAILABLE' when attempts>=5 then 'FAILED' else 'PENDING' end,completed_at=case when $2 or attempts>=5 then now() else null end,claimed_at=null,last_error_code=$3 where id=$1 and state='PROCESSING'",
+          "update document_verification_jobs set state=case when $2 then 'UNAVAILABLE' when attempts>=5 then 'DEAD_LETTER_PENDING_REDRIVE' else 'PENDING' end,completed_at=case when $2 then now() else null end,claimed_at=null,next_retry_at=case when $2 then null when attempts>=5 then now()+least(interval '24 hours',interval '15 minutes'*power(2,least(redrive_count,6))) else null end,last_error_code=$3 where id=$1 and state='PROCESSING'",
           [job.id, unavailable, (error as Error).name.slice(0, 100)],
         );
       }

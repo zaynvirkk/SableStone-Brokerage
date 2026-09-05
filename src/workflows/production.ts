@@ -16,7 +16,13 @@ export interface BrokerageActivities{
  recurrenceSchedule(input:{tradeId:string}):Promise<WorkflowReceipt>;
  recur(input:{tradeId:string}):Promise<WorkflowReceipt>;
 }
-const activities=proxyActivities<BrokerageActivities>({startToCloseTimeout:"2 minutes",scheduleToCloseTimeout:"10 minutes",retry:{maximumAttempts:5,initialInterval:"2 seconds",maximumInterval:"1 minute",backoffCoefficient:2}});
+// A transient provider/database outage must not turn a valid duty into a
+// terminally failed workflow.  Temporal treats maximumAttempts=0 as
+// unlimited retries.  We intentionally omit scheduleToCloseTimeout so the
+// retry policy remains durable until the workflow's own business deadline
+// (or an explicit operator kill switch) is reached.  Business-invalid
+// outcomes are returned as REJECTED by activities and are not retried.
+const activities=proxyActivities<BrokerageActivities>({startToCloseTimeout:"2 minutes",retry:{maximumAttempts:0,initialInterval:"2 seconds",maximumInterval:"1 minute",backoffCoefficient:2}});
 function accepted(receipt:WorkflowReceipt,label:string):WorkflowReceipt{if(receipt.state!=="ACCEPTED")throw new Error(`${label} failed closed: ${receipt.state}`);return receipt;}
 export async function SupplierDiscoveryWorkflow(input:{sourceId:string;cursor:string|null}):Promise<WorkflowReceipt>{return activities.discoverSupplier(input)}
 export async function BuyerDiscoveryWorkflow(input:{sourceId:string;cursor:string|null}):Promise<WorkflowReceipt>{return activities.discoverBuyer(input)}

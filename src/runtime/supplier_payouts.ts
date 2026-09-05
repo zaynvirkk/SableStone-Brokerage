@@ -13,7 +13,7 @@ export class SupplierPayoutReleaseDispatcher {
     if (limit < 1 || limit > 100) throw new Error("supplier payout batch invalid");
     const rows = (
       await this.pool.query(
-        "with claimed as(select p.instruction_id from supplier_payout_controls p join trades t on t.id=p.trade_id join delivery_acceptances d on d.trade_id=t.id where p.state in('HELD','RELEASE_PENDING') and t.state in('ACCEPTED','SETTLED','RECURRING') and not exists(select 1 from counterparty_dispute_requests x where x.trade_id=t.id and x.state in('OPENED','PROVIDER_SUBMITTED','FROZEN')) order by d.accepted_at for update of p skip locked limit $1) update supplier_payout_controls p set state='RELEASE_PENDING',updated_at=now() from claimed join settlement_instructions i on i.id=p.instruction_id where p.instruction_id=claimed.instruction_id returning p.*,i.provider_reference",
+        "with claimed as(select p.instruction_id,i.provider_reference from supplier_payout_controls p join trades t on t.id=p.trade_id join delivery_acceptances d on d.trade_id=t.id join settlement_instructions i on i.id=p.instruction_id where p.state in('HELD','RELEASE_PENDING') and t.state in('ACCEPTED','SETTLED','RECURRING') and not exists(select 1 from counterparty_dispute_requests x where x.trade_id=t.id and x.state in('OPENED','PROVIDER_SUBMITTED','FROZEN')) order by d.accepted_at for update of p skip locked limit $1) update supplier_payout_controls p set state='RELEASE_PENDING',updated_at=now() from claimed where p.instruction_id=claimed.instruction_id returning p.*,claimed.provider_reference",
         [limit],
       )
     ).rows;

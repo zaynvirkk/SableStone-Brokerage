@@ -113,7 +113,7 @@ export class EconomicQuoteJobDispatcher {
       async (client) =>
         (
           await client.query(
-            "with claimed as(select j.id from economic_quote_jobs j join matches m on m.id=j.match_id where (j.state='PENDING' or(j.state='PROCESSING' and j.claimed_at<now()-interval '10 minutes')) and j.cost_kind=any($2) order by m.priority_score desc,j.created_at for update of j skip locked limit $1) update economic_quote_jobs j set state='PROCESSING',attempts=attempts+1,claimed_at=now() from claimed where j.id=claimed.id returning j.*",
+            "with redriven as(update economic_quote_jobs set state='PENDING',redrive_count=redrive_count+1,next_retry_at=null where state='DEAD_LETTER_PENDING_REDRIVE' and next_retry_at<=now()),claimed as(select j.id from economic_quote_jobs j join matches m on m.id=j.match_id where (j.state='PENDING' or(j.state='PROCESSING' and j.claimed_at<now()-interval '10 minutes')) and j.cost_kind=any($2) order by m.priority_score desc,j.created_at for update of j skip locked limit $1) update economic_quote_jobs j set state='PROCESSING',attempts=attempts+1,claimed_at=now() from claimed where j.id=claimed.id returning j.*",
             [limit, kinds],
           )
         ).rows,
@@ -228,7 +228,7 @@ export class EconomicQuoteJobDispatcher {
         completed++;
       } catch (error) {
         await this.pool.query(
-          "update economic_quote_jobs set state=case when attempts>=5 then 'FAILED' else 'PENDING' end,completed_at=case when attempts>=5 then now() else null end,claimed_at=null,last_error_code=$2 where id=$1 and state='PROCESSING'",
+          "update economic_quote_jobs set state=case when attempts>=5 then 'DEAD_LETTER_PENDING_REDRIVE' else 'PENDING' end,completed_at=null,claimed_at=null,next_retry_at=case when attempts>=5 then now()+least(interval '24 hours',interval '15 minutes'*power(2,least(redrive_count,6))) else null end,last_error_code=$2 where id=$1 and state='PROCESSING'",
           [job.id, (error as Error).name.slice(0, 100)],
         );
       }

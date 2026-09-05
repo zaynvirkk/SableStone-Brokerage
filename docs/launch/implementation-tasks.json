@@ -1,0 +1,2691 @@
+{
+  "schema_version": "sablestone-launch-task-spec-v1",
+  "plan_id": "66",
+  "baseline_commit": "15cf22272c1189b2b9a7fd881e9649b3b970cc1e",
+  "written_at": "2026-09-05",
+  "claim": "Planning specification only. No implementation, provider approval, live activation or profitability claimed.",
+  "execution_manifest": "../../../../plans/completion/66.json",
+  "tasks": [
+    {
+      "task_id": "SH-00",
+      "title": "Connected production test harness",
+      "kind": "AGENT",
+      "status": "OPEN",
+      "depends_on": [],
+      "scope": "Build isolated PostgreSQL/Temporal/Redis/object-storage and native-provider simulators; execute production commands and browser actions, not SQL seeding to advance trades.",
+      "covered_paths": [
+        "B2B/sablestone-brokerage/tests",
+        "B2B/sablestone-brokerage/scripts",
+        "B2B/sablestone-brokerage/compose.yaml"
+      ],
+      "acceptance_cases": [
+        {
+          "acceptance_id": "SH00-POSITIVE",
+          "test_name": "test_boot_real_services_and_execute_api_worker_activity",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_00.py::test_boot_real_services_and_execute_api_worker_activity"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "boot real services and execute api worker activity",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH00-NEGATIVE",
+          "test_name": "test_reject_missing_services_or_synthetic_state_walk",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_00.py::test_reject_missing_services_or_synthetic_state_walk"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "reject missing services or synthetic state walk",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH00-RECOVERY",
+          "test_name": "test_restart_database_and_workflow_without_losing_evidence",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_00.py::test_restart_database_and_workflow_without_losing_evidence"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "restart database and workflow without losing evidence",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        }
+      ],
+      "required_artifacts": [
+        "artifacts/launch/SH-00/SH00-POSITIVE.json",
+        "artifacts/launch/SH-00/SH00-NEGATIVE.json",
+        "artifacts/launch/SH-00/SH00-RECOVERY.json"
+      ],
+      "forbidden_effects": [
+        "production_network",
+        "live_outreach",
+        "live_trading",
+        "live_payment",
+        "account_creation",
+        "deployment",
+        "spend"
+      ],
+      "completion_rule": "Exact cases must execute reachable production behavior against real local infrastructure; test files/outputs are planned and are not evidence. Register source mutations for load-bearing invariants before verification."
+    },
+    {
+      "task_id": "SH-01",
+      "title": "Declared toolchain and migration lifecycle",
+      "kind": "AGENT",
+      "status": "OPEN",
+      "depends_on": [
+        "SH-00"
+      ],
+      "scope": "Pin all build tools and images; prove clean API/web/worker builds, checksums, upgrades and compatible rollbacks.",
+      "covered_paths": [
+        "B2B/sablestone-brokerage/package.json",
+        "B2B/sablestone-brokerage/package-lock.json",
+        "B2B/sablestone-brokerage/Containerfile.api",
+        "B2B/sablestone-brokerage/migrations",
+        "B2B/sablestone-brokerage/src/runtime/database.ts"
+      ],
+      "acceptance_cases": [
+        {
+          "acceptance_id": "SH01-POSITIVE",
+          "test_name": "test_clean_image_and_fresh_upgrade_migrations",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_01.py::test_clean_image_and_fresh_upgrade_migrations"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "clean image and fresh upgrade migrations",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH01-NEGATIVE",
+          "test_name": "test_reject_global_compiler_dependency_and_schema_drift",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_01.py::test_reject_global_compiler_dependency_and_schema_drift"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "reject global compiler dependency and schema drift",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH01-RECOVERY",
+          "test_name": "test_restart_interrupted_migration_and_restore_schema",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_01.py::test_restart_interrupted_migration_and_restore_schema"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "restart interrupted migration and restore schema",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        }
+      ],
+      "required_artifacts": [
+        "artifacts/launch/SH-01/SH01-POSITIVE.json",
+        "artifacts/launch/SH-01/SH01-NEGATIVE.json",
+        "artifacts/launch/SH-01/SH01-RECOVERY.json"
+      ],
+      "forbidden_effects": [
+        "production_network",
+        "live_outreach",
+        "live_trading",
+        "live_payment",
+        "account_creation",
+        "deployment",
+        "spend"
+      ],
+      "completion_rule": "Exact cases must execute reachable production behavior against real local infrastructure; test files/outputs are planned and are not evidence. Register source mutations for load-bearing invariants before verification."
+    },
+    {
+      "task_id": "SH-02",
+      "title": "Repair production SQL and typed repositories",
+      "kind": "AGENT",
+      "status": "OPEN",
+      "depends_on": [
+        "SH-01"
+      ],
+      "scope": "Repair missing trade timestamp, 14/13 settlement binding and invalid payout join; type/map money rows and exercise dynamic as well as static SQL.",
+      "covered_paths": [
+        "B2B/sablestone-brokerage/src/runtime/opportunity_priority.ts",
+        "B2B/sablestone-brokerage/src/runtime/stage_handlers.ts",
+        "B2B/sablestone-brokerage/src/runtime/supplier_payouts.ts"
+      ],
+      "acceptance_cases": [
+        {
+          "acceptance_id": "SH02-POSITIVE",
+          "test_name": "test_economics_instruction_and_payout_queries_execute",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_02.py::test_economics_instruction_and_payout_queries_execute"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "economics instruction and payout queries execute",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH02-NEGATIVE",
+          "test_name": "test_reject_shifted_provider_currency_and_money_parameters",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_02.py::test_reject_shifted_provider_currency_and_money_parameters"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "reject shifted provider currency and money parameters",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH02-RECOVERY",
+          "test_name": "test_repeat_committed_transactions_without_duplicates",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_02.py::test_repeat_committed_transactions_without_duplicates"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "repeat committed transactions without duplicates",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        }
+      ],
+      "required_artifacts": [
+        "artifacts/launch/SH-02/SH02-POSITIVE.json",
+        "artifacts/launch/SH-02/SH02-NEGATIVE.json",
+        "artifacts/launch/SH-02/SH02-RECOVERY.json"
+      ],
+      "forbidden_effects": [
+        "production_network",
+        "live_outreach",
+        "live_trading",
+        "live_payment",
+        "account_creation",
+        "deployment",
+        "spend"
+      ],
+      "completion_rule": "Exact cases must execute reachable production behavior against real local infrastructure; test files/outputs are planned and are not evidence. Register source mutations for load-bearing invariants before verification."
+    },
+    {
+      "task_id": "SH-03",
+      "title": "Canonical economics and explicit tax waterfall",
+      "kind": "AGENT",
+      "status": "OPEN",
+      "depends_on": [
+        "SH-02"
+      ],
+      "scope": "One immutable accepted quantity/price/cost/fee/tax snapshot; known payer/beneficiary for each charge; tax-inclusive/exclusive only when supported; no premature receivable or cash recognition.",
+      "covered_paths": [
+        "B2B/sablestone-brokerage/src/waterfall.ts",
+        "B2B/sablestone-brokerage/src/runtime/economic_jobs.ts",
+        "B2B/sablestone-brokerage/src/runtime/inbox_processors.ts"
+      ],
+      "acceptance_cases": [
+        {
+          "acceptance_id": "SH03-POSITIVE",
+          "test_name": "test_accepted_snapshot_matches_every_allocation",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_03.py::test_accepted_snapshot_matches_every_allocation"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "accepted snapshot matches every allocation",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH03-NEGATIVE",
+          "test_name": "test_reject_stale_costs_unknown_taxes_or_hidden_principal_exposure",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_03.py::test_reject_stale_costs_unknown_taxes_or_hidden_principal_exposure"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "reject stale costs unknown taxes or hidden principal exposure",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH03-RECOVERY",
+          "test_name": "test_retry_negotiation_acceptance_with_one_snapshot",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_03.py::test_retry_negotiation_acceptance_with_one_snapshot"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "retry negotiation acceptance with one snapshot",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        }
+      ],
+      "required_artifacts": [
+        "artifacts/launch/SH-03/SH03-POSITIVE.json",
+        "artifacts/launch/SH-03/SH03-NEGATIVE.json",
+        "artifacts/launch/SH-03/SH03-RECOVERY.json"
+      ],
+      "forbidden_effects": [
+        "production_network",
+        "live_outreach",
+        "live_trading",
+        "live_payment",
+        "account_creation",
+        "deployment",
+        "spend"
+      ],
+      "completion_rule": "Exact cases must execute reachable production behavior against real local infrastructure; test files/outputs are planned and are not evidence. Register source mutations for load-bearing invariants before verification."
+    },
+    {
+      "task_id": "SH-04",
+      "title": "Native provider event normalization",
+      "kind": "AGENT",
+      "status": "OPEN",
+      "depends_on": [
+        "SH-02"
+      ],
+      "scope": "Provider-specific authenticated decoders, canonical money/time, API verification/poll catch-up and raw provenance; never require a fictitious provider response transformation.",
+      "covered_paths": [
+        "B2B/sablestone-brokerage/src/connectors/settlement_http.ts",
+        "B2B/sablestone-brokerage/src/runtime/inbox_processors.ts"
+      ],
+      "acceptance_cases": [
+        {
+          "acceptance_id": "SH04-POSITIVE",
+          "test_name": "test_native_timestamps_minor_units_and_beneficiaries_normalize",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_04.py::test_native_timestamps_minor_units_and_beneficiaries_normalize"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "native timestamps minor units and beneficiaries normalize",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH04-NEGATIVE",
+          "test_name": "test_reject_wrong_signature_amount_currency_party_or_reference",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_04.py::test_reject_wrong_signature_amount_currency_party_or_reference"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "reject wrong signature amount currency party or reference",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH04-RECOVERY",
+          "test_name": "test_replay_duplicate_out_of_order_and_missing_webhooks",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_04.py::test_replay_duplicate_out_of_order_and_missing_webhooks"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "replay duplicate out of order and missing webhooks",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        }
+      ],
+      "required_artifacts": [
+        "artifacts/launch/SH-04/SH04-POSITIVE.json",
+        "artifacts/launch/SH-04/SH04-NEGATIVE.json",
+        "artifacts/launch/SH-04/SH04-RECOVERY.json"
+      ],
+      "forbidden_effects": [
+        "production_network",
+        "live_outreach",
+        "live_trading",
+        "live_payment",
+        "account_creation",
+        "deployment",
+        "spend"
+      ],
+      "completion_rule": "Exact cases must execute reachable production behavior against real local infrastructure; test files/outputs are planned and are not evidence. Register source mutations for load-bearing invariants before verification."
+    },
+    {
+      "task_id": "SH-05",
+      "title": "Exact entitlement and identity disclosure gates",
+      "kind": "AGENT",
+      "status": "OPEN",
+      "depends_on": [
+        "SH-03",
+        "SH-04"
+      ],
+      "scope": "Lock rights only with current exact acceptance and independently secured beneficiary/funding evidence; prove provider-hosted anonymity before exposure; reject unsupported fund-before-disclose routes.",
+      "covered_paths": [
+        "B2B/sablestone-brokerage/src/runtime/stage_handlers.ts",
+        "B2B/sablestone-brokerage/src/runtime/commands.ts",
+        "B2B/sablestone-brokerage/src/runtime/provider_parties.ts",
+        "B2B/sablestone-brokerage/src/api"
+      ],
+      "acceptance_cases": [
+        {
+          "acceptance_id": "SH05-POSITIVE",
+          "test_name": "test_current_secured_entitlement_allows_exact_disclosure",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_05.py::test_current_secured_entitlement_allows_exact_disclosure"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "current secured entitlement allows exact disclosure",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH05-NEGATIVE",
+          "test_name": "test_deny_created_order_unfunded_lc_stale_terms_and_document_leaks",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_05.py::test_deny_created_order_unfunded_lc_stale_terms_and_document_leaks"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "deny created order unfunded lc stale terms and document leaks",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH05-RECOVERY",
+          "test_name": "test_revalidate_revocation_and_competing_release_atomically",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_05.py::test_revalidate_revocation_and_competing_release_atomically"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "revalidate revocation and competing release atomically",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        }
+      ],
+      "required_artifacts": [
+        "artifacts/launch/SH-05/SH05-POSITIVE.json",
+        "artifacts/launch/SH-05/SH05-NEGATIVE.json",
+        "artifacts/launch/SH-05/SH05-RECOVERY.json"
+      ],
+      "forbidden_effects": [
+        "production_network",
+        "live_outreach",
+        "live_trading",
+        "live_payment",
+        "account_creation",
+        "deployment",
+        "spend"
+      ],
+      "completion_rule": "Exact cases must execute reachable production behavior against real local infrastructure; test files/outputs are planned and are not evidence. Register source mutations for load-bearing invariants before verification."
+    },
+    {
+      "task_id": "SH-06",
+      "title": "Cashfree complete conditional-release contract",
+      "kind": "AGENT",
+      "status": "OPEN",
+      "depends_on": [
+        "SH-03",
+        "SH-04"
+      ],
+      "scope": "Implement all native steps and evidence if genuinely supported; otherwise explicitly unavailable, including delayed delivery/dispute beyond maximum eligibility.",
+      "covered_paths": [
+        "B2B/sablestone-brokerage/src/connectors/settlement_http.ts",
+        "B2B/sablestone-brokerage/src/runtime/supplier_payouts.ts"
+      ],
+      "acceptance_cases": [
+        {
+          "acceptance_id": "SH06-POSITIVE",
+          "test_name": "test_approved_order_vendor_hold_release_and_refund_contract",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_06.py::test_approved_order_vendor_hold_release_and_refund_contract"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "approved order vendor hold release and refund contract",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH06-NEGATIVE",
+          "test_name": "test_deny_finite_delay_without_delivery_conditional_protection",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_06.py::test_deny_finite_delay_without_delivery_conditional_protection"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "deny finite delay without delivery conditional protection",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH06-RECOVERY",
+          "test_name": "test_recover_capture_split_hold_release_timeout",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_06.py::test_recover_capture_split_hold_release_timeout"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "recover capture split hold release timeout",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        }
+      ],
+      "required_artifacts": [
+        "artifacts/launch/SH-06/SH06-POSITIVE.json",
+        "artifacts/launch/SH-06/SH06-NEGATIVE.json",
+        "artifacts/launch/SH-06/SH06-RECOVERY.json"
+      ],
+      "forbidden_effects": [
+        "production_network",
+        "live_outreach",
+        "live_trading",
+        "live_payment",
+        "account_creation",
+        "deployment",
+        "spend"
+      ],
+      "completion_rule": "Exact cases must execute reachable production behavior against real local infrastructure; test files/outputs are planned and are not evidence. Register source mutations for load-bearing invariants before verification."
+    },
+    {
+      "task_id": "SH-07",
+      "title": "Razorpay complete order-transfer lifecycle",
+      "kind": "AGENT",
+      "status": "OPEN",
+      "depends_on": [
+        "SH-03",
+        "SH-04"
+      ],
+      "scope": "Prove order/capture/linked-account mapping and transfer hold, exact accepted release, native recipient fields, fees/refunds and idempotency through fetched state.",
+      "covered_paths": [
+        "B2B/sablestone-brokerage/src/connectors/settlement_http.ts",
+        "B2B/sablestone-brokerage/src/runtime/supplier_payouts.ts",
+        "B2B/sablestone-brokerage/apps/web"
+      ],
+      "acceptance_cases": [
+        {
+          "acceptance_id": "SH07-POSITIVE",
+          "test_name": "test_native_checkout_capture_held_transfer_release_reconcile",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_07.py::test_native_checkout_capture_held_transfer_release_reconcile"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "native checkout capture held transfer release reconcile",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH07-NEGATIVE",
+          "test_name": "test_deny_early_release_wrong_paise_or_unapproved_linked_account",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_07.py::test_deny_early_release_wrong_paise_or_unapproved_linked_account"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "deny early release wrong paise or unapproved linked account",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH07-RECOVERY",
+          "test_name": "test_recover_lost_transfer_response_and_late_reversal",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_07.py::test_recover_lost_transfer_response_and_late_reversal"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "recover lost transfer response and late reversal",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        }
+      ],
+      "required_artifacts": [
+        "artifacts/launch/SH-07/SH07-POSITIVE.json",
+        "artifacts/launch/SH-07/SH07-NEGATIVE.json",
+        "artifacts/launch/SH-07/SH07-RECOVERY.json"
+      ],
+      "forbidden_effects": [
+        "production_network",
+        "live_outreach",
+        "live_trading",
+        "live_payment",
+        "account_creation",
+        "deployment",
+        "spend"
+      ],
+      "completion_rule": "Exact cases must execute reachable production behavior against real local infrastructure; test files/outputs are planned and are not evidence. Register source mutations for load-bearing invariants before verification."
+    },
+    {
+      "task_id": "SH-08",
+      "title": "Escrow complete broker transaction lifecycle",
+      "kind": "AGENT",
+      "status": "OPEN",
+      "depends_on": [
+        "SH-03",
+        "SH-04"
+      ],
+      "scope": "Implement native broker items and privacy, funding directions, provider shipping/inspection/acceptance, disputes/refunds and bank references; transaction creation alone never locks money.",
+      "covered_paths": [
+        "B2B/sablestone-brokerage/src/connectors/settlement_http.ts",
+        "B2B/sablestone-brokerage/src/runtime/provider_parties.ts",
+        "B2B/sablestone-brokerage/apps/web"
+      ],
+      "acceptance_cases": [
+        {
+          "acceptance_id": "SH08-POSITIVE",
+          "test_name": "test_broker_items_private_funding_shipping_acceptance_disburse",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_08.py::test_broker_items_private_funding_shipping_acceptance_disburse"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "broker items private funding shipping acceptance disburse",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH08-NEGATIVE",
+          "test_name": "test_deny_created_not_secured_and_provider_identity_leak",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_08.py::test_deny_created_not_secured_and_provider_identity_leak"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "deny created not secured and provider identity leak",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH08-RECOVERY",
+          "test_name": "test_recover_poll_shipping_rejection_and_return_process",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_08.py::test_recover_poll_shipping_rejection_and_return_process"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "recover poll shipping rejection and return process",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        }
+      ],
+      "required_artifacts": [
+        "artifacts/launch/SH-08/SH08-POSITIVE.json",
+        "artifacts/launch/SH-08/SH08-NEGATIVE.json",
+        "artifacts/launch/SH-08/SH08-RECOVERY.json"
+      ],
+      "forbidden_effects": [
+        "production_network",
+        "live_outreach",
+        "live_trading",
+        "live_payment",
+        "account_creation",
+        "deployment",
+        "spend"
+      ],
+      "completion_rule": "Exact cases must execute reachable production behavior against real local infrastructure; test files/outputs are planned and are not evidence. Register source mutations for load-bearing invariants before verification."
+    },
+    {
+      "task_id": "SH-09",
+      "title": "Named bank escrow and bank-feed adapters",
+      "kind": "AGENT",
+      "status": "OPEN",
+      "depends_on": [
+        "SH-03",
+        "SH-04"
+      ],
+      "scope": "Select an actual approved bank contract; implement verified onboarding, beneficiary waterfall, payment instructions, conditional release/refund and bank statement ingestion; generic placeholders remain unavailable.",
+      "covered_paths": [
+        "B2B/sablestone-brokerage/src/connectors",
+        "B2B/sablestone-brokerage/src/runtime/accounting.ts",
+        "B2B/sablestone-brokerage/src/runtime/supplier_payouts.ts"
+      ],
+      "acceptance_cases": [
+        {
+          "acceptance_id": "SH09-POSITIVE",
+          "test_name": "test_versioned_bank_protocol_funding_hold_split_and_feed",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_09.py::test_versioned_bank_protocol_funding_hold_split_and_feed"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "versioned bank protocol funding hold split and feed",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH09-NEGATIVE",
+          "test_name": "test_deny_generic_acknowledgement_or_manual_bank_only_boundary",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_09.py::test_deny_generic_acknowledgement_or_manual_bank_only_boundary"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "deny generic acknowledgement or manual bank only boundary",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH09-RECOVERY",
+          "test_name": "test_recover_partial_batch_feed_gap_and_payment_unknown",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_09.py::test_recover_partial_batch_feed_gap_and_payment_unknown"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "recover partial batch feed gap and payment unknown",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        }
+      ],
+      "required_artifacts": [
+        "artifacts/launch/SH-09/SH09-POSITIVE.json",
+        "artifacts/launch/SH-09/SH09-NEGATIVE.json",
+        "artifacts/launch/SH-09/SH09-RECOVERY.json"
+      ],
+      "forbidden_effects": [
+        "production_network",
+        "live_outreach",
+        "live_trading",
+        "live_payment",
+        "account_creation",
+        "deployment",
+        "spend"
+      ],
+      "completion_rule": "Exact cases must execute reachable production behavior against real local infrastructure; test files/outputs are planned and are not evidence. Register source mutations for load-bearing invariants before verification."
+    },
+    {
+      "task_id": "SH-10",
+      "title": "LC assignment capability and truthful limitations",
+      "kind": "AGENT",
+      "status": "OPEN",
+      "depends_on": [
+        "SH-03",
+        "SH-04"
+      ],
+      "scope": "Implement only contracted bank protocol; distinguish assigned future proceeds from received secured cash; remain non-executable when strict pre-disclosure funds invariant cannot be met.",
+      "covered_paths": [
+        "B2B/sablestone-brokerage/src/connectors",
+        "B2B/sablestone-brokerage/src/runtime/stage_handlers.ts"
+      ],
+      "acceptance_cases": [
+        {
+          "acceptance_id": "SH10-POSITIVE",
+          "test_name": "test_verified_assignment_preserves_precise_legal_and_cash_state",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_10.py::test_verified_assignment_preserves_precise_legal_and_cash_state"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "verified assignment preserves precise legal and cash state",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH10-NEGATIVE",
+          "test_name": "test_deny_assignment_as_cash_secured_or_automatic_guarantee",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_10.py::test_deny_assignment_as_cash_secured_or_automatic_guarantee"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "deny assignment as cash secured or automatic guarantee",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH10-RECOVERY",
+          "test_name": "test_recover_discrepancy_expiry_and_assignment_revocation",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_10.py::test_recover_discrepancy_expiry_and_assignment_revocation"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "recover discrepancy expiry and assignment revocation",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        }
+      ],
+      "required_artifacts": [
+        "artifacts/launch/SH-10/SH10-POSITIVE.json",
+        "artifacts/launch/SH-10/SH10-NEGATIVE.json",
+        "artifacts/launch/SH-10/SH10-RECOVERY.json"
+      ],
+      "forbidden_effects": [
+        "production_network",
+        "live_outreach",
+        "live_trading",
+        "live_payment",
+        "account_creation",
+        "deployment",
+        "spend"
+      ],
+      "completion_rule": "Exact cases must execute reachable production behavior against real local infrastructure; test files/outputs are planned and are not evidence. Register source mutations for load-bearing invariants before verification."
+    },
+    {
+      "task_id": "SH-11",
+      "title": "Counterparty payment-provider onboarding",
+      "kind": "AGENT",
+      "status": "OPEN",
+      "depends_on": [
+        "SH-04"
+      ],
+      "scope": "Hosted counterparty KYC/bank verification plus authenticated callback/polling registers exact current account IDs; no system operator entering IDs per new buyer or supplier.",
+      "covered_paths": [
+        "B2B/sablestone-brokerage/src/runtime/provider_parties.ts",
+        "B2B/sablestone-brokerage/src/api/server.ts",
+        "B2B/sablestone-brokerage/src/connectors"
+      ],
+      "acceptance_cases": [
+        {
+          "acceptance_id": "SH11-POSITIVE",
+          "test_name": "test_verified_contact_completes_hosted_provider_kyb_to_bound_account",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_11.py::test_verified_contact_completes_hosted_provider_kyb_to_bound_account"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "verified contact completes hosted provider kyb to bound account",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH11-NEGATIVE",
+          "test_name": "test_deny_unverified_replaced_or_cross_org_beneficiary",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_11.py::test_deny_unverified_replaced_or_cross_org_beneficiary"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "deny unverified replaced or cross org beneficiary",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH11-RECOVERY",
+          "test_name": "test_recover_invitation_duplicate_create_and_provider_rejection",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_11.py::test_recover_invitation_duplicate_create_and_provider_rejection"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "recover invitation duplicate create and provider rejection",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        }
+      ],
+      "required_artifacts": [
+        "artifacts/launch/SH-11/SH11-POSITIVE.json",
+        "artifacts/launch/SH-11/SH11-NEGATIVE.json",
+        "artifacts/launch/SH-11/SH11-RECOVERY.json"
+      ],
+      "forbidden_effects": [
+        "production_network",
+        "live_outreach",
+        "live_trading",
+        "live_payment",
+        "account_creation",
+        "deployment",
+        "spend"
+      ],
+      "completion_rule": "Exact cases must execute reachable production behavior against real local infrastructure; test files/outputs are planned and are not evidence. Register source mutations for load-bearing invariants before verification."
+    },
+    {
+      "task_id": "SH-12",
+      "title": "Shared stock and demand allocation",
+      "kind": "AGENT",
+      "status": "OPEN",
+      "depends_on": [
+        "SH-02",
+        "SH-03"
+      ],
+      "scope": "Persistent lot and demand quantities across all competing matches; partial fulfillment, units, MOQ, supersession, late funding and cancellation policy; supplier remains owner.",
+      "covered_paths": [
+        "B2B/sablestone-brokerage/src/runtime/stage_handlers.ts",
+        "B2B/sablestone-brokerage/src/runtime/commands.ts",
+        "B2B/sablestone-brokerage/migrations"
+      ],
+      "acceptance_cases": [
+        {
+          "acceptance_id": "SH12-POSITIVE",
+          "test_name": "test_atomically_reserve_commit_consume_and_release_quantity",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_12.py::test_atomically_reserve_commit_consume_and_release_quantity"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "atomically reserve commit consume and release quantity",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH12-NEGATIVE",
+          "test_name": "test_deny_two_eighty_tonne_commitments_on_one_hundred_tonne_lot",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_12.py::test_deny_two_eighty_tonne_commitments_on_one_hundred_tonne_lot"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "deny two eighty tonne commitments on one hundred tonne lot",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH12-RECOVERY",
+          "test_name": "test_recover_late_funds_partial_fills_and_expired_reservations",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_12.py::test_recover_late_funds_partial_fills_and_expired_reservations"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "recover late funds partial fills and expired reservations",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        }
+      ],
+      "required_artifacts": [
+        "artifacts/launch/SH-12/SH12-POSITIVE.json",
+        "artifacts/launch/SH-12/SH12-NEGATIVE.json",
+        "artifacts/launch/SH-12/SH12-RECOVERY.json"
+      ],
+      "forbidden_effects": [
+        "production_network",
+        "live_outreach",
+        "live_trading",
+        "live_payment",
+        "account_creation",
+        "deployment",
+        "spend"
+      ],
+      "completion_rule": "Exact cases must execute reachable production behavior against real local infrastructure; test files/outputs are planned and are not evidence. Register source mutations for load-bearing invariants before verification."
+    },
+    {
+      "task_id": "SH-13",
+      "title": "Permanent supply/demand refresh",
+      "kind": "AGENT",
+      "status": "OPEN",
+      "depends_on": [
+        "SH-12"
+      ],
+      "scope": "Automated last-known inventory confirmation, immutable versions and recurrence-aware demand refresh; stale/expired evidence requests clarification and stops new commitments.",
+      "covered_paths": [
+        "B2B/sablestone-brokerage/src/runtime",
+        "B2B/sablestone-brokerage/src/connectors/communication_brain.ts",
+        "B2B/sablestone-brokerage/migrations"
+      ],
+      "acceptance_cases": [
+        {
+          "acceptance_id": "SH13-POSITIVE",
+          "test_name": "test_scheduled_refresh_updates_exact_lot_and_wakes_waiting_match",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_13.py::test_scheduled_refresh_updates_exact_lot_and_wakes_waiting_match"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "scheduled refresh updates exact lot and wakes waiting match",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH13-NEGATIVE",
+          "test_name": "test_deny_stale_stock_duplicate_lot_and_fabricated_current_demand",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_13.py::test_deny_stale_stock_duplicate_lot_and_fabricated_current_demand"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "deny stale stock duplicate lot and fabricated current demand",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH13-RECOVERY",
+          "test_name": "test_recover_no_reply_sold_out_and_source_version_conflict",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_13.py::test_recover_no_reply_sold_out_and_source_version_conflict"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "recover no reply sold out and source version conflict",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        }
+      ],
+      "required_artifacts": [
+        "artifacts/launch/SH-13/SH13-POSITIVE.json",
+        "artifacts/launch/SH-13/SH13-NEGATIVE.json",
+        "artifacts/launch/SH-13/SH13-RECOVERY.json"
+      ],
+      "forbidden_effects": [
+        "production_network",
+        "live_outreach",
+        "live_trading",
+        "live_payment",
+        "account_creation",
+        "deployment",
+        "spend"
+      ],
+      "completion_rule": "Exact cases must execute reachable production behavior against real local infrastructure; test files/outputs are planned and are not evidence. Register source mutations for load-bearing invariants before verification."
+    },
+    {
+      "task_id": "SH-14",
+      "title": "Lawful discovery, KYB and jurisdiction renewal",
+      "kind": "AGENT",
+      "status": "OPEN",
+      "depends_on": [
+        "SH-00"
+      ],
+      "scope": "Source permission and pagination receipts, many-lane organization profiles, dedupe, time-bounded risk checks and re-verification; public email availability is not contact permission.",
+      "covered_paths": [
+        "B2B/sablestone-brokerage/src/runtime/discovery_service.ts",
+        "B2B/sablestone-brokerage/src/runtime/kyb_jobs.ts",
+        "B2B/sablestone-brokerage/src/runtime/acquisition_outreach.ts"
+      ],
+      "acceptance_cases": [
+        {
+          "acceptance_id": "SH14-POSITIVE",
+          "test_name": "test_rediscovery_preserves_verified_evidence_or_requalifies",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_14.py::test_rediscovery_preserves_verified_evidence_or_requalifies"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "rediscovery preserves verified evidence or requalifies",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH14-NEGATIVE",
+          "test_name": "test_deny_country_defaults_wrong_registration_scope_and_suppression_bypass",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_14.py::test_deny_country_defaults_wrong_registration_scope_and_suppression_bypass"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "deny country defaults wrong registration scope and suppression bypass",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH14-RECOVERY",
+          "test_name": "test_recover_expired_kyb_completed_job_and_late_inventory",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_14.py::test_recover_expired_kyb_completed_job_and_late_inventory"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "recover expired kyb completed job and late inventory",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        }
+      ],
+      "required_artifacts": [
+        "artifacts/launch/SH-14/SH14-POSITIVE.json",
+        "artifacts/launch/SH-14/SH14-NEGATIVE.json",
+        "artifacts/launch/SH-14/SH14-RECOVERY.json"
+      ],
+      "forbidden_effects": [
+        "production_network",
+        "live_outreach",
+        "live_trading",
+        "live_payment",
+        "account_creation",
+        "deployment",
+        "spend"
+      ],
+      "completion_rule": "Exact cases must execute reachable production behavior against real local infrastructure; test files/outputs are planned and are not evidence. Register source mutations for load-bearing invariants before verification."
+    },
+    {
+      "task_id": "SH-15",
+      "title": "Gmail acquisition and conversation continuity",
+      "kind": "AGENT",
+      "status": "OPEN",
+      "depends_on": [
+        "SH-13",
+        "SH-14"
+      ],
+      "scope": "Verified company sender; production watch renewal and cursor repair; consent/suppression/quotas; no duplicate-send guesses after timeout; structured clarifications with bounded source-cited LLM extraction.",
+      "covered_paths": [
+        "B2B/sablestone-brokerage/src/connectors/gmail.ts",
+        "B2B/sablestone-brokerage/src/runtime/inbox_processors.ts",
+        "B2B/sablestone-brokerage/src/runtime/acquisition_outreach.ts"
+      ],
+      "acceptance_cases": [
+        {
+          "acceptance_id": "SH15-POSITIVE",
+          "test_name": "test_first_outreach_reply_refresh_and_exact_negotiation_thread",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_15.py::test_first_outreach_reply_refresh_and_exact_negotiation_thread"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "first outreach reply refresh and exact negotiation thread",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH15-NEGATIVE",
+          "test_name": "test_deny_wrong_thread_unsubscribe_and_unsupported_commercial_promises",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_15.py::test_deny_wrong_thread_unsubscribe_and_unsupported_commercial_promises"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "deny wrong thread unsubscribe and unsupported commercial promises",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH15-RECOVERY",
+          "test_name": "test_recover_watch_expiry_history_gap_send_timeout_and_bounce",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_15.py::test_recover_watch_expiry_history_gap_send_timeout_and_bounce"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "recover watch expiry history gap send timeout and bounce",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        }
+      ],
+      "required_artifacts": [
+        "artifacts/launch/SH-15/SH15-POSITIVE.json",
+        "artifacts/launch/SH-15/SH15-NEGATIVE.json",
+        "artifacts/launch/SH-15/SH15-RECOVERY.json"
+      ],
+      "forbidden_effects": [
+        "production_network",
+        "live_outreach",
+        "live_trading",
+        "live_payment",
+        "account_creation",
+        "deployment",
+        "spend"
+      ],
+      "completion_rule": "Exact cases must execute reachable production behavior against real local infrastructure; test files/outputs are planned and are not evidence. Register source mutations for load-bearing invariants before verification."
+    },
+    {
+      "task_id": "SH-16",
+      "title": "Document evidence, specifications and identity redaction",
+      "kind": "AGENT",
+      "status": "OPEN",
+      "depends_on": [
+        "SH-00"
+      ],
+      "scope": "COA/TDS/batch/registration evidence with states, methods/units, signer/source authenticity; originals restricted, sanitized PDF/images/metadata/links; unknown requires clarification.",
+      "covered_paths": [
+        "B2B/sablestone-brokerage/src/runtime/document_jobs.ts",
+        "B2B/sablestone-brokerage/src/connectors",
+        "B2B/sablestone-brokerage/src/runtime/object_store.ts"
+      ],
+      "acceptance_cases": [
+        {
+          "acceptance_id": "SH16-POSITIVE",
+          "test_name": "test_uploaded_source_yields_cited_rich_specs_and_safe_anonymous_copy",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_16.py::test_uploaded_source_yields_cited_rich_specs_and_safe_anonymous_copy"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "uploaded source yields cited rich specs and safe anonymous copy",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH16-NEGATIVE",
+          "test_name": "test_deny_malware_prompt_injection_ocr_leak_and_false_verification",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_16.py::test_deny_malware_prompt_injection_ocr_leak_and_false_verification"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "deny malware prompt injection ocr leak and false verification",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH16-RECOVERY",
+          "test_name": "test_recover_ocr_outage_conflicting_certificate_and_legal_hold",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_16.py::test_recover_ocr_outage_conflicting_certificate_and_legal_hold"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "recover ocr outage conflicting certificate and legal hold",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        }
+      ],
+      "required_artifacts": [
+        "artifacts/launch/SH-16/SH16-POSITIVE.json",
+        "artifacts/launch/SH-16/SH16-NEGATIVE.json",
+        "artifacts/launch/SH-16/SH16-RECOVERY.json"
+      ],
+      "forbidden_effects": [
+        "production_network",
+        "live_outreach",
+        "live_trading",
+        "live_payment",
+        "account_creation",
+        "deployment",
+        "spend"
+      ],
+      "completion_rule": "Exact cases must execute reachable production behavior against real local infrastructure; test files/outputs are planned and are not evidence. Register source mutations for load-bearing invariants before verification."
+    },
+    {
+      "task_id": "SH-17",
+      "title": "Complete counterparty actions and reminders",
+      "kind": "AGENT",
+      "status": "OPEN",
+      "depends_on": [
+        "SH-11",
+        "SH-15",
+        "SH-16"
+      ],
+      "scope": "Atomic action+notification creation; occurrence-specific idempotency; settlement/funding/contracts/shipment/acceptance/dispute/standing order executable on mobile; none requires UUID knowledge.",
+      "covered_paths": [
+        "B2B/sablestone-brokerage/src/runtime/counterparty_actions.ts",
+        "B2B/sablestone-brokerage/apps/web",
+        "B2B/sablestone-brokerage/src/api/server.ts"
+      ],
+      "acceptance_cases": [
+        {
+          "acceptance_id": "SH17-POSITIVE",
+          "test_name": "test_every_required_action_is_usable_and_reminds_per_occurrence",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_17.py::test_every_required_action_is_usable_and_reminds_per_occurrence"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "every required action is usable and reminds per occurrence",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH17-NEGATIVE",
+          "test_name": "test_deny_duplicate_reminder_wrong_org_and_unexecutable_deep_link",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_17.py::test_deny_duplicate_reminder_wrong_org_and_unexecutable_deep_link"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "deny duplicate reminder wrong org and unexecutable deep link",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH17-RECOVERY",
+          "test_name": "test_recover_crash_between_action_and_notification",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_17.py::test_recover_crash_between_action_and_notification"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "recover crash between action and notification",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        }
+      ],
+      "required_artifacts": [
+        "artifacts/launch/SH-17/SH17-POSITIVE.json",
+        "artifacts/launch/SH-17/SH17-NEGATIVE.json",
+        "artifacts/launch/SH-17/SH17-RECOVERY.json"
+      ],
+      "forbidden_effects": [
+        "production_network",
+        "live_outreach",
+        "live_trading",
+        "live_payment",
+        "account_creation",
+        "deployment",
+        "spend"
+      ],
+      "completion_rule": "Exact cases must execute reachable production behavior against real local infrastructure; test files/outputs are planned and are not evidence. Register source mutations for load-bearing invariants before verification."
+    },
+    {
+      "task_id": "SH-18",
+      "title": "Identity, authorized signers and account fraud controls",
+      "kind": "AGENT",
+      "status": "OPEN",
+      "depends_on": [
+        "SH-11",
+        "SH-14"
+      ],
+      "scope": "Pin actual IdP protocol and subject format; live revocation, tenant isolation, CSRF/session security, signer authority and out-of-band counterparty verification for beneficiary changes.",
+      "covered_paths": [
+        "B2B/sablestone-brokerage/src/runtime/identity_provisioning.ts",
+        "B2B/sablestone-brokerage/src/api",
+        "B2B/sablestone-brokerage/apps/web"
+      ],
+      "acceptance_cases": [
+        {
+          "acceptance_id": "SH18-POSITIVE",
+          "test_name": "test_invite_authenticate_sign_and_deprovision_exact_org_role",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_18.py::test_invite_authenticate_sign_and_deprovision_exact_org_role"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "invite authenticate sign and deprovision exact org role",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH18-NEGATIVE",
+          "test_name": "test_deny_revoked_principal_idp_subject_mismatch_and_bank_change_fraud",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_18.py::test_deny_revoked_principal_idp_subject_mismatch_and_bank_change_fraud"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "deny revoked principal idp subject mismatch and bank change fraud",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH18-RECOVERY",
+          "test_name": "test_recover_invite_timeout_reauth_and_key_rotation",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_18.py::test_recover_invite_timeout_reauth_and_key_rotation"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "recover invite timeout reauth and key rotation",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        }
+      ],
+      "required_artifacts": [
+        "artifacts/launch/SH-18/SH18-POSITIVE.json",
+        "artifacts/launch/SH-18/SH18-NEGATIVE.json",
+        "artifacts/launch/SH-18/SH18-RECOVERY.json"
+      ],
+      "forbidden_effects": [
+        "production_network",
+        "live_outreach",
+        "live_trading",
+        "live_payment",
+        "account_creation",
+        "deployment",
+        "spend"
+      ],
+      "completion_rule": "Exact cases must execute reachable production behavior against real local infrastructure; test files/outputs are planned and are not evidence. Register source mutations for load-bearing invariants before verification."
+    },
+    {
+      "task_id": "SH-19",
+      "title": "Relationship and transaction legal templates",
+      "kind": "AGENT",
+      "status": "OPEN",
+      "depends_on": [
+        "SH-03",
+        "SH-05",
+        "SH-18"
+      ],
+      "scope": "Enduring introduction protection separate from per-trade commission; master mandate, pre-funding obligations, disputes, tax and recurring scope; legal review remains external.",
+      "covered_paths": [
+        "B2B/sablestone-brokerage/src/runtime/agreement_automation.ts",
+        "B2B/sablestone-brokerage/src/runtime/commands.ts",
+        "B2B/sablestone-brokerage/src/runtime/recurring_execution.ts",
+        "B2B/sablestone-brokerage/migrations"
+      ],
+      "acceptance_cases": [
+        {
+          "acceptance_id": "SH19-POSITIVE",
+          "test_name": "test_current_signers_accept_exact_match_trade_and_service_terms",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_19.py::test_current_signers_accept_exact_match_trade_and_service_terms"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "current signers accept exact match trade and service terms",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH19-NEGATIVE",
+          "test_name": "test_deny_stale_commission_reused_acceptance_and_unsigned_variation",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_19.py::test_deny_stale_commission_reused_acceptance_and_unsigned_variation"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "deny stale commission reused acceptance and unsigned variation",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH19-RECOVERY",
+          "test_name": "test_recover_late_signature_template_expiry_and_preexisting_relationship_claim",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_19.py::test_recover_late_signature_template_expiry_and_preexisting_relationship_claim"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "recover late signature template expiry and preexisting relationship claim",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        }
+      ],
+      "required_artifacts": [
+        "artifacts/launch/SH-19/SH19-POSITIVE.json",
+        "artifacts/launch/SH-19/SH19-NEGATIVE.json",
+        "artifacts/launch/SH-19/SH19-RECOVERY.json"
+      ],
+      "forbidden_effects": [
+        "production_network",
+        "live_outreach",
+        "live_trading",
+        "live_payment",
+        "account_creation",
+        "deployment",
+        "spend"
+      ],
+      "completion_rule": "Exact cases must execute reachable production behavior against real local infrastructure; test files/outputs are planned and are not evidence. Register source mutations for load-bearing invariants before verification."
+    },
+    {
+      "task_id": "SH-20",
+      "title": "Carrier, inspection and delivery execution",
+      "kind": "AGENT",
+      "status": "OPEN",
+      "depends_on": [
+        "SH-16",
+        "SH-17"
+      ],
+      "scope": "Automated carrier registry/refresh and quoted external inspection; trusted tracking/webhook/email or counterparty upload fallback; acceptance deadline follows signed terms, never inferred consent.",
+      "covered_paths": [
+        "B2B/sablestone-brokerage/src/runtime/commands.ts",
+        "B2B/sablestone-brokerage/src/runtime",
+        "B2B/sablestone-brokerage/apps/web",
+        "B2B/sablestone-brokerage/migrations/0061_carrier_evidence_execution.sql"
+      ],
+      "acceptance_cases": [
+        {
+          "acceptance_id": "SH20-POSITIVE",
+          "test_name": "test_onboard_carrier_ingest_tracking_and_accept_evidenced_delivery",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_20.py::test_onboard_carrier_ingest_tracking_and_accept_evidenced_delivery"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "onboard carrier ingest tracking and accept evidenced delivery",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH20-NEGATIVE",
+          "test_name": "test_deny_forged_pod_wrong_batch_unauthorized_carrier_or_early_release",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_20.py::test_deny_forged_pod_wrong_batch_unauthorized_carrier_or_early_release"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "deny forged pod wrong batch unauthorized carrier or early release",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH20-RECOVERY",
+          "test_name": "test_recover_carrier_outage_partial_delivery_and_silence",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_20.py::test_recover_carrier_outage_partial_delivery_and_silence"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "recover carrier outage partial delivery and silence",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        }
+      ],
+      "required_artifacts": [
+        "artifacts/launch/SH-20/SH20-POSITIVE.json",
+        "artifacts/launch/SH-20/SH20-NEGATIVE.json",
+        "artifacts/launch/SH-20/SH20-RECOVERY.json"
+      ],
+      "forbidden_effects": [
+        "production_network",
+        "live_outreach",
+        "live_trading",
+        "live_payment",
+        "account_creation",
+        "deployment",
+        "spend"
+      ],
+      "completion_rule": "Exact cases must execute reachable production behavior against real local infrastructure; test files/outputs are planned and are not evidence. Register source mutations for load-bearing invariants before verification."
+    },
+    {
+      "task_id": "SH-21",
+      "title": "Disputes, refunds, returns and late reversals",
+      "kind": "AGENT",
+      "status": "OPEN",
+      "depends_on": [
+        "SH-05",
+        "SH-06",
+        "SH-07",
+        "SH-08",
+        "SH-09",
+        "SH-20"
+      ],
+      "scope": "Submit/freeze externally, preserve evidence and poll named authority; supplier-win emits closing event and authorized release; actual refund/return/net fee adjustments and immutable corrections.",
+      "covered_paths": [
+        "B2B/sablestone-brokerage/src/runtime/inbox_processors.ts",
+        "B2B/sablestone-brokerage/src/runtime/supplier_payouts.ts",
+        "B2B/sablestone-brokerage/src/runtime",
+        "B2B/sablestone-brokerage/apps/web"
+      ],
+      "acceptance_cases": [
+        {
+          "acceptance_id": "SH21-POSITIVE",
+          "test_name": "test_provider_resolution_authorizes_payout_or_actual_refund_and_closing",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_21.py::test_provider_resolution_authorizes_payout_or_actual_refund_and_closing"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "provider resolution authorizes payout or actual refund and closing",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH21-NEGATIVE",
+          "test_name": "test_deny_local_cancel_as_refund_or_buyer_acceptance_required_after_award",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_21.py::test_deny_local_cancel_as_refund_or_buyer_acceptance_required_after_award"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "deny local cancel as refund or buyer acceptance required after award",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH21-RECOVERY",
+          "test_name": "test_recover_stalled_dispute_late_reversal_and_post_settlement_adjustments",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_21.py::test_recover_stalled_dispute_late_reversal_and_post_settlement_adjustments"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "recover stalled dispute late reversal and post settlement adjustments",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        }
+      ],
+      "required_artifacts": [
+        "artifacts/launch/SH-21/SH21-POSITIVE.json",
+        "artifacts/launch/SH-21/SH21-NEGATIVE.json",
+        "artifacts/launch/SH-21/SH21-RECOVERY.json"
+      ],
+      "forbidden_effects": [
+        "production_network",
+        "live_outreach",
+        "live_trading",
+        "live_payment",
+        "account_creation",
+        "deployment",
+        "spend"
+      ],
+      "completion_rule": "Exact cases must execute reachable production behavior against real local infrastructure; test files/outputs are planned and are not evidence. Register source mutations for load-bearing invariants before verification."
+    },
+    {
+      "task_id": "SH-22",
+      "title": "Native provider/bank many-to-many reconciliation",
+      "kind": "AGENT",
+      "status": "OPEN",
+      "depends_on": [
+        "SH-04",
+        "SH-06",
+        "SH-07",
+        "SH-08",
+        "SH-09"
+      ],
+      "scope": "Provider report-to-order allocation and source residual ledger; gross/net/fees/tax/withholding explicit; exact decimal currency-specific balance, unmatched money stays unresolved.",
+      "covered_paths": [
+        "B2B/sablestone-brokerage/src/runtime/accounting.ts",
+        "B2B/sablestone-brokerage/migrations"
+      ],
+      "acceptance_cases": [
+        {
+          "acceptance_id": "SH22-POSITIVE",
+          "test_name": "test_partial_disbursement_multi_trade_batch_and_adjustments_balance",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_22.py::test_partial_disbursement_multi_trade_batch_and_adjustments_balance"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "partial disbursement multi trade batch and adjustments balance",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH22-NEGATIVE",
+          "test_name": "test_deny_double_allocation_foreign_currency_mismatch_and_invented_remainder",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_22.py::test_deny_double_allocation_foreign_currency_mismatch_and_invented_remainder"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "deny double allocation foreign currency mismatch and invented remainder",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH22-RECOVERY",
+          "test_name": "test_recover_statement_gap_reversal_and_duplicate_bank_credit",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_22.py::test_recover_statement_gap_reversal_and_duplicate_bank_credit"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "recover statement gap reversal and duplicate bank credit",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        }
+      ],
+      "required_artifacts": [
+        "artifacts/launch/SH-22/SH22-POSITIVE.json",
+        "artifacts/launch/SH-22/SH22-NEGATIVE.json",
+        "artifacts/launch/SH-22/SH22-RECOVERY.json"
+      ],
+      "forbidden_effects": [
+        "production_network",
+        "live_outreach",
+        "live_trading",
+        "live_payment",
+        "account_creation",
+        "deployment",
+        "spend"
+      ],
+      "completion_rule": "Exact cases must execute reachable production behavior against real local infrastructure; test files/outputs are planned and are not evidence. Register source mutations for load-bearing invariants before verification."
+    },
+    {
+      "task_id": "SH-23",
+      "title": "Service invoices, tax postings and compliance exports",
+      "kind": "AGENT",
+      "status": "OPEN",
+      "depends_on": [
+        "SH-03",
+        "SH-21",
+        "SH-22"
+      ],
+      "scope": "Supplier material invoice and broker service invoice remain distinct; adviser-approved GST/place-of-supply/FX/withholding/e-invoice policies, documents and accounting export; filing duties external.",
+      "covered_paths": [
+        "B2B/sablestone-brokerage/src/runtime/accounting.ts",
+        "B2B/sablestone-brokerage/src/runtime",
+        "B2B/sablestone-brokerage/apps/web"
+      ],
+      "acceptance_cases": [
+        {
+          "acceptance_id": "SH23-POSITIVE",
+          "test_name": "test_snapshot_invoice_credit_note_tax_and_bank_sums_agree",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_23.py::test_snapshot_invoice_credit_note_tax_and_bank_sums_agree"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "snapshot invoice credit note tax and bank sums agree",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH23-NEGATIVE",
+          "test_name": "test_deny_material_invoice_revenue_double_count_and_tax_in_cash_profit",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_23.py::test_deny_material_invoice_revenue_double_count_and_tax_in_cash_profit"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "deny material invoice revenue double count and tax in cash profit",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH23-RECOVERY",
+          "test_name": "test_recover_withholding_partial_payments_and_period_correction",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_23.py::test_recover_withholding_partial_payments_and_period_correction"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "recover withholding partial payments and period correction",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        }
+      ],
+      "required_artifacts": [
+        "artifacts/launch/SH-23/SH23-POSITIVE.json",
+        "artifacts/launch/SH-23/SH23-NEGATIVE.json",
+        "artifacts/launch/SH-23/SH23-RECOVERY.json"
+      ],
+      "forbidden_effects": [
+        "production_network",
+        "live_outreach",
+        "live_trading",
+        "live_payment",
+        "account_creation",
+        "deployment",
+        "spend"
+      ],
+      "completion_rule": "Exact cases must execute reachable production behavior against real local infrastructure; test files/outputs are planned and are not evidence. Register source mutations for load-bearing invariants before verification."
+    },
+    {
+      "task_id": "SH-24",
+      "title": "First order to durable standing mandate",
+      "kind": "AGENT",
+      "status": "OPEN",
+      "depends_on": [
+        "SH-17",
+        "SH-19",
+        "SH-22"
+      ],
+      "scope": "Convert one-off demand via explicit immutable mandate, emit/resume deterministic scheduler on create/change/revoke, fresh demand per due cycle; signed cadence/quantity/price/currency bounds.",
+      "covered_paths": [
+        "B2B/sablestone-brokerage/src/runtime/commands.ts",
+        "B2B/sablestone-brokerage/src/runtime/inbox_processors.ts",
+        "B2B/sablestone-brokerage/src/workflows/production.ts",
+        "B2B/sablestone-brokerage/src/runtime/supervisor.ts"
+      ],
+      "acceptance_cases": [
+        {
+          "acceptance_id": "SH24-POSITIVE",
+          "test_name": "test_late_portal_authorization_of_one_off_demand_schedules_second_trade",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_24.py::test_late_portal_authorization_of_one_off_demand_schedules_second_trade"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "late portal authorization of one off demand schedules second trade",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH24-NEGATIVE",
+          "test_name": "test_deny_unapproved_renewal_old_fee_lock_and_stale_rfq_dependency",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_24.py::test_deny_unapproved_renewal_old_fee_lock_and_stale_rfq_dependency"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "deny unapproved renewal old fee lock and stale rfq dependency",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH24-RECOVERY",
+          "test_name": "test_recover_sixty_and_three_sixty_five_day_timers_after_restart",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_24.py::test_recover_sixty_and_three_sixty_five_day_timers_after_restart"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "recover sixty and three sixty five day timers after restart",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        }
+      ],
+      "required_artifacts": [
+        "artifacts/launch/SH-24/SH24-POSITIVE.json",
+        "artifacts/launch/SH-24/SH24-NEGATIVE.json",
+        "artifacts/launch/SH-24/SH24-RECOVERY.json"
+      ],
+      "forbidden_effects": [
+        "production_network",
+        "live_outreach",
+        "live_trading",
+        "live_payment",
+        "account_creation",
+        "deployment",
+        "spend"
+      ],
+      "completion_rule": "Exact cases must execute reachable production behavior against real local infrastructure; test files/outputs are planned and are not evidence. Register source mutations for load-bearing invariants before verification."
+    },
+    {
+      "task_id": "SH-25",
+      "title": "Recurring commitment, tolerance and substitution",
+      "kind": "AGENT",
+      "status": "OPEN",
+      "depends_on": [
+        "SH-12",
+        "SH-19",
+        "SH-24"
+      ],
+      "scope": "Atomic RESERVED/COMMITTED/CONSUMED/RELEASED with independent sweeper, cancellation deadlines, partial quantities and EV-ranked authorized suppliers; no expansion of buyer authority.",
+      "covered_paths": [
+        "B2B/sablestone-brokerage/src/runtime/recurring_execution.ts",
+        "B2B/sablestone-brokerage/src/runtime/stage_handlers.ts",
+        "B2B/sablestone-brokerage/migrations"
+      ],
+      "acceptance_cases": [
+        {
+          "acceptance_id": "SH25-POSITIVE",
+          "test_name": "test_fresh_fee_lock_consumes_committed_cycle_and_schedules_next",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_25.py::test_fresh_fee_lock_consumes_committed_cycle_and_schedules_next"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "fresh fee lock consumes committed cycle and schedules next",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH25-NEGATIVE",
+          "test_name": "test_deny_expired_authority_double_renewal_or_old_supplier_acceptance",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_25.py::test_deny_expired_authority_double_renewal_or_old_supplier_acceptance"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "deny expired authority double renewal or old supplier acceptance",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH25-RECOVERY",
+          "test_name": "test_recover_above_ceiling_decline_substitution_and_late_funding",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_25.py::test_recover_above_ceiling_decline_substitution_and_late_funding"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "recover above ceiling decline substitution and late funding",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        }
+      ],
+      "required_artifacts": [
+        "artifacts/launch/SH-25/SH25-POSITIVE.json",
+        "artifacts/launch/SH-25/SH25-NEGATIVE.json",
+        "artifacts/launch/SH-25/SH25-RECOVERY.json"
+      ],
+      "forbidden_effects": [
+        "production_network",
+        "live_outreach",
+        "live_trading",
+        "live_payment",
+        "account_creation",
+        "deployment",
+        "spend"
+      ],
+      "completion_rule": "Exact cases must execute reachable production behavior against real local infrastructure; test files/outputs are planned and are not evidence. Register source mutations for load-bearing invariants before verification."
+    },
+    {
+      "task_id": "SH-26",
+      "title": "End-to-end durable work and workflow recovery",
+      "kind": "AGENT",
+      "status": "OPEN",
+      "depends_on": [
+        "SH-00",
+        "SH-02"
+      ],
+      "scope": "Classify transient/permanent/unknown; durable fair redrive for every critical queue; reconcile failed started workflows to durable obligations; retries stop commercial expiry, not custody resolution.",
+      "covered_paths": [
+        "B2B/sablestone-brokerage/src/runtime/database.ts",
+        "B2B/sablestone-brokerage/src/runtime/supervisor.ts",
+        "B2B/sablestone-brokerage/src/workflows/production.ts",
+        "B2B/sablestone-brokerage/src/runtime/document_jobs.ts",
+        "B2B/sablestone-brokerage/src/runtime/enrichment_jobs.ts"
+      ],
+      "acceptance_cases": [
+        {
+          "acceptance_id": "SH26-POSITIVE",
+          "test_name": "test_valid_started_work_resumes_after_prolonged_outage",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_26.py::test_valid_started_work_resumes_after_prolonged_outage"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "valid started work resumes after prolonged outage",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH26-NEGATIVE",
+          "test_name": "test_deny_silent_terminal_failure_unbounded_spend_and_poison_starvation",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_26.py::test_deny_silent_terminal_failure_unbounded_spend_and_poison_starvation"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "deny silent terminal failure unbounded spend and poison starvation",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH26-RECOVERY",
+          "test_name": "test_recover_outbox_publish_then_workflow_failure_without_manual_restart",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_26.py::test_recover_outbox_publish_then_workflow_failure_without_manual_restart"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "recover outbox publish then workflow failure without manual restart",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        }
+      ],
+      "required_artifacts": [
+        "artifacts/launch/SH-26/SH26-POSITIVE.json",
+        "artifacts/launch/SH-26/SH26-NEGATIVE.json",
+        "artifacts/launch/SH-26/SH26-RECOVERY.json"
+      ],
+      "forbidden_effects": [
+        "production_network",
+        "live_outreach",
+        "live_trading",
+        "live_payment",
+        "account_creation",
+        "deployment",
+        "spend"
+      ],
+      "completion_rule": "Exact cases must execute reachable production behavior against real local infrastructure; test files/outputs are planned and are not evidence. Register source mutations for load-bearing invariants before verification."
+    },
+    {
+      "task_id": "SH-27",
+      "title": "Fair scheduling, reservations and external-cost budgets",
+      "kind": "AGENT",
+      "status": "OPEN",
+      "depends_on": [
+        "SH-12",
+        "SH-14",
+        "SH-26"
+      ],
+      "scope": "Per-service/trade/day/lifetime budget reservations, concurrency limits, paid-quote caps, exploration cap, aging priority and no ready-job starvation; known fees from actual provider tariffs.",
+      "covered_paths": [
+        "B2B/sablestone-brokerage/src/runtime",
+        "B2B/sablestone-brokerage/src/pricing.ts",
+        "B2B/sablestone-brokerage/src/acquisition.ts"
+      ],
+      "acceptance_cases": [
+        {
+          "acceptance_id": "SH27-POSITIVE",
+          "test_name": "test_bounded_full_recall_prioritizes_net_ev_with_fair_waiting_lanes",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_27.py::test_bounded_full_recall_prioritizes_net_ev_with_fair_waiting_lanes"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "bounded full recall prioritizes net ev with fair waiting lanes",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH27-NEGATIVE",
+          "test_name": "test_deny_lifetime_budget_overspend_and_unfunded_buyer_ceiling_quotes",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_27.py::test_deny_lifetime_budget_overspend_and_unfunded_buyer_ceiling_quotes"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "deny lifetime budget overspend and unfunded buyer ceiling quotes",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH27-RECOVERY",
+          "test_name": "test_recover_throttling_quote_timeout_and_unknown_billable_outcome",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_27.py::test_recover_throttling_quote_timeout_and_unknown_billable_outcome"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "recover throttling quote timeout and unknown billable outcome",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        }
+      ],
+      "required_artifacts": [
+        "artifacts/launch/SH-27/SH27-POSITIVE.json",
+        "artifacts/launch/SH-27/SH27-NEGATIVE.json",
+        "artifacts/launch/SH-27/SH27-RECOVERY.json"
+      ],
+      "forbidden_effects": [
+        "production_network",
+        "live_outreach",
+        "live_trading",
+        "live_payment",
+        "account_creation",
+        "deployment",
+        "spend"
+      ],
+      "completion_rule": "Exact cases must execute reachable production behavior against real local infrastructure; test files/outputs are planned and are not evidence. Register source mutations for load-bearing invariants before verification."
+    },
+    {
+      "task_id": "SH-28",
+      "title": "Security, privacy, retention and secrets",
+      "kind": "AGENT",
+      "status": "OPEN",
+      "depends_on": [
+        "SH-16",
+        "SH-18",
+        "SH-26"
+      ],
+      "scope": "Threat model all ingress/LLM/tool boundaries, data minimization, legal hold versus deletion, object version IDs, no runtime delete privileges, backups, SBOM and current dependency review.",
+      "covered_paths": [
+        "B2B/sablestone-brokerage/src/api",
+        "B2B/sablestone-brokerage/src/runtime",
+        "B2B/sablestone-brokerage/src/connectors",
+        "B2B/sablestone-brokerage/apps/web",
+        "B2B/sablestone-brokerage/deploy"
+      ],
+      "acceptance_cases": [
+        {
+          "acceptance_id": "SH28-POSITIVE",
+          "test_name": "test_least_privilege_tenant_retention_and_key_rotation_controls",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_28.py::test_least_privilege_tenant_retention_and_key_rotation_controls"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "least privilege tenant retention and key rotation controls",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH28-NEGATIVE",
+          "test_name": "test_deny_ssrf_cross_org_read_replay_secrets_leak_or_unsafe_upload",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_28.py::test_deny_ssrf_cross_org_read_replay_secrets_leak_or_unsafe_upload"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "deny ssrf cross org read replay secrets leak or unsafe upload",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH28-RECOVERY",
+          "test_name": "test_recover_key_compromise_data_request_and_processor_outage",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_28.py::test_recover_key_compromise_data_request_and_processor_outage"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "recover key compromise data request and processor outage",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        }
+      ],
+      "required_artifacts": [
+        "artifacts/launch/SH-28/SH28-POSITIVE.json",
+        "artifacts/launch/SH-28/SH28-NEGATIVE.json",
+        "artifacts/launch/SH-28/SH28-RECOVERY.json"
+      ],
+      "forbidden_effects": [
+        "production_network",
+        "live_outreach",
+        "live_trading",
+        "live_payment",
+        "account_creation",
+        "deployment",
+        "spend"
+      ],
+      "completion_rule": "Exact cases must execute reachable production behavior against real local infrastructure; test files/outputs are planned and are not evidence. Register source mutations for load-bearing invariants before verification."
+    },
+    {
+      "task_id": "SH-29",
+      "title": "Operational recovery, safe wind-down and authority expiry",
+      "kind": "AGENT",
+      "status": "OPEN",
+      "depends_on": [
+        "SH-21",
+        "SH-22",
+        "SH-26",
+        "SH-27",
+        "SH-28"
+      ],
+      "scope": "Executable health policies, timed obligation reconciliation and scoped resume; independently authorized WIND_DOWN keeps evidence/payment recovery alive; provider/CA/security support escalation with contracts.",
+      "covered_paths": [
+        "B2B/sablestone-brokerage/src/runtime",
+        "B2B/sablestone-brokerage/scripts/start-production-worker.mjs",
+        "B2B/sablestone-brokerage/src/workflows"
+      ],
+      "acceptance_cases": [
+        {
+          "acceptance_id": "SH29-POSITIVE",
+          "test_name": "test_health_fault_freezes_affected_risk_but_preserves_money_resolution",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_29.py::test_health_fault_freezes_affected_risk_but_preserves_money_resolution"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "health fault freezes affected risk but preserves money resolution",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH29-NEGATIVE",
+          "test_name": "test_deny_all_new_business_when_authority_expired_and_never_fake_reapproval",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_29.py::test_deny_all_new_business_when_authority_expired_and_never_fake_reapproval"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "deny all new business when authority expired and never fake reapproval",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH29-RECOVERY",
+          "test_name": "test_recover_provider_shutdown_backlog_budget_exhaustion_and_new_credential",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_29.py::test_recover_provider_shutdown_backlog_budget_exhaustion_and_new_credential"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "recover provider shutdown backlog budget exhaustion and new credential",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        }
+      ],
+      "required_artifacts": [
+        "artifacts/launch/SH-29/SH29-POSITIVE.json",
+        "artifacts/launch/SH-29/SH29-NEGATIVE.json",
+        "artifacts/launch/SH-29/SH29-RECOVERY.json"
+      ],
+      "forbidden_effects": [
+        "production_network",
+        "live_outreach",
+        "live_trading",
+        "live_payment",
+        "account_creation",
+        "deployment",
+        "spend"
+      ],
+      "completion_rule": "Exact cases must execute reachable production behavior against real local infrastructure; test files/outputs are planned and are not evidence. Register source mutations for load-bearing invariants before verification."
+    },
+    {
+      "task_id": "SH-30",
+      "title": "Real profit measurement and bounded learning",
+      "kind": "AGENT",
+      "status": "OPEN",
+      "depends_on": [
+        "SH-03",
+        "SH-13",
+        "SH-22",
+        "SH-23",
+        "SH-25",
+        "SH-27"
+      ],
+      "scope": "Separate receipts, revenue, taxes, refunds, variable costs, fixed overhead and distributable cash; disjoint evidence/calibration/backtesting, conservative cost priors and safe baseline reversion.",
+      "covered_paths": [
+        "B2B/sablestone-brokerage/src/runtime/opportunity_priority.ts",
+        "B2B/sablestone-brokerage/src/pricing.ts",
+        "B2B/sablestone-brokerage/src/acquisition.ts",
+        "B2B/sablestone-brokerage/src/runtime"
+      ],
+      "acceptance_cases": [
+        {
+          "acceptance_id": "SH30-POSITIVE",
+          "test_name": "test_net_cash_contribution_and_repeat_outcomes_drive_supported_ev",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_30.py::test_net_cash_contribution_and_repeat_outcomes_drive_supported_ev"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "net cash contribution and repeat outcomes drive supported ev",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH30-NEGATIVE",
+          "test_name": "test_deny_projected_ltv_as_revenue_tax_as_profit_or_duplicate_probability",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_30.py::test_deny_projected_ltv_as_revenue_tax_as_profit_or_duplicate_probability"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "deny projected ltv as revenue tax as profit or duplicate probability",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH30-RECOVERY",
+          "test_name": "test_recover_loss_lane_zero_response_and_prediction_drift",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_30.py::test_recover_loss_lane_zero_response_and_prediction_drift"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "recover loss lane zero response and prediction drift",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        }
+      ],
+      "required_artifacts": [
+        "artifacts/launch/SH-30/SH30-POSITIVE.json",
+        "artifacts/launch/SH-30/SH30-NEGATIVE.json",
+        "artifacts/launch/SH-30/SH30-RECOVERY.json"
+      ],
+      "forbidden_effects": [
+        "production_network",
+        "live_outreach",
+        "live_trading",
+        "live_payment",
+        "account_creation",
+        "deployment",
+        "spend"
+      ],
+      "completion_rule": "Exact cases must execute reachable production behavior against real local infrastructure; test files/outputs are planned and are not evidence. Register source mutations for load-bearing invariants before verification."
+    },
+    {
+      "task_id": "SH-31",
+      "title": "Railway production deployment contract",
+      "kind": "AGENT",
+      "status": "OPEN",
+      "depends_on": [
+        "SH-01",
+        "SH-28",
+        "SH-29"
+      ],
+      "scope": "Reproducible API/web/workers on Railway, PostgreSQL/PITR, managed Temporal or proven self-hosting, Redis and WORM-capable external object storage; one typed configuration and current region/SLA/cost evidence.",
+      "covered_paths": [
+        "B2B/sablestone-brokerage/Containerfile.api",
+        "B2B/sablestone-brokerage/apps/web/Containerfile",
+        "B2B/sablestone-brokerage/deploy",
+        "B2B/sablestone-brokerage/scripts",
+        "B2B/sablestone-brokerage/src/runtime/bootstrap.ts"
+      ],
+      "acceptance_cases": [
+        {
+          "acceptance_id": "SH31-POSITIVE",
+          "test_name": "test_clean_configured_api_web_workers_connect_to_private_services",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_31.py::test_clean_configured_api_web_workers_connect_to_private_services"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "clean configured api web workers connect to private services",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH31-NEGATIVE",
+          "test_name": "test_deny_missing_tool_secret_migration_or_unsupported_storage_capability",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_31.py::test_deny_missing_tool_secret_migration_or_unsupported_storage_capability"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "deny missing tool secret migration or unsupported storage capability",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH31-RECOVERY",
+          "test_name": "test_recover_rolling_deploy_health_failure_and_schema_compatible_rollback",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_31.py::test_recover_rolling_deploy_health_failure_and_schema_compatible_rollback"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "recover rolling deploy health failure and schema compatible rollback",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        }
+      ],
+      "required_artifacts": [
+        "artifacts/launch/SH-31/SH31-POSITIVE.json",
+        "artifacts/launch/SH-31/SH31-NEGATIVE.json",
+        "artifacts/launch/SH-31/SH31-RECOVERY.json"
+      ],
+      "forbidden_effects": [
+        "production_network",
+        "live_outreach",
+        "live_trading",
+        "live_payment",
+        "account_creation",
+        "deployment",
+        "spend"
+      ],
+      "completion_rule": "Exact cases must execute reachable production behavior against real local infrastructure; test files/outputs are planned and are not evidence. Register source mutations for load-bearing invariants before verification."
+    },
+    {
+      "task_id": "SH-32",
+      "title": "Backup, restore and provider replay",
+      "kind": "AGENT",
+      "status": "OPEN",
+      "depends_on": [
+        "SH-22",
+        "SH-26",
+        "SH-31"
+      ],
+      "scope": "DB+object versions+key access+workflow history recovery, off-account encrypted copies, consistent checkpoints, PITR and no live effects in drills; measured RPO/RTO.",
+      "covered_paths": [
+        "B2B/sablestone-brokerage/src/runtime/backup.ts",
+        "B2B/sablestone-brokerage/scripts",
+        "B2B/sablestone-brokerage/deploy"
+      ],
+      "acceptance_cases": [
+        {
+          "acceptance_id": "SH32-POSITIVE",
+          "test_name": "test_restore_isolated_copy_and_replay_to_exact_money_state",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_32.py::test_restore_isolated_copy_and_replay_to_exact_money_state"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "restore isolated copy and replay to exact money state",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH32-NEGATIVE",
+          "test_name": "test_deny_backup_only_success_without_restore_and_duplicate_disbursement",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_32.py::test_deny_backup_only_success_without_restore_and_duplicate_disbursement"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "deny backup only success without restore and duplicate disbursement",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH32-RECOVERY",
+          "test_name": "test_recover_database_loss_provider_gap_and_temporal_history_replay",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_32.py::test_recover_database_loss_provider_gap_and_temporal_history_replay"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "recover database loss provider gap and temporal history replay",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        }
+      ],
+      "required_artifacts": [
+        "artifacts/launch/SH-32/SH32-POSITIVE.json",
+        "artifacts/launch/SH-32/SH32-NEGATIVE.json",
+        "artifacts/launch/SH-32/SH32-RECOVERY.json"
+      ],
+      "forbidden_effects": [
+        "production_network",
+        "live_outreach",
+        "live_trading",
+        "live_payment",
+        "account_creation",
+        "deployment",
+        "spend"
+      ],
+      "completion_rule": "Exact cases must execute reachable production behavior against real local infrastructure; test files/outputs are planned and are not evidence. Register source mutations for load-bearing invariants before verification."
+    },
+    {
+      "task_id": "SH-33",
+      "title": "Complete adversarial production journey",
+      "kind": "AGENT",
+      "status": "OPEN",
+      "depends_on": [
+        "SH-00",
+        "SH-01",
+        "SH-02",
+        "SH-03",
+        "SH-04",
+        "SH-05",
+        "SH-06",
+        "SH-07",
+        "SH-08",
+        "SH-09",
+        "SH-10",
+        "SH-11",
+        "SH-12",
+        "SH-13",
+        "SH-14",
+        "SH-15",
+        "SH-16",
+        "SH-17",
+        "SH-18",
+        "SH-19",
+        "SH-20",
+        "SH-21",
+        "SH-22",
+        "SH-23",
+        "SH-24",
+        "SH-25",
+        "SH-26",
+        "SH-27",
+        "SH-28",
+        "SH-29",
+        "SH-30",
+        "SH-31",
+        "SH-32"
+      ],
+      "scope": "Run every exact prior case plus connected native-schema local journeys, concurrency/load/property tests and real production-source mutations; document permitted unsupported rails, no fake live receipts.",
+      "covered_paths": [
+        "B2B/sablestone-brokerage/src",
+        "B2B/sablestone-brokerage/apps/web",
+        "B2B/sablestone-brokerage/migrations",
+        "B2B/sablestone-brokerage/scripts",
+        "B2B/sablestone-brokerage/tests"
+      ],
+      "acceptance_cases": [
+        {
+          "acceptance_id": "SH33-POSITIVE",
+          "test_name": "test_connected_first_and_recurring_domestic_international_journeys",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_33.py::test_connected_first_and_recurring_domestic_international_journeys"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "connected first and recurring domestic international journeys",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH33-NEGATIVE",
+          "test_name": "test_deny_each_money_identity_quantity_and_authority_invariant_mutant",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_33.py::test_deny_each_money_identity_quantity_and_authority_invariant_mutant"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "deny each money identity quantity and authority invariant mutant",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH33-RECOVERY",
+          "test_name": "test_recover_concurrent_trades_disputes_restarts_and_every_required_action",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_33.py::test_recover_concurrent_trades_disputes_restarts_and_every_required_action"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "recover concurrent trades disputes restarts and every required action",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        }
+      ],
+      "required_artifacts": [
+        "artifacts/launch/SH-33/SH33-POSITIVE.json",
+        "artifacts/launch/SH-33/SH33-NEGATIVE.json",
+        "artifacts/launch/SH-33/SH33-RECOVERY.json"
+      ],
+      "forbidden_effects": [
+        "production_network",
+        "live_outreach",
+        "live_trading",
+        "live_payment",
+        "account_creation",
+        "deployment",
+        "spend"
+      ],
+      "completion_rule": "Exact cases must execute reachable production behavior against real local infrastructure; test files/outputs are planned and are not evidence. Register source mutations for load-bearing invariants before verification."
+    },
+    {
+      "task_id": "SH-34",
+      "title": "Exact release and launch evidence binding",
+      "kind": "AGENT",
+      "status": "OPEN",
+      "depends_on": [
+        "SH-33"
+      ],
+      "scope": "One externally keyed signed release/report with execution artifacts and coverage; local/alternative CI permitted, GitHub Actions remains absent; business claim requires later real gate evidence.",
+      "covered_paths": [
+        "B2B/sablestone-brokerage/scripts",
+        "B2B/sablestone-brokerage/releases",
+        "B2B/sablestone-brokerage/release-trust",
+        "B2B/sablestone-brokerage/docs/readiness",
+        "B2B/sablestone-brokerage/docs/launch"
+      ],
+      "acceptance_cases": [
+        {
+          "acceptance_id": "SH34-POSITIVE",
+          "test_name": "test_clean_exact_source_images_commands_and_trusted_signature_match",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_34.py::test_clean_exact_source_images_commands_and_trusted_signature_match"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "clean exact source images commands and trusted signature match",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH34-NEGATIVE",
+          "test_name": "test_deny_stale_report_mutated_source_missing_case_and_false_live_claim",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_34.py::test_deny_stale_report_mutated_source_missing_case_and_false_live_claim"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "deny stale report mutated source missing case and false live claim",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        },
+        {
+          "acceptance_id": "SH34-RECOVERY",
+          "test_name": "test_recover_rollback_and_reverify_changed_scope",
+          "command": [
+            "python3",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/acceptance/launch/test_sh_34.py::test_recover_rollback_and_reverify_changed_scope"
+          ],
+          "cwd": "B2B/sablestone-brokerage",
+          "specification": "recover rollback and reverify changed scope",
+          "status": "PLANNED_NOT_IMPLEMENTED"
+        }
+      ],
+      "required_artifacts": [
+        "artifacts/launch/SH-34/SH34-POSITIVE.json",
+        "artifacts/launch/SH-34/SH34-NEGATIVE.json",
+        "artifacts/launch/SH-34/SH34-RECOVERY.json"
+      ],
+      "forbidden_effects": [
+        "production_network",
+        "live_outreach",
+        "live_trading",
+        "live_payment",
+        "account_creation",
+        "deployment",
+        "spend"
+      ],
+      "completion_rule": "Exact cases must execute reachable production behavior against real local infrastructure; test files/outputs are planned and are not evidence. Register source mutations for load-bearing invariants before verification."
+    }
+  ]
+}

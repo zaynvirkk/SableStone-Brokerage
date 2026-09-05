@@ -3,6 +3,7 @@ import type { Pool } from "pg";
 import { inTransaction, TransactionalOutboxRepository } from "./database.js";
 import { compareDecimalStrings } from "../domain.js";
 import { decimal } from "../money.js";
+import { transitionInventory } from "./inventory_allocations.js";
 export class ProductionCommandService {
   readonly outbox: TransactionalOutboxRepository;
   constructor(readonly pool: Pool) {
@@ -529,6 +530,7 @@ export class ProductionCommandService {
       );
       if ((updated.rowCount ?? 0) !== 1)
         throw new Error("delivery acceptance conflict");
+      await transitionInventory(client, input.tradeId, "COMMITTED", "CONSUMED");
       await this.outbox.append(client, {
         id: randomUUID(),
         aggregateType: "TRADE",

@@ -23,12 +23,13 @@ import {
   type NegotiationPolicy,
   type NegotiationSession,
 } from "../negotiation.js";
-import { addDecimal, decimal, subtractDecimal } from "../money.js";
+import { addDecimal, decimal, divideDecimal, subtractDecimal } from "../money.js";
 import { compareDecimalStrings } from "../domain.js";
 import { settlementInstructionAcceptanceDigest } from "./commands.js";
 import { assertCurrentAcquisitionOutreachPolicy } from "./outreach_policy.js";
 import { refreshMatchPriority } from "./opportunity_priority.js";
 import { protectApprovedRecurringMatch,releaseRecurringReservation } from "./recurring_execution.js";
+import { transitionInventory, releaseInventory } from "./inventory_allocations.js";
 
 function path(value: unknown, dotted: string | undefined): unknown {
   return dotted
@@ -45,6 +46,51 @@ function text(value: unknown, label: string): string {
   if (typeof value !== "string" || !value.trim())
     throw new Error(`${label} missing`);
   return value;
+}
+
+/** Normalize native provider time values without allowing locale-dependent parsing. */
+export function normalizeProviderOccurredAt(value: unknown): string {
+  if (typeof value === "number") {
+    if (!Number.isFinite(value) || value <= 0) throw new Error("provider occurred_at invalid");
+    const milliseconds = value < 1_000_000_000_000 ? value * 1000 : value;
+    const date = new Date(milliseconds);
+    if (!Number.isFinite(date.getTime())) throw new Error("provider occurred_at invalid");
+    return date.toISOString();
+  }
+  if (typeof value !== "string" || !value.trim())
+    throw new Error("provider occurred_at missing");
+  const textValue = value.trim();
+  if (/^\d+(?:\.\d+)?$/.test(textValue)) {
+    const numeric = Number(textValue);
+    if (!Number.isFinite(numeric) || numeric <= 0)
+      throw new Error("provider occurred_at invalid");
+    const milliseconds = numeric < 1_000_000_000_000 ? numeric * 1000 : numeric;
+    const date = new Date(milliseconds);
+    if (!Number.isFinite(date.getTime()))
+      throw new Error("provider occurred_at invalid");
+    return date.toISOString();
+  }
+  const parsed = Date.parse(textValue);
+  if (!Number.isFinite(parsed)) throw new Error("provider occurred_at invalid");
+  return new Date(parsed).toISOString();
+}
+
+/** Provider-native money is normalized to the instruction's major-unit Decimal. */
+export function normalizeProviderAmount(
+  provider: string,
+  currency: string,
+  value: unknown,
+): string {
+  if (typeof value !== "string" && typeof value !== "number")
+    throw new Error("provider amount missing");
+  const raw = decimal(String(value));
+  if (compareDecimalStrings(raw, decimal("0")) <= 0)
+    throw new Error("provider amount invalid");
+  // Razorpay sends all INR webhook amounts in paise. Other configured rails
+  // send the major currency unit and must not be silently rescaled.
+  if (provider === "RAZORPAY_ROUTE" && currency.toUpperCase() === "INR")
+    return divideDecimal(raw, decimal("100"), 2);
+  return raw;
 }
 
 export function assertProviderEntitlementEvidence(input: {
@@ -749,11 +795,10 @@ async function processSettlementEvent(
       path(decoded, config.webhookProviderReferencePath),
       "provider reference",
     ),
-    occurredAt = text(
+    occurredAt = normalizeProviderOccurredAt(
       path(decoded, config.webhookOccurredAtPath),
-      "provider occurred_at",
     );
-  if (!mappedType || Number.isNaN(Date.parse(occurredAt)))
+  if (!mappedType)
     throw new Error("unsupported settlement event");
   const instruction = (
     await pool.query(
@@ -765,8 +810,6 @@ async function processSettlementEvent(
   const rawAmount = config.webhookAmountPath
       ? path(decoded, config.webhookAmountPath)
       : null,
-    amount =
-      rawAmount === null || rawAmount === undefined ? null : String(rawAmount),
     rawCurrency = config.webhookCurrencyPath
       ? path(decoded, config.webhookCurrencyPath)
       : null,
@@ -774,6 +817,10 @@ async function processSettlementEvent(
       rawCurrency === null || rawCurrency === undefined
         ? null
         : String(rawCurrency).toUpperCase(),
+    amount =
+      rawAmount === null || rawAmount === undefined || !currency
+        ? null
+        : normalizeProviderAmount(adapter.provider, currency, rawAmount),
     rawBank = config.webhookBankReferencePath
       ? path(decoded, config.webhookBankReferencePath)
       : null,
@@ -1098,6 +1145,7 @@ async function processSettlementEvent(
       );
       if ((updated.rowCount ?? 0) !== 1)
         throw new Error("funding transition conflict");
+      await transitionInventory(client, instruction.trade_id, "RESERVED", "COMMITTED");
       await outbox.append(client, {
         id: randomUUID(),
         aggregateType: "TRADE",
@@ -1117,6 +1165,7 @@ async function processSettlementEvent(
         "update trades set state='SETTLEMENT_FAILED',updated_at=now() where id=$1 and state not in('SETTLED','RECURRING','SETTLEMENT_FAILED')",
         [instruction.trade_id],
       );
+      await releaseInventory(client, instruction.trade_id);
       const released=(await client.query("update standing_renewal_reservations set state='RELEASED',released_at=now() where trade_id=$1 and state='COMMITTED' returning demand_id,demand_version",[instruction.trade_id])).rows[0];
       if(released)await client.query("update standing_demand_authorizations set renewals_reserved=greatest(renewals_reserved-1,0) where demand_id=$1 and demand_version=$2",[released.demand_id,released.demand_version]);
     } else if (
@@ -1135,6 +1184,7 @@ async function processSettlementEvent(
     } else if(["DISPUTE_RESOLVED_BUYER","REFUNDED"].includes(internalType)&&instruction.trade_state==="DISPUTED_FROZEN"){
       await client.query("update counterparty_dispute_requests set state='RESOLVED' where trade_id=$1 and state in('PROVIDER_SUBMITTED','FROZEN')",[instruction.trade_id]);
       await client.query("update trades set state='CANCELLED',updated_at=now() where id=$1 and state='DISPUTED_FROZEN'",[instruction.trade_id]);
+      await releaseInventory(client, instruction.trade_id);
       await client.query("update supplier_payout_controls set state='FAILED',last_error_code='DISPUTE_RESOLVED_BUYER',updated_at=now() where trade_id=$1 and state='FROZEN'",[instruction.trade_id]);
     }
   });

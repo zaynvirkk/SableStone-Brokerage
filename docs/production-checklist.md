@@ -1,5 +1,12 @@
 # Production checklist
 
+**Current status: NO-GO.** Checked historical items below are not proof that
+the production runtime completes a trade. Follow the [complete launch plan](launch/MASTER-PLAN.md)
+and its `SH-00`–`SH-34` tasks, 105 launch behavioral cases and external
+`EX-01`–`EX-12` deliverables. The local harness passes its offline cases and
+honestly skips only unavailable disposable services or the operator-held release
+key. Do not reactivate from this historical checklist.
+
 - [x] Offline root and web builds pass.
 - [x] Full synthetic journey and rejection suite pass deterministically.
 - [x] Identity, authorization, webhook and ledger source mutations are killed.
@@ -16,4 +23,3 @@
 
 Unchecked items are release blockers for provider or live operation, not defects
 that automatic fixtures are permitted to waive.
-

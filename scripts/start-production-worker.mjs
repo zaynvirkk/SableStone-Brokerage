@@ -42,6 +42,7 @@ import {
   CounterpartyActionDispatcher,
   IdentityProvisioningDispatcher,
   RuntimeHealthMonitor,
+  sweepExpiredRenewalReservations,
 } from "../dist/index.js";
 
 const runtime = await bootstrapProduction(process.env);
@@ -371,6 +372,10 @@ const periodic = async () => {
     if(supplierPayouts)await isolated("supplier-payout-release",()=>supplierPayouts.dispatchBatch());
     if(counterpartyActions)await isolated("counterparty-actions",()=>counterpartyActions.dispatchBatch());
     if(identityProvisioning)await isolated("identity-provisioning",()=>identityProvisioning.dispatchBatch());
+    if (runtime.activation.capabilities.includes("TRADING"))
+      await isolated("renewal-reservation-sweeper", () =>
+        sweepExpiredRenewalReservations(runtime.pool),
+      );
     await isolated("runtime-health",()=>healthMonitor.inspect());
     if (scheduler) await isolated("scheduler", () => scheduler.tick());
     await new Promise((resolve) => {

@@ -15,6 +15,7 @@ import { compareDecimalStrings, known } from "../domain.js";
 import { expectedProfitPriority } from "../pricing.js";
 import type { ProviderPartyReferenceResolver } from "./provider_parties.js";
 import { releaseRecurringReservation } from "./recurring_execution.js";
+import { reserveInventory } from "./inventory_allocations.js";
 
 const accepted = (
   receipt: string,
@@ -732,7 +733,7 @@ async function protectMatch(pool: Pool, matchId: string): Promise<StageResult> {
       const tradeId = randomUUID(),
         facts = (
           await client.query(
-            "select o.supplier_id,d.buyer_id,case when sj.country_code='IN' and bj.country_code='IN' then 'DOMESTIC_INDIA' else 'INTERNATIONAL' end geography,case when exists(select 1 from trades prior where prior.supplier_id=o.supplier_id and prior.buyer_id=d.buyer_id and prior.state in('SETTLED','RECURRING')) then 'ESTABLISHED' else 'NEW' end relationship_maturity,exists(select 1 from documentary_lc_route_evidence l join documents doc on doc.id=l.document_id and doc.kind='DOCUMENTARY_LC' join document_checks dc on dc.id=l.document_check_id and dc.document_id=doc.id and dc.check_type='DOCUMENTARY_LC_AUTHENTICITY' and dc.state='VERIFIED' and (dc.valid_until is null or dc.valid_until>now()) where l.relationship_id=$2 and l.valid_until>now()) has_documentary_lc from matches m join supplier_offers o on o.id=m.offer_id and o.version=m.offer_version join buyer_demands d on d.id=m.demand_id and d.version=m.demand_version join organization_jurisdictions sj on sj.organization_id=o.supplier_id and sj.state='VERIFIED' and sj.valid_until>now() join organization_jurisdictions bj on bj.organization_id=d.buyer_id and bj.state='VERIFIED' and bj.valid_until>now() where m.id=$1",
+            "select o.id offer_id,o.version offer_version,o.supplier_id,d.id demand_id,d.version demand_version,d.buyer_id,d.quantity_mt,case when sj.country_code='IN' and bj.country_code='IN' then 'DOMESTIC_INDIA' else 'INTERNATIONAL' end geography,case when exists(select 1 from trades prior where prior.supplier_id=o.supplier_id and prior.buyer_id=d.buyer_id and prior.state in('SETTLED','RECURRING')) then 'ESTABLISHED' else 'NEW' end relationship_maturity,exists(select 1 from documentary_lc_route_evidence l join documents doc on doc.id=l.document_id and doc.kind='DOCUMENTARY_LC' join document_checks dc on dc.id=l.document_check_id and dc.document_id=doc.id and dc.check_type='DOCUMENTARY_LC_AUTHENTICITY' and dc.state='VERIFIED' and (dc.valid_until is null or dc.valid_until>now()) where l.relationship_id=$2 and l.valid_until>now()) has_documentary_lc from matches m join supplier_offers o on o.id=m.offer_id and o.version=m.offer_version join buyer_demands d on d.id=m.demand_id and d.version=m.demand_version join organization_jurisdictions sj on sj.organization_id=o.supplier_id and sj.state='VERIFIED' and sj.valid_until>now() join organization_jurisdictions bj on bj.organization_id=d.buyer_id and bj.state='VERIFIED' and bj.valid_until>now() where m.id=$1",
             [matchId, relationship.id],
           )
         ).rows[0];
@@ -753,6 +754,14 @@ async function protectMatch(pool: Pool, matchId: string): Promise<StageResult> {
           ],
         )
       ).rows[0];
+      await reserveInventory(client, {
+        offerId: String(facts.offer_id),
+        offerVersion: Number(facts.offer_version),
+        demandId: String(facts.demand_id),
+        demandVersion: Number(facts.demand_version),
+        tradeId,
+        quantityMt: decimal(String(facts.quantity_mt)),
+      });
       const recurring=(await client.query("select c.id,c.reservation_id from recurring_candidates c join standing_renewal_reservations r on r.id=c.reservation_id and r.state='RESERVED' and r.expires_at>now() where c.match_id=$1 and c.status='PRICE_APPROVED' for update of c",[matchId])).rows[0];
       if(recurring){
         const snapshot=(await client.query("select id,realized_commission_per_kg,currency,waterfall_digest from final_economics_snapshots where match_id=$1",[matchId])).rows[0];
@@ -868,6 +877,7 @@ async function lockSettlement(
       [
         id,
         tradeId,
+        routed.adapter.provider,
         facts.product_family,
         facts.relationship_currency,
         gross,

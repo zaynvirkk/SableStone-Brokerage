@@ -53,6 +53,8 @@ export * from "./runtime/search.js";
 export * from "./runtime/accounting.js";
 export * from "./connectors/bank_http.js";
 export * from "./runtime/kyb_jobs.js";
+export * from "./runtime/inventory_allocations.js";
+export * from "./runtime/recurring_execution.js";
 export * from "./connectors/economic_quotes.js";
 export * from "./connectors/commercial_extraction.js";
 export * from "./runtime/economic_jobs.js";

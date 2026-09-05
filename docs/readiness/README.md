@@ -1,5 +1,27 @@
 # SableStone release readiness
 
+## Current launch verdict — 5 September 2026
+
+**NO-GO.** The runtime audit reproduced PostgreSQL economics, settlement-insert
+and supplier-payout failures, native payment-event incompatibility and a clean
+toolchain failure, plus continuing-operation gaps. The historical build and
+signature results below do not establish a connected autonomous production
+journey. They must not be read as a current software-complete claim.
+
+The [complete launch plan](../launch/MASTER-PLAN.md) registers `SH-00`–`SH-34`
+as the launch-hardening work packages and `EX-01`–`EX-12` as genuine external
+deliverables in Plan 66. The 108-case local launch harness is implemented;
+the available offline cases pass, while it honestly skips only unavailable
+disposable services or the operator-held release key. Its deterministic
+full-replay timeout is configurable (180 seconds by default) so the complete
+journey is not mistaken for a product failure on constrained hosts. The
+connected-service positive path is intentionally not claimed when
+PostgreSQL/Temporal/Redis/S3 endpoints are not supplied. The [archived audit](../launch/evidence/AUDIT-2026-09-05.md)
+preserves the baseline findings and reproduction details. Existing live gates
+remain blocked; no new live authority is created by the plan.
+
+## Historical implemented boundaries and verification claims
+
 The release contains the inert production runtime as well as the deterministic
 business kernel: checksum-bound PostgreSQL migrations, durable inbox/outbox,
 Temporal workflows, immutable object receipts, cache-only Redis, authenticated

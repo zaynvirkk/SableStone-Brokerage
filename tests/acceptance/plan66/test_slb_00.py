@@ -57,7 +57,12 @@ def test_plan_and_manifest_register_exact_bootstrap() -> None:
 
     assert "SLB-00" in plan and "SLB-32" in plan
     assert manifest["plan_id"] == "66"
-    assert manifest["tasks"][0]["task_id"] == "SLB-00"
+    # Plan 66 now keeps the finite launch-hardening work packages (SH-00…SH-34)
+    # ahead of the already-verified historical SLB tasks.  Both bootstrap
+    # tracks must remain registered; ordering is not an execution guarantee.
+    task_ids = [task["task_id"] for task in manifest["tasks"]]
+    assert task_ids[0] == "SH-00"
+    assert "SLB-00" in task_ids and "SH-34" in task_ids
     assert any(item["plan_id"] == "66" for item in registry["plans"])
 
 
